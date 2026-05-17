@@ -8,7 +8,7 @@ Foresight watches competitor websites on a schedule, detects meaningful changes,
 
 ## Why I built this
 
-I built Foresight in 48 hours using Claude Code, end to end, as a demonstration that I can scope, design, and ship a real full-stack product on a short clock. Every architectural decision was directed by me: the WASM SQLite choice over a native driver, the synchronous DB adapter, the DB-backed session store, the tier-enforcement layer, the multi-step OTP authentication flow, and the AI prompt structure for battle cards. Claude Code wrote code; I made the calls. The point was to show velocity and judgment together, not just velocity.
+I demonstrated my ability to scope, develop, and release a true full-stack solution on short notice by building Foresight from start to finish in 48 hours using Claude Code. The choice of WASM SQLite over a native driver, the synchronous DB adapter, the DB-backed session storage, the tier-enforcement layer, the multi-step OTP authentication flow, and the AI prompt structure for combat cards are all architectural choices that I oversaw. The idea was to demonstrate both rapidity and judgment.
 
 ## Features
 
