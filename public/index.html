@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Foresight: Know What Your Competitors Do Before They Do It To You</title>
+  <meta name="description" content="AI-powered competitor monitoring that watches their every move. Pricing changes, new features, messaging shifts, delivered to your team in real time.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/landing.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+</head>
+<body>
+
+  <!-- ── Navbar ─────────────────────────────────────────────── -->
+  <nav class="lp-nav" id="lp-nav" role="navigation" aria-label="Main navigation">
+    <div class="lp-nav-inner">
+      <a href="/" class="lp-logo" aria-label="Foresight home">
+        <div class="lp-logo-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+        </div>
+        <span class="lp-logo-name">Foresight</span>
+      </a>
+
+      <div class="lp-nav-right">
+        <button class="lp-theme-btn" id="lp-theme-btn" aria-label="Toggle color theme">
+          <!-- icon injected by JS -->
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+        <a href="/login" class="lp-btn lp-btn-ghost">Login</a>
+        <a href="/register" class="lp-btn lp-btn-primary">Get started</a>
+        <button class="lp-mobile-menu-btn" id="lp-mobile-menu-btn" aria-label="Toggle mobile menu" aria-expanded="false">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile dropdown -->
+    <div id="lp-mobile-menu" style="display:none;flex-direction:column;padding:16px 24px 20px;gap:10px;background:var(--lp-bg-2);border-top:1px solid var(--lp-border);">
+      <a href="/login" class="lp-btn lp-btn-ghost" style="width:100%;justify-content:center;">Login</a>
+      <a href="/register" class="lp-btn lp-btn-primary" style="width:100%;justify-content:center;">Get started</a>
+    </div>
+  </nav>
+
+  <!-- ── Hero ───────────────────────────────────────────────── -->
+  <section class="lp-hero" aria-label="Hero">
+    <video id="lp-hero-video" class="lp-hero-video" autoplay muted loop playsinline aria-hidden="true">
+      <source src="/assets/hero-data.mp4.mp4" type="video/mp4">
+    </video>
+    <div class="lp-hero-overlay" aria-hidden="true"></div>
+    <div class="lp-hero-content">
+      <h1 class="lp-hero-headline">
+        Know what your competitors do.<br>Before they do it to you.
+      </h1>
+      <p class="lp-hero-sub">
+        AI-powered competitor monitoring that watches their every move. Pricing changes, new features, messaging shifts, delivered to your team in real time.
+      </p>
+      <a href="/register" class="lp-btn lp-btn-primary lp-btn-lg">
+        Get started
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+        </svg>
+      </a>
+      <p class="lp-hero-trust">Trusted by sales teams that close more deals</p>
+    </div>
+  </section>
+
+  <!-- ── Features ───────────────────────────────────────────── -->
+  <section class="lp-features lp-section" id="features" aria-label="Features">
+    <div class="lp-container">
+      <div class="lp-features-header lp-animate">
+        <div class="lp-section-label">What we do</div>
+        <h2 class="lp-section-title">Intelligence, automated</h2>
+        <p class="lp-section-sub">Stop doing competitive research manually. Let Foresight do it for you, around the clock.</p>
+      </div>
+      <div class="lp-features-grid">
+
+        <div class="lp-feature-col lp-animate" data-delay="1">
+          <img
+            src="/assets/monitor.svg.svg"
+            alt="Monitoring illustration"
+            class="lp-feature-img"
+            loading="lazy"
+          >
+          <h3 class="lp-feature-title">Always watching</h3>
+          <p class="lp-feature-desc">We check your competitors&rsquo; websites every day, automatically. No more manual tab-checking or calendar reminders.</p>
+        </div>
+
+        <div class="lp-feature-col lp-animate" data-delay="2">
+          <img
+            src="/assets/analysis.svg.svg"
+            alt="AI analysis illustration"
+            class="lp-feature-img"
+            loading="lazy"
+          >
+          <h3 class="lp-feature-title">AI that thinks like a strategist</h3>
+          <p class="lp-feature-desc">Claude analyzes what changed, why it matters, and how to respond. Not just diffs. Real intelligence.</p>
+        </div>
+
+        <div class="lp-feature-col lp-animate" data-delay="3">
+          <img
+            src="/assets/radar.svg.svg"
+            alt="Radar alerts illustration"
+            class="lp-feature-img"
+            loading="lazy"
+          >
+          <h3 class="lp-feature-title">Alerts where you work</h3>
+          <p class="lp-feature-desc">Get battle cards delivered to Slack or Discord the moment anything changes. Your sales team is never blindsided.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <div class="lp-stripe" aria-hidden="true"></div>
+
+  <!-- ── Benefits ───────────────────────────────────────────── -->
+  <section class="lp-section" id="benefits" aria-label="Benefits">
+    <div class="lp-container">
+      <div class="lp-benefits-grid">
+
+        <div>
+          <div class="lp-section-label lp-animate">For your team</div>
+          <h2 class="lp-section-title lp-animate" data-delay="1">Built for sales and marketing teams who move fast</h2>
+          <p class="lp-section-sub lp-animate" data-delay="2">Know your competitive landscape cold. Walk into every deal with the freshest intel, automatically updated every day.</p>
+
+          <ul class="lp-benefits-list" aria-label="Key benefits">
+            <li class="lp-benefit-item lp-animate" data-delay="3">
+              <span class="lp-benefit-check" aria-hidden="true">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </span>
+              <span>Cut competitor research time by 90%</span>
+            </li>
+            <li class="lp-benefit-item lp-animate" data-delay="4">
+              <span class="lp-benefit-check" aria-hidden="true">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </span>
+              <span>Never get blindsided in a sales call again</span>
+            </li>
+            <li class="lp-benefit-item lp-animate" data-delay="5">
+              <span class="lp-benefit-check" aria-hidden="true">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </span>
+              <span>Spot pricing changes the day they happen</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- App mockup -->
+        <div class="lp-animate" data-delay="2" aria-hidden="true">
+          <div class="lp-mockup">
+            <div class="lp-mockup-bar">
+              <div class="lp-mock-dot"></div>
+              <div class="lp-mock-dot"></div>
+              <div class="lp-mock-dot"></div>
+            </div>
+            <div class="lp-mockup-body">
+              <div class="lp-mock-stat-row">
+                <div class="lp-mock-stat">
+                  <div class="lp-mock-stat-label">Competitors</div>
+                  <div class="lp-mock-stat-val">12</div>
+                </div>
+                <div class="lp-mock-stat">
+                  <div class="lp-mock-stat-label">Changes today</div>
+                  <div class="lp-mock-stat-val green">7</div>
+                </div>
+                <div class="lp-mock-stat">
+                  <div class="lp-mock-stat-label">High alerts</div>
+                  <div class="lp-mock-stat-val yellow">3</div>
+                </div>
+              </div>
+              <div class="lp-mock-row">
+                <div class="lp-mock-card">
+                  <div class="lp-mock-avatar" style="background:linear-gradient(135deg,#6366F1,#4F46E5)"></div>
+                  <span class="lp-mock-name">Acme Corp: Pricing page</span>
+                  <span class="lp-mock-badge high">HIGH</span>
+                  <span class="lp-mock-time">2h ago</span>
+                </div>
+                <div class="lp-mock-card">
+                  <div class="lp-mock-avatar" style="background:linear-gradient(135deg,#06B6D4,#0891B2)"></div>
+                  <span class="lp-mock-name">Rival Inc: Features page</span>
+                  <span class="lp-mock-badge medium">MED</span>
+                  <span class="lp-mock-time">5h ago</span>
+                </div>
+                <div class="lp-mock-card">
+                  <div class="lp-mock-avatar" style="background:linear-gradient(135deg,#10B981,#059669)"></div>
+                  <span class="lp-mock-name">CompX: Homepage headline</span>
+                  <span class="lp-mock-badge low">LOW</span>
+                  <span class="lp-mock-time">8h ago</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <div class="lp-stripe" aria-hidden="true"></div>
+
+  <!-- ── Pricing ─────────────────────────────────────────────── -->
+  <section class="lp-pricing lp-section" id="pricing" aria-label="Pricing">
+    <div class="lp-container">
+      <div class="lp-pricing-header">
+        <div class="lp-section-label lp-animate">Simple pricing</div>
+        <h2 class="lp-section-title lp-animate" data-delay="1">Start free, scale when ready</h2>
+        <p class="lp-section-sub lp-animate" data-delay="2">No surprise fees. Cancel any time.</p>
+      </div>
+      <div class="lp-pricing-grid">
+
+        <!-- Free -->
+        <div class="lp-plan-card lp-animate" data-delay="1">
+          <div class="lp-plan-name">Free</div>
+          <div class="lp-plan-price">
+            <span class="lp-plan-amount">$0</span>
+            <span class="lp-plan-period">/mo</span>
+          </div>
+          <p class="lp-plan-desc">Try it out, no credit card needed</p>
+          <div class="lp-plan-divider"></div>
+          <ul class="lp-plan-features" aria-label="Free plan features">
+            <li class="lp-plan-feat">
+              <svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              1 competitor URL
+            </li>
+            <li class="lp-plan-feat">
+              <svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              Manual checks only
+            </li>
+            <li class="lp-plan-feat">
+              <svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              Basic AI battle cards
+            </li>
+            <li class="lp-plan-feat">
+              <svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              Community support
+            </li>
+          </ul>
+          <a href="/register" class="lp-plan-cta">Get started free</a>
+        </div>
+
+        <!-- Pro (featured) -->
+        <div class="lp-plan-card featured lp-animate" data-delay="2">
+          <div class="lp-plan-tag">Most Popular</div>
+          <div class="lp-plan-name">Pro</div>
+          <div class="lp-plan-price">
+            <span class="lp-plan-amount">$20</span>
+            <span class="lp-plan-period">/mo</span>
+          </div>
+          <p class="lp-plan-desc">For growing competitive teams</p>
+          <div class="lp-plan-divider"></div>
+          <ul class="lp-plan-features" aria-label="Pro plan features">
+            <li class="lp-plan-feat">
+              <svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              10 competitor URLs
+            </li>
+            <li class="lp-plan-feat">
+              <svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              Automatic daily checks
+            </li>
+            <li class="lp-plan-feat">
+              <svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              Slack &amp; Discord alerts
+            </li>
+            <li class="lp-plan-feat">
+              <svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              Full AI battle cards
+            </li>
+            <li class="lp-plan-feat">
+              <svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              Priority email support
+            </li>
+          </ul>
+          <a href="/register" class="lp-plan-cta">Get started</a>
+        </div>
+
+        <!-- Team -->
+        <div class="lp-plan-card lp-animate" data-delay="3">
+          <div class="lp-plan-name">Team</div>
+          <div class="lp-plan-price">
+            <span class="lp-plan-amount">$49</span>
+            <span class="lp-plan-period">/mo</span>
+          </div>
+          <p class="lp-plan-desc">For sales-led organizations</p>
+          <div class="lp-plan-divider"></div>
+          <ul class="lp-plan-features" aria-label="Team plan features">
+            <li class="lp-plan-feat">
+              <svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              Unlimited competitor URLs
+            </li>
+            <li class="lp-plan-feat">
+              <svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              Automatic daily checks
+            </li>
+            <li class="lp-plan-feat">
+              <svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              Multiple webhooks
+            </li>
+            <li class="lp-plan-feat">
+              <svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              Team dashboard
+            </li>
+            <li class="lp-plan-feat">
+              <svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              API access
+            </li>
+            <li class="lp-plan-feat">
+              <svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+              Dedicated support
+            </li>
+          </ul>
+          <a href="/register" class="lp-plan-cta">Get started</a>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <div class="lp-stripe" aria-hidden="true"></div>
+
+  <!-- ── Final CTA ───────────────────────────────────────────── -->
+  <section class="lp-cta-section" aria-label="Call to action">
+    <div class="lp-container">
+      <h2 class="lp-cta-headline lp-animate">
+        Stop guessing what your <span class="lp-cta-accent">competitors</span> are doing.
+      </h2>
+      <a href="/register" class="lp-btn lp-btn-primary lp-btn-lg lp-animate" data-delay="1">
+        Get started
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+        </svg>
+      </a>
+    </div>
+  </section>
+
+  <!-- ── Footer ─────────────────────────────────────────────── -->
+  <footer class="lp-footer" role="contentinfo">
+    <div class="lp-container">
+      <div class="lp-footer-inner">
+        <span class="lp-footer-copy">&copy; 2026 Foresight. All rights reserved.</span>
+        <nav class="lp-footer-links" aria-label="Footer navigation">
+          <a href="/app#/pricing">Pricing</a>
+          <a href="/app">Dashboard</a>
+        </nav>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/js/landing.js"></script>
+</body>
+</html>

@@ -1,0 +1,295 @@
+const path = require('path');
+const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
+
+let db;       // DatabaseWrapper
+let sqlDb;    // raw sql.js Database
+let dbPath;
+
+// ─── sql.js compatibility adapter ─────────────────────────────────────────────
+// Wraps sql.js to provide a better-sqlite3-style synchronous API.
+
+function saveDb() {
+  if (!sqlDb || !dbPath) return;
+  const data = sqlDb.export();
+  fs.writeFileSync(dbPath, Buffer.from(data));
+}
+
+class Statement {
+  constructor(sql) {
+    this._sql = sql;
+  }
+
+  run(...args) {
+    sqlDb.run(this._sql, args.length ? args : undefined);
+    const rowid = sqlDb.exec('SELECT last_insert_rowid()');
+    const lastInsertRowid = Number(rowid[0]?.values[0][0] ?? 0);
+    saveDb();
+    return { lastInsertRowid };
+  }
+
+  get(...args) {
+    const stmt = sqlDb.prepare(this._sql);
+    try {
+      if (args.length) stmt.bind(args);
+      if (!stmt.step()) return undefined;
+      return stmt.getAsObject();
+    } finally {
+      stmt.free();
+    }
+  }
+
+  all(...args) {
+    const stmt = sqlDb.prepare(this._sql);
+    const rows = [];
+    try {
+      if (args.length) stmt.bind(args);
+      while (stmt.step()) rows.push(stmt.getAsObject());
+    } finally {
+      stmt.free();
+    }
+    return rows;
+  }
+}
+
+class DatabaseWrapper {
+  exec(sql) {
+    sqlDb.exec(sql);
+    saveDb();
+    return this;
+  }
+
+  prepare(sql) {
+    return new Statement(sql);
+  }
+}
+
+// ─── Schema & seeding ──────────────────────────────────────────────────────────
+
+const SCHEMA = `
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    tier TEXT DEFAULT 'free' CHECK(tier IN ('free', 'pro', 'team')),
+    api_key TEXT UNIQUE NOT NULL,
+    password_hash TEXT,
+    email_verified INTEGER DEFAULT 0,
+    last_login DATETIME,
+    session_version INTEGER DEFAULT 1,
+    stripe_customer_id TEXT,
+    stripe_subscription_id TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS otp_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    code TEXT NOT NULL,
+    purpose TEXT NOT NULL CHECK(purpose IN ('register','reset')),
+    expires_at DATETIME NOT NULL,
+    used INTEGER DEFAULT 0,
+    verified_token TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS login_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    attempted_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    sid TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS competitors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    description TEXT,
+    active INTEGER DEFAULT 1,
+    last_checked DATETIME,
+    last_content_hash TEXT,
+    check_count INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS changes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    competitor_id INTEGER NOT NULL,
+    content_before TEXT,
+    content_after TEXT,
+    diff_summary TEXT,
+    analysis TEXT,
+    threat_level TEXT CHECK(threat_level IN ('low', 'medium', 'high')),
+    recommended_response TEXT,
+    talking_points TEXT,
+    headline TEXT,
+    detected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (competitor_id) REFERENCES competitors(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER UNIQUE NOT NULL,
+    slack_webhook TEXT,
+    discord_webhook TEXT,
+    notification_email TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+`;
+
+async function initDb() {
+  const dataDir = path.join(__dirname, '../data');
+  fs.mkdirSync(dataDir, { recursive: true });
+  dbPath = path.join(dataDir, 'competitor-shadow.db');
+
+  const initSqlJs = require('sql.js');
+  const SQL = await initSqlJs();
+
+  if (fs.existsSync(dbPath)) {
+    const buf = fs.readFileSync(dbPath);
+    sqlDb = new SQL.Database(buf);
+  } else {
+    sqlDb = new SQL.Database();
+  }
+
+  db = new DatabaseWrapper();
+
+  sqlDb.exec(SCHEMA);
+
+  // Migrate existing users table if columns are missing
+  const userCols = (sqlDb.exec('PRAGMA table_info(users)')[0]?.values || []).map(v => v[1]);
+  if (!userCols.includes('password_hash'))   sqlDb.run('ALTER TABLE users ADD COLUMN password_hash TEXT');
+  if (!userCols.includes('email_verified'))  sqlDb.run('ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0');
+  if (!userCols.includes('last_login'))      sqlDb.run('ALTER TABLE users ADD COLUMN last_login DATETIME');
+  if (!userCols.includes('session_version')) sqlDb.run('ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 1');
+  saveDb();
+
+  const existingUser = db.prepare('SELECT id FROM users WHERE id = 1').get();
+  if (!existingUser) {
+    const apiKey = 'cs-' + uuidv4().replace(/-/g, '');
+    db.prepare('INSERT INTO users (email, name, tier, api_key) VALUES (?, ?, ?, ?)')
+      .run('demo@foresight.com', 'Demo User', 'pro', apiKey);
+    db.prepare('INSERT INTO settings (user_id) VALUES (?)').run(1);
+    seedDemoData();
+    console.log(`\n✅ Demo account created. API Key: ${apiKey}\n`);
+  }
+
+  // Ensure demo user has a password for testing
+  const demoUser = db.prepare('SELECT id, password_hash FROM users WHERE id = 1').get();
+  if (demoUser && !demoUser.password_hash) {
+    const bcrypt = require('bcryptjs');
+    const hash = bcrypt.hashSync('Demo1234!', 12);
+    db.prepare('UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = 1').run(hash);
+    saveDb();
+    console.log('✅ Demo credentials: demo@foresight.com / Demo1234!');
+  }
+
+  saveDb();
+  console.log('✅ Database initialized');
+  return db;
+}
+
+function seedDemoData() {
+  const now = new Date();
+  const ts = (offsetMs) => new Date(now - offsetMs).toISOString().replace('T', ' ').slice(0, 19);
+
+  const c1 = db.prepare('INSERT INTO competitors (user_id, name, url, description, last_checked, last_content_hash, check_count) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(1, 'Acme Corp', 'https://acmecorp.com/pricing', 'Primary competitor in our core market segment', ts(3600000), 'hash_acme_001', 24).lastInsertRowid;
+  const c2 = db.prepare('INSERT INTO competitors (user_id, name, url, description, last_checked, last_content_hash, check_count) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(1, 'NovaTech', 'https://novatech.io/features', 'Fast-growing startup targeting our SMB customers', ts(7200000), 'hash_nova_001', 18).lastInsertRowid;
+  const c3 = db.prepare('INSERT INTO competitors (user_id, name, url, description, last_checked, last_content_hash, check_count) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(1, 'Horizon AI', 'https://horizonai.com', 'AI-first competitor, recently raised Series B', ts(21600000), 'hash_horizon_001', 31).lastInsertRowid;
+
+  const highAnalysis = JSON.stringify({
+    headline: 'Acme Corp slashed Pro plan pricing by 30% — aggressive market move',
+    summary: 'Acme Corp reduced their Pro plan from $49/mo to $34/mo and removed the seat limit. This is a significant pricing response likely targeting our recent customer wins. They also added a new "Starter" tier at $9/mo.',
+    threat_level: 'high',
+    threat_reasoning: 'Direct price undercut on our core plan with unlimited seats threatens our mid-market positioning.',
+    recommended_response: 'Immediate sales team briefing required. Prepare competitive pricing rebuttals and emphasize superior support and integrations.',
+    talking_points: [
+      'Our platform includes enterprise SSO and audit logs at the Pro level — Acme charges extra for these',
+      'We offer 99.9% SLA with dedicated support; Acme Pro only includes email support',
+      'Our API rate limits are 10x higher than Acme at equivalent tiers',
+      'Migration from Acme takes 2-3 weeks; we offer free white-glove onboarding'
+    ],
+    key_changes: [
+      { category: 'pricing', description: 'Pro plan reduced from $49 to $34/mo', impact: 'Direct competitive threat to our primary revenue tier' },
+      { category: 'pricing', description: 'New $9/mo Starter tier added', impact: 'Now competes in the SMB entry market we currently own' },
+      { category: 'features', description: 'Seat limits removed from Pro plan', impact: 'Eliminates a key objection prospects previously raised against Acme' }
+    ],
+    opportunity: 'Aggressive pricing signals margin pressure — emphasize stability and longevity in enterprise deals.'
+  });
+
+  const medAnalysis = JSON.stringify({
+    headline: 'NovaTech launches AI writing assistant — enters our core feature territory',
+    summary: 'NovaTech has quietly launched an AI-powered content generation feature that directly competes with our core offering. Currently in beta but prominently featured on their homepage.',
+    threat_level: 'medium',
+    threat_reasoning: 'Feature parity in a differentiated area, but NovaTech lacks our integrations ecosystem and enterprise credibility.',
+    recommended_response: 'Accelerate roadmap items that further differentiate our AI capabilities. Brief sales team with comparison talking points.',
+    talking_points: [
+      'Our AI has been in production for 18 months with 500M+ documents processed — NovaTech is just starting',
+      'We offer fine-tuning on company data; NovaTech uses generic models only',
+      'Our compliance certifications (SOC2, HIPAA) cover AI features — critical for enterprise',
+      'We integrate with 150+ tools; NovaTech supports 12'
+    ],
+    key_changes: [
+      { category: 'features', description: 'AI writing assistant launched in beta', impact: 'Enters our primary differentiation area' },
+      { category: 'messaging', description: 'Homepage now leads with AI messaging', impact: 'Repositioning toward our target buyer' }
+    ],
+    opportunity: 'Their beta launch gives us time to showcase production maturity. Create case studies highlighting AI ROI.'
+  });
+
+  const lowAnalysis = JSON.stringify({
+    headline: 'Horizon AI updates case studies and adds two Fortune 500 logos',
+    summary: 'Horizon AI refreshed their customer evidence page with two new Fortune 500 case studies and updated their ROI calculator. No product or pricing changes detected.',
+    threat_level: 'low',
+    threat_reasoning: 'Social proof improvements are positive for them but do not represent immediate competitive threat.',
+    recommended_response: 'Update our own case study page if any similar wins are available. Ensure sales team is aware Horizon is targeting enterprise accounts.',
+    talking_points: [
+      'We have 3x more enterprise case studies across more industries',
+      'Our G2 rating is 4.8 vs Horizon\'s 4.2 with significantly more reviews',
+      'Our implementation timeline is 4 weeks vs Horizon\'s 12-week average'
+    ],
+    key_changes: [
+      { category: 'messaging', description: 'Two new Fortune 500 logos added', impact: 'Improves enterprise credibility' },
+      { category: 'features', description: 'ROI calculator updated', impact: 'Better sales enablement tool for their reps' }
+    ],
+    opportunity: 'If they are closing Fortune 500 deals, the market is validating enterprise demand. Ensure compelling enterprise proof points are ready.'
+  });
+
+  db.prepare('INSERT INTO changes (competitor_id, diff_summary, analysis, threat_level, recommended_response, talking_points, headline, detected_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(c1, JSON.stringify({ added: ['$34', 'Starter', 'unlimited seats'], removed: ['$49', 'per seat'] }),
+      highAnalysis, 'high', 'Immediate sales team briefing required.',
+      JSON.stringify(['Enterprise SSO included', 'Our 99.9% SLA', 'API rate limits 10x higher']),
+      'Acme Corp slashed Pro plan pricing by 30% — aggressive market move', ts(86400000));
+
+  db.prepare('INSERT INTO changes (competitor_id, diff_summary, analysis, threat_level, recommended_response, talking_points, headline, detected_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(c2, JSON.stringify({ added: ['AI', 'writing assistant', 'beta'], removed: [] }),
+      medAnalysis, 'medium', 'Accelerate roadmap AI differentiation.',
+      JSON.stringify(['18 months production history', 'Fine-tuning on company data', 'SOC2/HIPAA certified']),
+      'NovaTech launches AI writing assistant — enters our core feature territory', ts(259200000));
+
+  db.prepare('INSERT INTO changes (competitor_id, diff_summary, analysis, threat_level, recommended_response, talking_points, headline, detected_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(c3, JSON.stringify({ added: ['Fortune 500', 'case study'], removed: [] }),
+      lowAnalysis, 'low', 'Update our own case study page.',
+      JSON.stringify(['3x more enterprise case studies', 'G2 rating 4.8 vs 4.2', '4-week implementation']),
+      'Horizon AI updates case studies and adds two Fortune 500 logos', ts(86400000));
+
+  saveDb();
+}
+
+function getDb() {
+  if (!db) throw new Error('Database not initialized. Call initDb() first.');
+  return db;
+}
+
+module.exports = { initDb, getDb };

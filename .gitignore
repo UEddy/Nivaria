@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+
+# Environment variables (real secrets — never commit)
+.env
+.env.local
+.env.development
+.env.development.local
+.env.production
+.env.production.local
+.env.test
+.env.test.local
+.env.*.local
+.env.*
+!.env.example
+
+# Database (contains real user data, sessions, OTP codes)
+data/
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+*.log
+*.err
+/server.*
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local editor / IDE settings
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code local config (contains absolute paths + local test data)
+.claude/
+
+# Backup files
+*.bak
+*.backup
+*.orig
+*.tmp
+*~
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Certificates / keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
