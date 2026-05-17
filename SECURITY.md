@@ -98,7 +98,7 @@ Do not open a public GitHub issue for security-sensitive bugs. We aim to respond
 
 ## Known limitations
 
-1. **CSP `'unsafe-inline'`**: Required for the anti-flash theme detection snippet in `auth/index.html` and related static files. Mitigation: the script is first-party and does no external requests. A nonce-based CSP is the proper fix.
+1. **CSP `'unsafe-inline'` for `script-src` and `script-src-attr`**: `script-src 'unsafe-inline'` is required for the anti-flash theme detection snippet in `auth/index.html` and related static files. `script-src-attr 'unsafe-inline'` is required for inline event handlers (`onclick`, `oninput`, etc.) used throughout the SPA for view switching, OTP submission, password visibility toggles, and modal close buttons. Mitigation: all scripts and handlers are first-party and same-origin; all user-controlled content rendered into the DOM is escaped via the `esc()` helper. The proper hardening is to refactor inline handlers to `addEventListener` and move the anti-flash snippet behind a nonce.
 
 2. **In-memory rate limiter**: `express-rate-limit` uses an in-memory store by default. Limits reset on server restart and do not scale across multiple instances. Use a Redis store (`rate-limit-redis`) for multi-server deployments.
 

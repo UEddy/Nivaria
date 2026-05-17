@@ -67,6 +67,11 @@ app.use(helmet({
       // 'unsafe-inline' required for the anti-flash theme snippet in static HTML files.
       // A nonce-based CSP would remove this; tracked as a known limitation.
       scriptSrc:      ["'self'", "'unsafe-inline'"],
+      // Helmet's default for script-src-attr is 'none', which blocks all inline
+      // event handlers (onclick, oninput, etc.). The SPA uses inline handlers
+      // throughout for view switching, OTP submit, password eye toggles, etc.
+      // Refactoring to addEventListener is a planned hardening step.
+      scriptSrcAttr:  ["'unsafe-inline'"],
       styleSrc:       ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc:        ["'self'", 'https://fonts.gstatic.com'],
       imgSrc:         ["'self'", 'data:', 'https:'],
