@@ -215,6 +215,7 @@ const App = {
     }
   },
 };
+window.App = App;
 
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 function el(id) { return document.getElementById(id); }

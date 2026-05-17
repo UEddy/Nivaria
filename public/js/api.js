@@ -64,3 +64,4 @@ const API = (() => {
     testWebhook:  (type, url) => API.post('/settings/test-webhook', { type, url }),
   };
 })();
+window.API = API;
