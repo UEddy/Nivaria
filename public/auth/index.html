@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Foresight — Sign in</title>
+  <title>Foresight: Sign in</title>
 
   <!--
     Anti-flash: read theme from localStorage and apply before ANY CSS renders.
@@ -563,10 +563,10 @@ function render() {
   const sw   = document.getElementById('auth-switch');
 
   document.title = State.mode === 'register'
-    ? 'Foresight — Create account'
+    ? 'Foresight: Create account'
     : State.mode === 'forgot'
-    ? 'Foresight — Reset password'
-    : 'Foresight — Sign in';
+    ? 'Foresight: Reset password'
+    : 'Foresight: Sign in';
 
   if (State.mode === 'login') {
     root.innerHTML = renderLogin();
@@ -695,9 +695,9 @@ function renderPassword(flow) {
         </div>
         <div class="pw-rules">
           <div class="pw-rule" id="rule-len"><div class="pw-rule-dot">✓</div>At least 12 characters</div>
-          <div class="pw-rule" id="rule-upper"><div class="pw-rule-dot">✓</div>One uppercase letter (A–Z)</div>
-          <div class="pw-rule" id="rule-lower"><div class="pw-rule-dot">✓</div>One lowercase letter (a–z)</div>
-          <div class="pw-rule" id="rule-num"><div class="pw-rule-dot">✓</div>One number (0–9)</div>
+          <div class="pw-rule" id="rule-upper"><div class="pw-rule-dot">✓</div>One uppercase letter (A-Z)</div>
+          <div class="pw-rule" id="rule-lower"><div class="pw-rule-dot">✓</div>One lowercase letter (a-z)</div>
+          <div class="pw-rule" id="rule-num"><div class="pw-rule-dot">✓</div>One number (0-9)</div>
           <div class="pw-rule" id="rule-special"><div class="pw-rule-dot">✓</div>One special character (!@#$%^&amp;*...)</div>
           <div class="pw-rule" id="rule-email"><div class="pw-rule-dot">✓</div>Does not contain your email</div>
           <div class="pw-rule" id="rule-common"><div class="pw-rule-dot">✓</div>Not a commonly used password</div>

@@ -93,7 +93,7 @@ function buildHtml(code, purpose) {
 
         <tr><td style="padding:18px 36px;border-top:1px solid #1A1A1A">
           <p style="margin:0;font-size:11.5px;color:#374151">
-            Foresight — Competitor Intelligence Platform
+            Foresight: Competitor Intelligence Platform
           </p>
         </td></tr>
 

@@ -15,7 +15,7 @@ This document describes the security controls in place for Foresight, how to rep
 - `session_version` column on users: incremented on password reset, which invalidates all pre-existing sessions
 
 ### Session management
-- Sessions stored in the database (`sessions` table) — survive server restarts
+- Sessions stored in the database (`sessions` table), so they survive server restarts
 - Session cookies: `httpOnly`, `secure` (production), `sameSite=strict`
 - Default sessions are browser-session cookies (expire on browser close)
 - "Remember me" option extends to 30 days via `cookie.maxAge`
@@ -67,7 +67,7 @@ This document describes the security controls in place for Foresight, how to rep
 - **Known limitation:** CSP includes `'unsafe-inline'` for scripts due to an anti-flash theme snippet in static HTML files. A nonce-based CSP would eliminate this; planned for a future sprint.
 
 ### Authorization (IDOR prevention)
-- Every database query for user-owned resources includes `AND user_id = ?` using the server-side `req.userId` (set by `requireAuth` — never from request body or params)
+- Every database query for user-owned resources includes `AND user_id = ?` using the server-side `req.userId` (set by `requireAuth`, never from request body or params)
 - Competitors, changes, and settings are always scoped to the authenticated user
 - Returning 404 (not 403) for resources that belong to other users prevents user enumeration
 
@@ -98,13 +98,13 @@ Do not open a public GitHub issue for security-sensitive bugs. We aim to respond
 
 ## Known limitations
 
-1. **CSP `'unsafe-inline'`** — Required for the anti-flash theme detection snippet in `auth/index.html` and related static files. Mitigation: the script is first-party and does no external requests. A nonce-based CSP is the proper fix.
+1. **CSP `'unsafe-inline'`**: Required for the anti-flash theme detection snippet in `auth/index.html` and related static files. Mitigation: the script is first-party and does no external requests. A nonce-based CSP is the proper fix.
 
-2. **In-memory rate limiter** — `express-rate-limit` uses an in-memory store by default. Limits reset on server restart and do not scale across multiple instances. Use a Redis store (`rate-limit-redis`) for multi-server deployments.
+2. **In-memory rate limiter**: `express-rate-limit` uses an in-memory store by default. Limits reset on server restart and do not scale across multiple instances. Use a Redis store (`rate-limit-redis`) for multi-server deployments.
 
-3. **sql.js session store** — Sessions are written to `data/competitor-shadow.db`. In a multi-server deployment you would need a shared session store (Redis, PostgreSQL) instead.
+3. **sql.js session store**: Sessions are written to `data/competitor-shadow.db`. In a multi-server deployment you would need a shared session store (Redis, PostgreSQL) instead.
 
-4. **No MFA** — Multi-factor authentication beyond email OTP is not yet implemented.
+4. **No MFA**: Multi-factor authentication beyond email OTP is not yet implemented.
 
 ---
 

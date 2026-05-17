@@ -2,18 +2,18 @@
 
 **AI-powered competitive intelligence monitoring platform.**
 
-Foresight watches your rivals' websites and uses Claude AI to analyze what changed, why it matters, and what your sales team should do about it — then delivers battle cards straight to Slack or Discord.
+Foresight watches your rivals' websites and uses Claude AI to analyze what changed, why it matters, and what your sales team should do about it, then delivers battle cards straight to Slack or Discord.
 
 ---
 
 ## Features
 
-- **Automatic monitoring** — checks competitor pages every 24 hours (Pro/Team)
-- **AI analysis** — Claude AI explains what changed, scores the threat level (low/medium/high), and writes talking points
-- **Battle cards** — structured competitive reports with recommended response and sales talking points
-- **Slack & Discord alerts** — instant webhook notifications when changes are detected
-- **Tier enforcement** — Free (1 URL), Pro (10 URLs, $20/mo), Team (unlimited, $49/mo)
-- **Stripe-ready** — payment integration is stubbed out, drop in your keys to activate
+- **Automatic monitoring**: checks competitor pages every 24 hours (Pro/Team)
+- **AI analysis**: Claude AI explains what changed, scores the threat level (low/medium/high), and writes talking points
+- **Battle cards**: structured competitive reports with recommended response and sales talking points
+- **Slack & Discord alerts**: instant webhook notifications when changes are detected
+- **Tier enforcement**: Free (1 URL), Pro (10 URLs, $20/mo), Team (unlimited, $49/mo)
+- **Stripe-ready**: payment integration is stubbed out, drop in your keys to activate
 
 ---
 
@@ -50,7 +50,7 @@ npm run dev
 npm start
 ```
 
-Open **http://localhost:3000** — demo data is seeded automatically on first run.
+Open **http://localhost:3000**. Demo data is seeded automatically on first run.
 
 ---
 
@@ -163,7 +163,7 @@ competitor-shadow/
 ## Tech Stack
 
 - **Backend**: Node.js + Express
-- **Database**: SQLite via sql.js (pure WASM — no native compilation required)
+- **Database**: SQLite via sql.js (pure WASM, no native compilation required)
 - **AI**: Anthropic Claude (claude-sonnet-4-6)
 - **Scraping**: axios + cheerio
 - **Scheduler**: node-cron
