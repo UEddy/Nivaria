@@ -17,6 +17,21 @@ function validateCompetitorUrl(raw) {
   }
 }
 
+// Returns { value, error }. `value === null` means "no selector / clear it".
+function validateCssSelector(raw) {
+  if (raw === undefined || raw === null) return { value: null, error: null };
+  const s = String(raw).trim();
+  if (s.length === 0) return { value: null, error: null };
+  if (s.length > 200) return { value: null, error: 'CSS selector must be 200 characters or fewer' };
+  // Anything that smells like injection / template breakage is rejected.
+  // We are deliberately permissive about CSS punctuation: . # > + ~ [ ] = " ' : ( ) , whitespace.
+  if (/<\/?script/i.test(s))                     return { value: null, error: 'CSS selector must not contain script tags' };
+  if (s.includes('`'))                            return { value: null, error: 'CSS selector must not contain backticks' };
+  if (/[{}]/.test(s))                             return { value: null, error: 'CSS selector must not contain { or }' };
+  if (/javascript:/i.test(s))                     return { value: null, error: 'CSS selector must not contain javascript: URIs' };
+  return { value: s, error: null };
+}
+
 // ── Routes — all queries include user_id to prevent IDOR ──────────────────────
 
 router.get('/', (req, res) => {
@@ -52,6 +67,10 @@ router.post('/', (req, res) => {
   const urlError = validateCompetitorUrl(url);
   if (urlError) return res.status(400).json({ error: urlError });
 
+  // Optional CSS selector
+  const sel = validateCssSelector(req.body.css_selector);
+  if (sel.error) return res.status(400).json({ error: sel.error });
+
   const user  = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
   const count = db.prepare('SELECT COUNT(*) AS n FROM competitors WHERE user_id = ?').get(req.userId).n;
 
@@ -63,10 +82,71 @@ router.post('/', (req, res) => {
   }
 
   const result = db.prepare(
-    'INSERT INTO competitors (user_id, name, url, description) VALUES (?, ?, ?, ?)'
-  ).run(req.userId, name, url, description || null);
+    'INSERT INTO competitors (user_id, name, url, description, css_selector) VALUES (?, ?, ?, ?, ?)'
+  ).run(req.userId, name, url, description || null, sel.value);
 
   res.status(201).json(db.prepare('SELECT * FROM competitors WHERE id = ?').get(result.lastInsertRowid));
+});
+
+router.put('/:id', (req, res) => {
+  const db  = getDb();
+  const row = db.prepare('SELECT * FROM competitors WHERE id = ? AND user_id = ?').get(req.params.id, req.userId);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+
+  let name        = row.name;
+  let url         = row.url;
+  let description = row.description;
+  let cssSelector = row.css_selector;
+  let resetHash   = false;
+
+  if (req.body.name !== undefined) {
+    name = String(req.body.name).trim();
+    if (!name) return res.status(400).json({ error: 'name cannot be empty' });
+    if (name.length > 100) return res.status(400).json({ error: 'name must be 100 characters or fewer' });
+  }
+
+  if (req.body.url !== undefined) {
+    const newUrl = String(req.body.url).trim();
+    if (!newUrl) return res.status(400).json({ error: 'url cannot be empty' });
+    if (newUrl.length > 2048) return res.status(400).json({ error: 'url must be 2048 characters or fewer' });
+    const urlError = validateCompetitorUrl(newUrl);
+    if (urlError) return res.status(400).json({ error: urlError });
+    if (newUrl !== url) resetHash = true;
+    url = newUrl;
+  }
+
+  if (req.body.description !== undefined) {
+    const d = String(req.body.description).trim();
+    if (d.length > 500) return res.status(400).json({ error: 'description must be 500 characters or fewer' });
+    description = d || null;
+  }
+
+  if (req.body.css_selector !== undefined) {
+    const sel = validateCssSelector(req.body.css_selector);
+    if (sel.error) return res.status(400).json({ error: sel.error });
+    if (sel.value !== cssSelector) resetHash = true;
+    cssSelector = sel.value;
+  }
+
+  // When URL or selector changes, the previous baseline is no longer comparable.
+  // Clear it so the next check captures a fresh baseline rather than firing a
+  // bogus "change detected" against content from a different region.
+  if (resetHash) {
+    db.prepare(`
+      UPDATE competitors
+      SET name = ?, url = ?, description = ?, css_selector = ?,
+          last_content_hash = NULL, last_check_status = NULL, last_check_error = NULL
+      WHERE id = ?
+    `).run(name, url, description, cssSelector, row.id);
+  } else {
+    db.prepare(`
+      UPDATE competitors
+      SET name = ?, url = ?, description = ?, css_selector = ?
+      WHERE id = ?
+    `).run(name, url, description, cssSelector, row.id);
+  }
+
+  res.json(db.prepare('SELECT * FROM competitors WHERE id = ?').get(row.id));
 });
 
 router.get('/:id', (req, res) => {

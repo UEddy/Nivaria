@@ -61,7 +61,13 @@ const Competitors = {
                   <div class="comp-name-cell">
                     ${avatarHtml(c.name, 32)}
                     <div>
-                      <div class="td-primary">${esc(c.name)}</div>
+                      <div class="td-primary">
+                        ${esc(c.name)}
+                        ${c.css_selector ? `<span class="scoped-badge" title="Monitoring scoped to: ${esc(c.css_selector)}">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+                          scoped
+                        </span>` : ''}
+                      </div>
                       ${c.description ? `<div class="td-sub">${esc(c.description.substring(0, 55))}${c.description.length > 55 ? '…' : ''}</div>` : ''}
                     </div>
                   </div>
@@ -93,6 +99,9 @@ const Competitors = {
                     <button class="btn btn-secondary btn-sm" onclick="Competitors.check(${c.id}, this)" title="Check now">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                       Check
+                    </button>
+                    <button class="btn btn-ghost btn-sm" onclick="Competitors.showEditModal(${c.id})" title="Edit">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
                     <button class="btn btn-ghost btn-sm" onclick="Competitors.toggle(${c.id}, this)" title="${c.active ? 'Pause' : 'Resume'}">
                       ${c.active
@@ -134,6 +143,11 @@ const Competitors = {
     if (s === 'empty_content') {
       return `<span class="status-pill status-pill--empty"${tip}><span class="status-dot"></span>Empty</span>`;
     }
+    if (s === 'selector_not_found') {
+      const sel = c.css_selector ? ` (${esc(c.css_selector)})` : '';
+      const fullTip = ` title="Selector not found${sel}. The page structure may have changed."`;
+      return `<span class="status-pill status-pill--selector-missing"${fullTip}><span class="status-dot"></span>Selector not found</span>`;
+    }
     if (s.startsWith('fetch_failed')) {
       return `<span class="status-pill status-pill--fetch-error"${tip}><span class="status-dot"></span>Fetch error</span>`;
     }
@@ -166,6 +180,11 @@ const Competitors = {
           <label class="form-label">Internal Notes <span style="color:var(--txt-3);font-weight:400">(optional)</span></label>
           <input class="form-input" id="comp-desc" placeholder="e.g. Primary rival in the SMB market" />
         </div>
+        <div class="form-group">
+          <label class="form-label">CSS selector <span style="color:var(--txt-3);font-weight:400">(optional)</span></label>
+          <input class="form-input" id="comp-selector" placeholder=".pricing-table or #features" maxlength="200" />
+          <span class="form-hint">Advanced. Monitor only a specific section of the page. Leave blank to watch the whole page. Use your browser's Inspect tool to find the right selector.</span>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -180,18 +199,25 @@ const Competitors = {
   },
 
   async submitAdd(btn) {
-    const name = el('comp-name').value.trim();
-    const url  = el('comp-url').value.trim();
-    const desc = el('comp-desc').value.trim();
+    const name     = el('comp-name').value.trim();
+    const url      = el('comp-url').value.trim();
+    const desc     = el('comp-desc').value.trim();
+    const selector = el('comp-selector')?.value.trim() || '';
 
     if (!name) { toast('Name is required', 'error'); return; }
     if (!url)  { toast('URL is required', 'error'); return; }
+    if (selector.length > 200) { toast('CSS selector must be 200 characters or fewer', 'error'); return; }
 
     btn.disabled = true;
     btn.textContent = 'Adding…';
 
     try {
-      await API.addCompetitor({ name, url, description: desc || undefined });
+      await API.addCompetitor({
+        name,
+        url,
+        description: desc || undefined,
+        css_selector: selector || undefined,
+      });
       closeModal();
       toast(`${name} added successfully`, 'success');
       Competitors.render();
@@ -208,6 +234,79 @@ const Competitors = {
       } else {
         toast(e.message, 'error');
       }
+    }
+  },
+
+  async showEditModal(id) {
+    let c;
+    try {
+      const all = await API.getCompetitors();
+      c = all.find(x => x.id === id);
+    } catch (e) { toast(e.message, 'error'); return; }
+    if (!c) { toast('Competitor not found', 'error'); return; }
+
+    openModal(`
+      <div class="modal-header">
+        <div class="modal-title">Edit Competitor</div>
+        <button class="modal-close" onclick="closeModal()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Competitor Name <span style="color:var(--red)">*</span></label>
+          <input class="form-input" id="edit-comp-name" value="${esc(c.name)}" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Page URL to Monitor <span style="color:var(--red)">*</span></label>
+          <input class="form-input" id="edit-comp-url" value="${esc(c.url)}" type="url" />
+          <span class="form-hint">Changing the URL will reset the baseline so the next check captures the new page.</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Internal Notes <span style="color:var(--txt-3);font-weight:400">(optional)</span></label>
+          <input class="form-input" id="edit-comp-desc" value="${esc(c.description || '')}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">CSS selector <span style="color:var(--txt-3);font-weight:400">(optional)</span></label>
+          <input class="form-input" id="edit-comp-selector" value="${esc(c.css_selector || '')}" placeholder=".pricing-table or #features" maxlength="200" />
+          <span class="form-hint">Advanced. Monitor only a specific section of the page. Clear this field to revert to full-page monitoring. Changing it will reset the baseline.</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="Competitors.submitEdit(${id}, this)">Save Changes</button>
+      </div>
+    `);
+    setTimeout(() => el('edit-comp-name').focus(), 50);
+  },
+
+  async submitEdit(id, btn) {
+    const name     = el('edit-comp-name').value.trim();
+    const url      = el('edit-comp-url').value.trim();
+    const desc     = el('edit-comp-desc').value.trim();
+    const selector = el('edit-comp-selector').value.trim();
+
+    if (!name) { toast('Name is required', 'error'); return; }
+    if (!url)  { toast('URL is required', 'error'); return; }
+    if (selector.length > 200) { toast('CSS selector must be 200 characters or fewer', 'error'); return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    try {
+      await API.updateCompetitor(id, {
+        name,
+        url,
+        description: desc,
+        css_selector: selector, // empty string clears it server-side
+      });
+      closeModal();
+      toast('Saved', 'success');
+      Competitors.render();
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Save Changes';
+      toast(e.message, 'error');
     }
   },
 

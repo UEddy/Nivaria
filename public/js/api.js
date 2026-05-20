@@ -45,11 +45,12 @@ const API = (() => {
     getStats: () => API.get('/changes/stats'),
 
     // Competitors
-    getCompetitors:  ()       => API.get('/competitors'),
-    addCompetitor:   (data)   => API.post('/competitors', data),
-    deleteCompetitor:(id)     => API.delete(`/competitors/${id}`),
-    toggleCompetitor:(id)     => API.put(`/competitors/${id}/toggle`),
-    checkCompetitor: (id)     => API.post(`/competitors/${id}/check`),
+    getCompetitors:   ()           => API.get('/competitors'),
+    addCompetitor:    (data)       => API.post('/competitors', data),
+    updateCompetitor: (id, data)   => API.put(`/competitors/${id}`, data),
+    deleteCompetitor: (id)         => API.delete(`/competitors/${id}`),
+    toggleCompetitor: (id)         => API.put(`/competitors/${id}/toggle`),
+    checkCompetitor:  (id)         => API.post(`/competitors/${id}/check`),
 
     // Changes
     getChanges: (params = {}) => {

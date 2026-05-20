@@ -6,8 +6,9 @@ const { sendAlerts } = require('./webhooks');
 const { canUseWebhooks } = require('./payments');
 
 function fetchErrorToStatus(err) {
-  if (err && err.code === 'BLOCKED_PAGE')  return { status: 'blocked',       msg: err.message };
-  if (err && err.code === 'EMPTY_CONTENT') return { status: 'empty_content', msg: err.message };
+  if (err && err.code === 'BLOCKED_PAGE')       return { status: 'blocked',             msg: err.message };
+  if (err && err.code === 'EMPTY_CONTENT')      return { status: 'empty_content',       msg: err.message };
+  if (err && err.code === 'SELECTOR_NOT_FOUND') return { status: 'selector_not_found',  msg: `Selector "${err.selector}" matched no elements — the page structure may have changed.` };
   const httpStatus = err && err.response && err.response.status;
   if (httpStatus) {
     if (httpStatus === 403) return { status: 'blocked',      msg: `HTTP 403 — likely bot block` };
@@ -29,7 +30,7 @@ async function checkCompetitor(competitor, db) {
   // ── FETCH ────────────────────────────────────────────────────────────────────
   let content, hash;
   try {
-    const r = await fetchPageContent(competitor.url);
+    const r = await fetchPageContent(competitor.url, { cssSelector: competitor.css_selector || null });
     content = r.content;
     hash    = r.hash;
   } catch (err) {

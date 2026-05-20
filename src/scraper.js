@@ -22,19 +22,40 @@ class EmptyContentError extends Error {
   }
 }
 
+class SelectorNotFoundError extends Error {
+  constructor(selector, url) {
+    super(`Selector "${selector}" matched no elements on the page`);
+    this.name = 'SelectorNotFoundError';
+    this.code = 'SELECTOR_NOT_FOUND';
+    this.selector = selector;
+    this.url = url;
+  }
+}
+
 const EMPTY_BODY_THRESHOLD = 200;
 
 // Fingerprints of common bot-challenge / JS-wall pages.
 // Each entry: { label, test(rawHtml) -> boolean }.
+//
+// Tightened to require challenge-specific contexts (script tags, cookie names,
+// challenge URLs) rather than bare vendor keywords — otherwise a competitor
+// blog post that *mentions* "DataDome" or "Cloudflare" in prose would be
+// permanently mis-flagged as blocked.
 const BLOCK_FINGERPRINTS = [
-  { label: 'Cloudflare challenge',  test: h => /cf-browser-verification|cf-chl-bypass|cf_chl_opt/i.test(h) },
+  // Cloudflare
+  { label: 'Cloudflare challenge',  test: h => /cf-browser-verification|cf-chl-bypass|cf_chl_opt|cdn-cgi\/challenge-platform/i.test(h) },
   { label: 'Cloudflare challenge',  test: h => /just a moment\.{0,3}/i.test(h) && /cloudflare/i.test(h) },
   { label: 'Cloudflare challenge',  test: h => /checking your browser before accessing/i.test(h) },
-  { label: 'DataDome challenge',    test: h => /captcha-delivery\.com|datadome|dd\.js\b/i.test(h) },
+  // DataDome — require script context, challenge URL, or cookie/marker pattern
+  { label: 'DataDome challenge',    test: h => /captcha-delivery\.com/i.test(h) },
+  { label: 'DataDome challenge',    test: h => /<script[^>]+(?:datadome|dd\.js)/i.test(h) },
+  { label: 'DataDome challenge',    test: h => /datadome[_-]?(?:cookie|block|tags)|window\.ddjskey/i.test(h) },
   { label: 'DataDome block',        test: h => /sorry, you have been blocked/i.test(h) },
   { label: 'DataDome block',        test: h => /please enable js and disable any ad ?blocker/i.test(h) },
-  { label: 'PerimeterX challenge',  test: h => /\/_px\/|perimeterx|px-captcha/i.test(h) },
-  { label: 'Akamai bot manager',    test: h => /access denied[\s\S]{0,200}reference\s*#?\s*\d/i.test(h) },
+  // PerimeterX — require their specific JS globals or URL paths, not the bare brand name
+  { label: 'PerimeterX challenge',  test: h => /window\._pxAppId|_pxhd|px-captcha|\/_px_\//i.test(h) },
+  // Akamai — require both signals together
+  { label: 'Akamai bot manager',    test: h => /access denied/i.test(h) && /reference\s*#?\s*\d{6,}/i.test(h) },
 ];
 
 function detectBlockPage(rawHtml) {
@@ -62,7 +83,9 @@ function detectEmptyContent(content) {
   return null;
 }
 
-async function fetchPageContent(url) {
+async function fetchPageContent(url, opts = {}) {
+  const cssSelector = opts.cssSelector ? String(opts.cssSelector).trim() : null;
+
   const response = await axios.get(url, {
     timeout: 30000,
     headers: {
@@ -92,16 +115,45 @@ async function fetchPageContent(url) {
   const metaDescription = $('meta[name="description"]').attr('content') || '';
   const ogTitle = $('meta[property="og:title"]').attr('content') || '';
 
+  // ── Scope selection ─────────────────────────────────────────────────────────
+  // If the competitor pinned a CSS selector, we monitor ONLY that region.
+  // Title / meta tags still come from <head> because that's how browsers and
+  // OG previews work — and stripping them wouldn't reduce noise.
+  let scope;
+  let scopeLabel;
+  if (cssSelector) {
+    let matched;
+    try {
+      matched = $(cssSelector);
+    } catch (selErr) {
+      // cheerio throws on a few exotic selectors; treat as "selector not found"
+      throw new SelectorNotFoundError(cssSelector, url);
+    }
+    if (!matched || matched.length === 0) {
+      throw new SelectorNotFoundError(cssSelector, url);
+    }
+    scope = matched;
+    scopeLabel = cssSelector;
+  } else {
+    scope = $('body');
+    scopeLabel = null;
+  }
+
   const headings = [];
-  $('h1, h2, h3').each((_, el) => {
+  scope.find('h1, h2, h3').each((_, el) => {
+    const text = $(el).text().replace(/\s+/g, ' ').trim();
+    if (text.length > 2 && text.length < 200) headings.push(text);
+  });
+  // If the scope element itself is a heading, include it too
+  scope.filter('h1, h2, h3').each((_, el) => {
     const text = $(el).text().replace(/\s+/g, ' ').trim();
     if (text.length > 2 && text.length < 200) headings.push(text);
   });
 
-  const pricing = extractByKeywords($, ['pricing', 'price', 'plan', 'subscription', 'tier']);
-  const features = extractByKeywords($, ['feature', 'capability', 'solution', 'product']);
+  const pricing = extractByKeywords($, scope, ['pricing', 'price', 'plan', 'subscription', 'tier']);
+  const features = extractByKeywords($, scope, ['feature', 'capability', 'solution', 'product']);
 
-  const bodyText = $('body').text().replace(/\s+/g, ' ').trim().substring(0, 40000);
+  const bodyText = scope.text().replace(/\s+/g, ' ').trim().substring(0, 40000);
 
   const content = {
     title,
@@ -111,6 +163,7 @@ async function fetchPageContent(url) {
     pricing: pricing.substring(0, 8000),
     features: features.substring(0, 8000),
     bodyText: bodyText,
+    scope: scopeLabel,
   };
 
   // JS-wall detection — only meaningful once we've measured the visible body.
@@ -125,10 +178,15 @@ async function fetchPageContent(url) {
   return { content, hash, url };
 }
 
-function extractByKeywords($, keywords) {
+function extractByKeywords($, scope, keywords) {
   const found = new Set();
   keywords.forEach(kw => {
-    $(`[class*="${kw}"], [id*="${kw}"]`).each((_, el) => {
+    scope.find(`[class*="${kw}"], [id*="${kw}"]`).each((_, el) => {
+      const text = $(el).text().replace(/\s+/g, ' ').trim();
+      if (text.length > 30) found.add(text.substring(0, 3000));
+    });
+    // Also check whether any scope-root element itself matches
+    scope.filter(`[class*="${kw}"], [id*="${kw}"]`).each((_, el) => {
       const text = $(el).text().replace(/\s+/g, ' ').trim();
       if (text.length > 30) found.add(text.substring(0, 3000));
     });
@@ -184,5 +242,6 @@ module.exports = {
   detectEmptyContent,
   BlockedPageError,
   EmptyContentError,
+  SelectorNotFoundError,
   EMPTY_BODY_THRESHOLD,
 };

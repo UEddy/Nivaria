@@ -1426,6 +1426,27 @@ tbody tr:hover td { background: var(--bg-hover); }
   width: 5px; height: 5px; background: #EAB308;
   border-radius: 50%;
 }
+.status-pill--selector-missing {
+  background: rgba(217, 70, 239, 0.10); color: #F5D0FE;
+  border-color: rgba(217, 70, 239, 0.3);
+}
+.status-pill--selector-missing .status-dot {
+  width: 5px; height: 5px; background: #D946EF;
+  border-radius: 50%; box-shadow: 0 0 5px #D946EF;
+}
+
+/* "scoped" badge shown next to a competitor name when css_selector is set */
+.scoped-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  margin-left: 6px; padding: 1px 6px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.02em;
+  background: rgba(99, 102, 241, 0.12); color: var(--accent-2);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 4px;
+  vertical-align: middle;
+  cursor: help;
+}
+.scoped-badge svg { opacity: 0.9; }
 
 .comp-url-link {
   display: inline-flex; align-items: center; gap: 5px;
