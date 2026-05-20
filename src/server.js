@@ -218,12 +218,28 @@ app.use(productionErrorHandler);
 
 // ── Start ──────────────────────────────────────────────────────────────────────
 
+function logAnthropicKeyStatus() {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) {
+    console.warn('⚠️  ANTHROPIC_API_KEY is not set — change analysis will use rule-based fallback');
+    return;
+  }
+  const prefix = key.slice(0, 10);
+  const shapeOk = /^sk-ant-[a-z0-9-]+/i.test(key) && key.length > 30;
+  if (shapeOk) {
+    console.log(`✅ ANTHROPIC_API_KEY present (prefix: ${prefix}…, length: ${key.length}) — AI analysis enabled`);
+  } else {
+    console.warn(`⚠️  ANTHROPIC_API_KEY is set (prefix: ${prefix}…, length: ${key.length}) but shape looks unusual — AI calls may fail`);
+  }
+}
+
 initDb().then(() => {
   // Purge expired sessions hourly
   setInterval(() => {
     try { getDb().prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run(); } catch (_) {}
   }, 60 * 60 * 1000);
 
+  logAnthropicKeyStatus();
   startScheduler();
   app.listen(PORT, () => {
     console.log(`\n🔍 Foresight — http://localhost:${PORT}\n`);

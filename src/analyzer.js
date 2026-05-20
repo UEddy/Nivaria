@@ -9,6 +9,38 @@ function getClient() {
   return client;
 }
 
+class AIAnalysisError extends Error {
+  constructor(code, message, cause) {
+    super(message);
+    this.name = 'AIAnalysisError';
+    this.code = code; // ai_auth_failed | ai_out_of_credits | ai_rate_limited | ai_service_error | ai_invalid_response | ai_error
+    this.cause = cause;
+  }
+}
+
+function categorizeAnthropicError(err) {
+  const status = err?.status ?? err?.statusCode;
+  const msg = String(err?.message || err || '');
+
+  if (status === 401 || /authentication_error|invalid x-api-key|invalid api key/i.test(msg)) {
+    return new AIAnalysisError('ai_auth_failed',
+      `Anthropic API key rejected (401). Check ANTHROPIC_API_KEY in .env.`, err);
+  }
+  if (status === 402 || /credit balance|plans & billing|insufficient_quota|billing/i.test(msg)) {
+    return new AIAnalysisError('ai_out_of_credits',
+      `Anthropic account is out of credits. Refill at console.anthropic.com → Plans & Billing.`, err);
+  }
+  if (status === 429 || /rate_limit|too many requests/i.test(msg)) {
+    return new AIAnalysisError('ai_rate_limited',
+      `Anthropic rate limit hit. Will retry on next scheduled check.`, err);
+  }
+  if (status >= 500 && status < 600) {
+    return new AIAnalysisError('ai_service_error',
+      `Anthropic service error (${status}). Will retry on next scheduled check.`, err);
+  }
+  return new AIAnalysisError('ai_error', `AI analysis failed: ${msg}`, err);
+}
+
 async function analyzeChange(competitor, before, after, diff) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return buildFallbackAnalysis(competitor, diff);
@@ -16,18 +48,29 @@ async function analyzeChange(competitor, before, after, diff) {
 
   const prompt = buildPrompt(competitor, diff);
 
-  const response = await getClient().messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2000,
-    system: 'You are a competitive intelligence analyst. You analyze competitor website changes and produce structured battle card intelligence. Always respond with valid JSON only, no markdown fences.',
-    messages: [{ role: 'user', content: prompt }],
-  });
+  let response;
+  try {
+    response = await getClient().messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2000,
+      system: 'You are a competitive intelligence analyst. You analyze competitor website changes and produce structured battle card intelligence. Always respond with valid JSON only, no markdown fences.',
+      messages: [{ role: 'user', content: prompt }],
+    });
+  } catch (err) {
+    throw categorizeAnthropicError(err);
+  }
 
   const text = response.content[0].text.trim();
   const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('AI response was not valid JSON');
+  if (!jsonMatch) {
+    throw new AIAnalysisError('ai_invalid_response', 'AI response was not valid JSON', null);
+  }
 
-  return JSON.parse(jsonMatch[0]);
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch (err) {
+    throw new AIAnalysisError('ai_invalid_response', `AI response JSON parse failed: ${err.message}`, err);
+  }
 }
 
 function buildPrompt(competitor, diff) {
@@ -94,4 +137,4 @@ function buildFallbackAnalysis(competitor, diff) {
   };
 }
 
-module.exports = { analyzeChange };
+module.exports = { analyzeChange, buildFallbackAnalysis, AIAnalysisError, categorizeAnthropicError };

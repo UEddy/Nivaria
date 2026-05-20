@@ -72,12 +72,7 @@ const Competitors = {
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                   </a>
                 </td>
-                <td>
-                  <span class="status-pill ${c.active ? 'status-pill--active' : 'status-pill--paused'}">
-                    <span class="status-dot"></span>
-                    ${c.active ? 'Active' : 'Paused'}
-                  </span>
-                </td>
+                <td>${Competitors.statusPill(c)}</td>
                 <td class="text-muted text-sm">${c.last_checked ? timeAgo(c.last_checked) : '—'}</td>
                 <td>
                   ${c.change_count > 0
@@ -125,6 +120,28 @@ const Competitors = {
         }
       </p>
     `;
+  },
+
+  statusPill(c) {
+    if (!c.active) {
+      return `<span class="status-pill status-pill--paused"><span class="status-dot"></span>Paused</span>`;
+    }
+    const s = c.last_check_status || '';
+    const tip = c.last_check_error ? ` title="${esc(c.last_check_error)}"` : '';
+    if (s === 'blocked') {
+      return `<span class="status-pill status-pill--blocked"${tip}><span class="status-dot"></span>Blocked</span>`;
+    }
+    if (s === 'empty_content') {
+      return `<span class="status-pill status-pill--empty"${tip}><span class="status-dot"></span>Empty</span>`;
+    }
+    if (s.startsWith('fetch_failed')) {
+      return `<span class="status-pill status-pill--fetch-error"${tip}><span class="status-dot"></span>Fetch error</span>`;
+    }
+    if (s.startsWith('ok_')) {
+      // Successful fetch but AI analysis fell back (ok_ai_out_of_credits, ok_no_ai_key, etc.)
+      return `<span class="status-pill status-pill--ai-down"${tip}><span class="status-dot"></span>AI down</span>`;
+    }
+    return `<span class="status-pill status-pill--active"><span class="status-dot"></span>Active</span>`;
   },
 
   showAddModal() {

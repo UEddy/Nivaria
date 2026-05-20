@@ -115,6 +115,9 @@ const SCHEMA = `
     active INTEGER DEFAULT 1,
     last_checked DATETIME,
     last_content_hash TEXT,
+    last_check_status TEXT,
+    last_check_error TEXT,
+    last_check_at DATETIME,
     check_count INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -131,6 +134,8 @@ const SCHEMA = `
     recommended_response TEXT,
     talking_points TEXT,
     headline TEXT,
+    analysis_status TEXT DEFAULT 'ok',
+    analysis_error TEXT,
     detected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (competitor_id) REFERENCES competitors(id)
   );
@@ -171,6 +176,18 @@ async function initDb() {
   if (!userCols.includes('email_verified'))  sqlDb.run('ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0');
   if (!userCols.includes('last_login'))      sqlDb.run('ALTER TABLE users ADD COLUMN last_login DATETIME');
   if (!userCols.includes('session_version')) sqlDb.run('ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 1');
+
+  // Migrate competitors table for P0 check-status tracking
+  const compCols = (sqlDb.exec('PRAGMA table_info(competitors)')[0]?.values || []).map(v => v[1]);
+  if (!compCols.includes('last_check_status')) sqlDb.run('ALTER TABLE competitors ADD COLUMN last_check_status TEXT');
+  if (!compCols.includes('last_check_error'))  sqlDb.run('ALTER TABLE competitors ADD COLUMN last_check_error TEXT');
+  if (!compCols.includes('last_check_at'))     sqlDb.run('ALTER TABLE competitors ADD COLUMN last_check_at DATETIME');
+
+  // Migrate changes table to support analyzer-failure backfill
+  const changeCols = (sqlDb.exec('PRAGMA table_info(changes)')[0]?.values || []).map(v => v[1]);
+  if (!changeCols.includes('analysis_status')) sqlDb.run("ALTER TABLE changes ADD COLUMN analysis_status TEXT DEFAULT 'ok'");
+  if (!changeCols.includes('analysis_error'))  sqlDb.run('ALTER TABLE changes ADD COLUMN analysis_error TEXT');
+
   saveDb();
 
   const existingUser = db.prepare('SELECT id FROM users WHERE id = 1').get();

@@ -1400,6 +1400,32 @@ tbody tr:hover td { background: var(--bg-hover); }
   width: 5px; height: 5px; background: var(--txt-3);
   border-radius: 50%;
 }
+.status-pill--blocked {
+  background: rgba(220, 38, 38, 0.12); color: #FCA5A5;
+  border-color: rgba(220, 38, 38, 0.3);
+}
+.status-pill--blocked .status-dot {
+  width: 5px; height: 5px; background: #EF4444;
+  border-radius: 50%; box-shadow: 0 0 5px #EF4444;
+}
+.status-pill--empty,
+.status-pill--fetch-error {
+  background: rgba(245, 158, 11, 0.12); color: #FCD34D;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+.status-pill--empty .status-dot,
+.status-pill--fetch-error .status-dot {
+  width: 5px; height: 5px; background: #F59E0B;
+  border-radius: 50%; box-shadow: 0 0 5px #F59E0B;
+}
+.status-pill--ai-down {
+  background: rgba(234, 179, 8, 0.12); color: #FDE68A;
+  border-color: rgba(234, 179, 8, 0.3);
+}
+.status-pill--ai-down .status-dot {
+  width: 5px; height: 5px; background: #EAB308;
+  border-radius: 50%;
+}
 
 .comp-url-link {
   display: inline-flex; align-items: center; gap: 5px;
