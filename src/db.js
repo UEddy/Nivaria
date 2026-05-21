@@ -138,6 +138,11 @@ const SCHEMA = `
     headline TEXT,
     analysis_status TEXT DEFAULT 'ok',
     analysis_error TEXT,
+    is_meaningful INTEGER DEFAULT 1,
+    gate_category TEXT,
+    gate_reason TEXT,
+    ai_input_tokens INTEGER,
+    ai_output_tokens INTEGER,
     detected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (competitor_id) REFERENCES competitors(id)
   );
@@ -193,6 +198,12 @@ async function initDb() {
   const changeCols = (sqlDb.exec('PRAGMA table_info(changes)')[0]?.values || []).map(v => v[1]);
   if (!changeCols.includes('analysis_status')) sqlDb.run("ALTER TABLE changes ADD COLUMN analysis_status TEXT DEFAULT 'ok'");
   if (!changeCols.includes('analysis_error'))  sqlDb.run('ALTER TABLE changes ADD COLUMN analysis_error TEXT');
+  // Phase 4: meaningful-change gate + AI token tracking
+  if (!changeCols.includes('is_meaningful'))    sqlDb.run('ALTER TABLE changes ADD COLUMN is_meaningful INTEGER DEFAULT 1');
+  if (!changeCols.includes('gate_category'))    sqlDb.run('ALTER TABLE changes ADD COLUMN gate_category TEXT');
+  if (!changeCols.includes('gate_reason'))      sqlDb.run('ALTER TABLE changes ADD COLUMN gate_reason TEXT');
+  if (!changeCols.includes('ai_input_tokens'))  sqlDb.run('ALTER TABLE changes ADD COLUMN ai_input_tokens INTEGER');
+  if (!changeCols.includes('ai_output_tokens')) sqlDb.run('ALTER TABLE changes ADD COLUMN ai_output_tokens INTEGER');
 
   saveDb();
 

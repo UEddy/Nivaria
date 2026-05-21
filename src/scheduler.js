@@ -1,7 +1,8 @@
 const cron = require('node-cron');
 const { getDb } = require('./db');
 const { fetchPageContent, generateDiff } = require('./scraper');
-const { analyzeChange, buildFallbackAnalysis } = require('./analyzer');
+const { analyzeChange, buildFallbackAnalysis, estimateCostUsd } = require('./analyzer');
+const { classifyChange } = require('./changeGate');
 const { sendAlerts } = require('./webhooks');
 const { canUseWebhooks } = require('./payments');
 
@@ -59,6 +60,12 @@ async function checkCompetitor(competitor, db) {
   let analysisStatus = 'ok';
   let analysisError  = null;
 
+  let isMeaningful = 1;
+  let gateCategory = null;
+  let gateReason   = null;
+  let aiInputTokens  = null;
+  let aiOutputTokens = null;
+
   if (hashChanged) {
     console.log(`  ⚡ Change detected: ${competitor.name}`);
 
@@ -69,16 +76,44 @@ async function checkCompetitor(competitor, db) {
     const before = previousChange ? JSON.parse(previousChange.content_after) : null;
     const diff = generateDiff(before, content);
 
-    // ── AI ANALYSIS (failure must NOT block persistence) ──────────────────────
+    // ── GATE: classify cheaply before spending an AI call ───────────────────
+    const gate = classifyChange(before, content, diff);
+    gateCategory = gate.category;
+    gateReason   = gate.reason;
+    console.log(`  🚪 Gate: ${gate.meaningful ? 'MEANINGFUL' : 'trivial'} (${gate.category}) — ${gate.reason}`);
+
     let analysis;
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!gate.meaningful) {
+      // Skip the AI entirely. Persist a thin record so the user can still
+      // see what was gated if they enable the trivial filter, but no
+      // webhook is fired and no tokens are spent.
+      isMeaningful = 0;
+      analysis = buildTrivialAnalysis(competitor, gate);
+      analysisStatus = 'trivial';
+    } else if (!process.env.ANTHROPIC_API_KEY) {
       analysis = buildFallbackAnalysis(competitor, diff);
       analysisStatus = 'no_ai_key';
       analysisError  = 'ANTHROPIC_API_KEY not configured';
     } else {
       try {
-        analysis = await analyzeChange(competitor, before, content, diff);
+        const result = await analyzeChange(competitor, before, content, diff);
+        analysis = result.analysis;
         analysisStatus = 'ok';
+        if (result.usage) {
+          aiInputTokens  = result.usage.input_tokens;
+          aiOutputTokens = result.usage.output_tokens;
+          const cost = estimateCostUsd(result.usage);
+          console.log(`  💰 AI usage: in=${aiInputTokens} out=${aiOutputTokens} ≈$${cost.toFixed(4)}`);
+        }
+        // Post-hoc downgrade: AI looked at the diff and decided there was
+        // nothing of strategic significance. Treat exactly like a gated row —
+        // record stays for transparency, but no webhook fires.
+        if (analysis.is_meaningful === false) {
+          isMeaningful = 0;
+          gateCategory = 'ai_downgraded';
+          gateReason   = analysis.why_it_matters || 'AI judged change as non-meaningful';
+          console.log(`  🚪 AI post-hoc downgrade: ${gateReason}`);
+        }
       } catch (aiErr) {
         const code = aiErr.code || 'ai_error';
         const msg  = aiErr.message || String(aiErr);
@@ -90,8 +125,8 @@ async function checkCompetitor(competitor, db) {
     }
 
     const insertResult = db.prepare(`
-      INSERT INTO changes (competitor_id, content_before, content_after, diff_summary, analysis, threat_level, recommended_response, talking_points, headline, analysis_status, analysis_error)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO changes (competitor_id, content_before, content_after, diff_summary, analysis, threat_level, recommended_response, talking_points, headline, analysis_status, analysis_error, is_meaningful, gate_category, gate_reason, ai_input_tokens, ai_output_tokens)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       competitor.id,
       previousChange?.content_after || null,
@@ -100,16 +135,21 @@ async function checkCompetitor(competitor, db) {
       JSON.stringify(analysis),
       analysis.threat_level,
       analysis.recommended_response,
-      JSON.stringify(analysis.talking_points),
+      JSON.stringify(analysis.talking_points || []),
       analysis.headline,
-      analysisStatus === 'ok' ? 'ok' : 'failed',
+      analysisStatus === 'ok' ? 'ok' : (analysisStatus === 'trivial' ? 'trivial' : 'failed'),
       analysisError,
+      isMeaningful,
+      gateCategory,
+      gateReason ? gateReason.slice(0, 500) : null,
+      aiInputTokens,
+      aiOutputTokens,
     );
     changeRowId = insertResult.lastInsertRowid;
 
-    // Alert only when AI analysis is genuine. Rule-based fallbacks would just
-    // be noise in Slack/Discord and could be sent later by a backfill job.
-    if (analysisStatus === 'ok') {
+    // Alert only when (a) AI analysis succeeded, AND (b) the change is
+    // meaningful (gate + AI both agree it's worth a sales team's attention).
+    if (analysisStatus === 'ok' && isMeaningful === 1) {
       const settings = db.prepare('SELECT * FROM settings WHERE user_id = ?').get(competitor.user_id);
       const user = db.prepare('SELECT * FROM users WHERE id = ?').get(competitor.user_id);
       if (settings && user && canUseWebhooks(user)) {
@@ -123,12 +163,14 @@ async function checkCompetitor(competitor, db) {
   }
 
   // ── ALWAYS advance baseline + check status on a successful fetch ────────────
+  // Gated-trivial counts as 'ok' for the competitor's check status — the
+  // pipeline ran exactly as intended; we just chose not to call the AI.
   const finalStatus = !hashChanged
     ? 'ok'
-    : analysisStatus === 'ok'
+    : (analysisStatus === 'ok' || analysisStatus === 'trivial')
       ? 'ok'
       : `ok_${analysisStatus}`; // e.g. ok_ai_out_of_credits, ok_no_ai_key
-  const finalError = analysisStatus === 'ok' ? null : analysisError;
+  const finalError = (analysisStatus === 'ok' || analysisStatus === 'trivial') ? null : analysisError;
 
   db.prepare(`UPDATE competitors SET last_content_hash = ?, last_check_status = ?, last_check_error = ?, last_check_at = CURRENT_TIMESTAMP WHERE id = ?`)
     .run(hash, finalStatus, finalError, competitor.id);
@@ -173,4 +215,23 @@ function startScheduler() {
   console.log('⏰ Scheduler started — daily checks at 9:00 AM');
 }
 
-module.exports = { startScheduler, checkCompetitor, runScheduledChecks, fetchErrorToStatus };
+// Stub analysis returned when the gate classifies a diff as trivial. We never
+// call Anthropic, but we still write a row so users can audit gating decisions
+// from the UI via the "Trivial" filter.
+function buildTrivialAnalysis(competitor, gate) {
+  return {
+    is_meaningful: false,
+    changed_what: `${competitor.name} page changed in a way that did not require analysis`,
+    why_it_matters: `Gated as trivial: ${gate.reason}`,
+    threat_level: 'low',
+    threat_reasoning: `Pre-AI gate classified this change as "${gate.category}".`,
+    recommended_response: 'No action needed.',
+    talking_points: [],
+    headline: `${competitor.name} — trivial change skipped`,
+    summary: `Change detected but classified by the pre-AI gate as "${gate.category}": ${gate.reason}. No battle card generated.`,
+    key_changes: [{ category: 'other', description: gate.reason, impact: 'None — gated as trivial' }],
+    opportunity: '',
+  };
+}
+
+module.exports = { startScheduler, checkCompetitor, runScheduledChecks, fetchErrorToStatus, buildTrivialAnalysis };

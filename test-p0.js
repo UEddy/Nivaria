@@ -30,9 +30,11 @@ const assert = require('assert');
     if (nextFetchError) throw nextFetchError;
     return nextFetchResult;
   };
+  // Phase 4: analyzeChange now returns { analysis, usage }. Wrap the test
+  // double so the scheduler can still destructure cleanly.
   analyzer.analyzeChange = async () => {
     if (nextAnalyzeError) throw nextAnalyzeError;
-    return nextAnalyzeResult;
+    return { analysis: nextAnalyzeResult, usage: null };
   };
 
   const { checkCompetitor } = require('./src/scheduler');
@@ -65,6 +67,8 @@ const assert = require('assert');
       analysis TEXT, threat_level TEXT, recommended_response TEXT,
       talking_points TEXT, headline TEXT,
       analysis_status TEXT DEFAULT 'ok', analysis_error TEXT,
+      is_meaningful INTEGER DEFAULT 1, gate_category TEXT, gate_reason TEXT,
+      ai_input_tokens INTEGER, ai_output_tokens INTEGER,
       detected_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE settings (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER UNIQUE NOT NULL);
