@@ -113,6 +113,7 @@ const SCHEMA = `
     url TEXT NOT NULL,
     description TEXT,
     css_selector TEXT,
+    render_mode TEXT NOT NULL DEFAULT 'fetch',
     active INTEGER DEFAULT 1,
     last_checked DATETIME,
     last_content_hash TEXT,
@@ -185,6 +186,8 @@ async function initDb() {
   if (!compCols.includes('last_check_at'))     sqlDb.run('ALTER TABLE competitors ADD COLUMN last_check_at DATETIME');
   // Phase 2: per-competitor CSS selector override for noise reduction
   if (!compCols.includes('css_selector'))      sqlDb.run('ALTER TABLE competitors ADD COLUMN css_selector TEXT');
+  // Phase 3: per-competitor render mode — 'fetch' (axios+cheerio) or 'js' (Playwright)
+  if (!compCols.includes('render_mode'))       sqlDb.run("ALTER TABLE competitors ADD COLUMN render_mode TEXT NOT NULL DEFAULT 'fetch'");
 
   // Migrate changes table to support analyzer-failure backfill
   const changeCols = (sqlDb.exec('PRAGMA table_info(changes)')[0]?.values || []).map(v => v[1]);

@@ -151,6 +151,12 @@ const Competitors = {
     if (s.startsWith('fetch_failed')) {
       return `<span class="status-pill status-pill--fetch-error"${tip}><span class="status-dot"></span>Fetch error</span>`;
     }
+    if (s === 'render_failed') {
+      return `<span class="status-pill status-pill--fetch-error"${tip}><span class="status-dot"></span>Render error</span>`;
+    }
+    if (s === 'ssrf_blocked') {
+      return `<span class="status-pill status-pill--blocked"${tip}><span class="status-dot"></span>Blocked (SSRF)</span>`;
+    }
     if (s.startsWith('ok_')) {
       // Successful fetch but AI analysis fell back (ok_ai_out_of_credits, ok_no_ai_key, etc.)
       return `<span class="status-pill status-pill--ai-down"${tip}><span class="status-dot"></span>AI down</span>`;
@@ -185,6 +191,11 @@ const Competitors = {
           <input class="form-input" id="comp-selector" placeholder=".pricing-table or #features" maxlength="200" />
           <span class="form-hint">Advanced. Monitor only a specific section of the page. Leave blank to watch the whole page. Use your browser's Inspect tool to find the right selector.</span>
         </div>
+        <div class="form-group">
+          <label class="form-label">Rendering mode</label>
+          ${Competitors.renderModeRadios('comp-render-mode', 'fetch')}
+          <span class="form-hint">Switch to JavaScript mode if Fast mode shows "no content found" or you know the page is built with React, Vue, Webflow, or similar.</span>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -198,11 +209,41 @@ const Competitors = {
     });
   },
 
+  // Inline component: rendering-mode radios. Caller supplies a unique field name
+  // (so add/edit modals can coexist if ever shown together) and the current value.
+  renderModeRadios(fieldName, current) {
+    const c = current === 'js' ? 'js' : 'fetch';
+    return `
+      <div class="render-mode-group" style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:6px">
+          <input type="radio" name="${fieldName}" value="fetch" ${c === 'fetch' ? 'checked' : ''} style="margin-top:3px"/>
+          <span>
+            <span style="display:block;color:var(--txt);font-weight:500">Fast (HTML fetch)</span>
+            <span style="display:block;color:var(--txt-3);font-size:12px;margin-top:2px">Default, recommended for most sites</span>
+          </span>
+        </label>
+        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:6px">
+          <input type="radio" name="${fieldName}" value="js" ${c === 'js' ? 'checked' : ''} style="margin-top:3px"/>
+          <span>
+            <span style="display:block;color:var(--txt);font-weight:500">JavaScript (slower)</span>
+            <span style="display:block;color:var(--txt-3);font-size:12px;margin-top:2px">For modern SaaS pages where content loads dynamically</span>
+          </span>
+        </label>
+      </div>
+    `;
+  },
+
+  selectedRenderMode(fieldName) {
+    const chosen = document.querySelector(`input[name="${fieldName}"]:checked`);
+    return chosen?.value === 'js' ? 'js' : 'fetch';
+  },
+
   async submitAdd(btn) {
-    const name     = el('comp-name').value.trim();
-    const url      = el('comp-url').value.trim();
-    const desc     = el('comp-desc').value.trim();
-    const selector = el('comp-selector')?.value.trim() || '';
+    const name       = el('comp-name').value.trim();
+    const url        = el('comp-url').value.trim();
+    const desc       = el('comp-desc').value.trim();
+    const selector   = el('comp-selector')?.value.trim() || '';
+    const renderMode = Competitors.selectedRenderMode('comp-render-mode');
 
     if (!name) { toast('Name is required', 'error'); return; }
     if (!url)  { toast('URL is required', 'error'); return; }
@@ -217,6 +258,7 @@ const Competitors = {
         url,
         description: desc || undefined,
         css_selector: selector || undefined,
+        render_mode: renderMode,
       });
       closeModal();
       toast(`${name} added successfully`, 'success');
@@ -245,6 +287,13 @@ const Competitors = {
     } catch (e) { toast(e.message, 'error'); return; }
     if (!c) { toast('Competitor not found', 'error'); return; }
 
+    const currentMode = c.render_mode === 'js' ? 'js' : 'fetch';
+    // Surface a JS-mode hint when the last check failed for an extraction reason
+    // while we were in fetch mode — this is the exact failure shape that switching
+    // to Playwright is built to fix.
+    const showJsHint = currentMode === 'fetch'
+      && (c.last_check_status === 'selector_not_found' || c.last_check_status === 'empty_content');
+
     openModal(`
       <div class="modal-header">
         <div class="modal-title">Edit Competitor</div>
@@ -253,6 +302,11 @@ const Competitors = {
         </button>
       </div>
       <div class="modal-body">
+        ${showJsHint ? `
+          <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.35);border-radius:6px;padding:10px 12px;margin-bottom:14px;color:var(--txt-2);font-size:13px;line-height:1.5">
+            <strong style="color:var(--txt)">Try switching to JavaScript rendering.</strong>
+            The last check failed (${esc(c.last_check_status === 'selector_not_found' ? 'selector not found' : 'empty content')}) while using Fast mode. If this page is built with React, Vue, Webflow, or similar, content loads after the initial HTML and Fast mode can't see it.
+          </div>` : ''}
         <div class="form-group">
           <label class="form-label">Competitor Name <span style="color:var(--red)">*</span></label>
           <input class="form-input" id="edit-comp-name" value="${esc(c.name)}" autocomplete="off" />
@@ -271,6 +325,11 @@ const Competitors = {
           <input class="form-input" id="edit-comp-selector" value="${esc(c.css_selector || '')}" placeholder=".pricing-table or #features" maxlength="200" />
           <span class="form-hint">Advanced. Monitor only a specific section of the page. Clear this field to revert to full-page monitoring. Changing it will reset the baseline.</span>
         </div>
+        <div class="form-group">
+          <label class="form-label">Rendering mode</label>
+          ${Competitors.renderModeRadios('edit-comp-render-mode', currentMode)}
+          <span class="form-hint">Switch to JavaScript mode if Fast mode shows "no content found" or you know the page is built with React, Vue, Webflow, or similar. Changing this resets the baseline.</span>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -281,10 +340,11 @@ const Competitors = {
   },
 
   async submitEdit(id, btn) {
-    const name     = el('edit-comp-name').value.trim();
-    const url      = el('edit-comp-url').value.trim();
-    const desc     = el('edit-comp-desc').value.trim();
-    const selector = el('edit-comp-selector').value.trim();
+    const name       = el('edit-comp-name').value.trim();
+    const url        = el('edit-comp-url').value.trim();
+    const desc       = el('edit-comp-desc').value.trim();
+    const selector   = el('edit-comp-selector').value.trim();
+    const renderMode = Competitors.selectedRenderMode('edit-comp-render-mode');
 
     if (!name) { toast('Name is required', 'error'); return; }
     if (!url)  { toast('URL is required', 'error'); return; }
@@ -299,6 +359,7 @@ const Competitors = {
         url,
         description: desc,
         css_selector: selector, // empty string clears it server-side
+        render_mode: renderMode,
       });
       closeModal();
       toast('Saved', 'success');

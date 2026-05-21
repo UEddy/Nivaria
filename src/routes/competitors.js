@@ -17,6 +17,14 @@ function validateCompetitorUrl(raw) {
   }
 }
 
+// Returns { value, error }. value is always 'fetch' or 'js'; defaults to 'fetch' when missing.
+function validateRenderMode(raw) {
+  if (raw === undefined || raw === null || raw === '') return { value: 'fetch', error: null };
+  const s = String(raw).trim().toLowerCase();
+  if (s !== 'fetch' && s !== 'js') return { value: null, error: 'render_mode must be "fetch" or "js"' };
+  return { value: s, error: null };
+}
+
 // Returns { value, error }. `value === null` means "no selector / clear it".
 function validateCssSelector(raw) {
   if (raw === undefined || raw === null) return { value: null, error: null };
@@ -71,6 +79,10 @@ router.post('/', (req, res) => {
   const sel = validateCssSelector(req.body.css_selector);
   if (sel.error) return res.status(400).json({ error: sel.error });
 
+  // Optional render_mode — defaults to 'fetch'
+  const rm = validateRenderMode(req.body.render_mode);
+  if (rm.error) return res.status(400).json({ error: rm.error });
+
   const user  = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
   const count = db.prepare('SELECT COUNT(*) AS n FROM competitors WHERE user_id = ?').get(req.userId).n;
 
@@ -82,8 +94,8 @@ router.post('/', (req, res) => {
   }
 
   const result = db.prepare(
-    'INSERT INTO competitors (user_id, name, url, description, css_selector) VALUES (?, ?, ?, ?, ?)'
-  ).run(req.userId, name, url, description || null, sel.value);
+    'INSERT INTO competitors (user_id, name, url, description, css_selector, render_mode) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(req.userId, name, url, description || null, sel.value, rm.value);
 
   res.status(201).json(db.prepare('SELECT * FROM competitors WHERE id = ?').get(result.lastInsertRowid));
 });
@@ -97,6 +109,7 @@ router.put('/:id', (req, res) => {
   let url         = row.url;
   let description = row.description;
   let cssSelector = row.css_selector;
+  let renderMode  = row.render_mode || 'fetch';
   let resetHash   = false;
 
   if (req.body.name !== undefined) {
@@ -128,22 +141,32 @@ router.put('/:id', (req, res) => {
     cssSelector = sel.value;
   }
 
-  // When URL or selector changes, the previous baseline is no longer comparable.
-  // Clear it so the next check captures a fresh baseline rather than firing a
-  // bogus "change detected" against content from a different region.
+  if (req.body.render_mode !== undefined) {
+    const rm = validateRenderMode(req.body.render_mode);
+    if (rm.error) return res.status(400).json({ error: rm.error });
+    // Switching render mode changes how content is extracted, so the prior
+    // hash is no longer comparable — clear the baseline.
+    if (rm.value !== renderMode) resetHash = true;
+    renderMode = rm.value;
+  }
+
+  // When URL, selector, or render mode changes, the previous baseline is no
+  // longer comparable. Clear it so the next check captures a fresh baseline
+  // rather than firing a bogus "change detected" against content from a
+  // different region or rendering pipeline.
   if (resetHash) {
     db.prepare(`
       UPDATE competitors
-      SET name = ?, url = ?, description = ?, css_selector = ?,
+      SET name = ?, url = ?, description = ?, css_selector = ?, render_mode = ?,
           last_content_hash = NULL, last_check_status = NULL, last_check_error = NULL
       WHERE id = ?
-    `).run(name, url, description, cssSelector, row.id);
+    `).run(name, url, description, cssSelector, renderMode, row.id);
   } else {
     db.prepare(`
       UPDATE competitors
-      SET name = ?, url = ?, description = ?, css_selector = ?
+      SET name = ?, url = ?, description = ?, css_selector = ?, render_mode = ?
       WHERE id = ?
-    `).run(name, url, description, cssSelector, row.id);
+    `).run(name, url, description, cssSelector, renderMode, row.id);
   }
 
   res.json(db.prepare('SELECT * FROM competitors WHERE id = ?').get(row.id));

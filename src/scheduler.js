@@ -9,6 +9,8 @@ function fetchErrorToStatus(err) {
   if (err && err.code === 'BLOCKED_PAGE')       return { status: 'blocked',             msg: err.message };
   if (err && err.code === 'EMPTY_CONTENT')      return { status: 'empty_content',       msg: err.message };
   if (err && err.code === 'SELECTOR_NOT_FOUND') return { status: 'selector_not_found',  msg: `Selector "${err.selector}" matched no elements — the page structure may have changed.` };
+  if (err && err.code === 'SSRF_BLOCKED')       return { status: 'ssrf_blocked',        msg: err.message };
+  if (err && err.code === 'RENDER_FAILED')      return { status: 'render_failed',       msg: err.message };
   const httpStatus = err && err.response && err.response.status;
   if (httpStatus) {
     if (httpStatus === 403) return { status: 'blocked',      msg: `HTTP 403 — likely bot block` };
@@ -18,24 +20,34 @@ function fetchErrorToStatus(err) {
     return { status: 'fetch_failed', msg: `HTTP ${httpStatus}` };
   }
   if (err && err.code === 'ECONNABORTED') return { status: 'fetch_failed', msg: 'timeout' };
+  // Playwright navigation timeouts surface as TimeoutError with a name field.
+  if (err && (err.name === 'TimeoutError' || /Timeout.*exceeded/i.test(err.message || ''))) {
+    return { status: 'render_failed', msg: 'render timeout (30s)' };
+  }
   return { status: 'fetch_failed', msg: (err && err.message) || 'unknown fetch error' };
 }
 
 async function checkCompetitor(competitor, db) {
-  console.log(`  Checking: ${competitor.name} (${competitor.url})`);
+  const renderMode = competitor.render_mode === 'js' ? 'js' : 'fetch';
+  console.log(`  Checking: ${competitor.name} (${competitor.url}) [render=${renderMode}]`);
 
   db.prepare(`UPDATE competitors SET last_checked = CURRENT_TIMESTAMP, check_count = check_count + 1 WHERE id = ?`)
     .run(competitor.id);
 
   // ── FETCH ────────────────────────────────────────────────────────────────────
-  let content, hash;
+  let content, hash, renderDuration;
   try {
-    const r = await fetchPageContent(competitor.url, { cssSelector: competitor.css_selector || null });
-    content = r.content;
-    hash    = r.hash;
+    const r = await fetchPageContent(competitor.url, {
+      cssSelector: competitor.css_selector || null,
+      renderMode,
+    });
+    content        = r.content;
+    hash           = r.hash;
+    renderDuration = r.renderDuration;
+    console.log(`  ⏱  render=${renderMode} duration=${renderDuration}ms`);
   } catch (err) {
     const { status, msg } = fetchErrorToStatus(err);
-    console.error(`  ✗ Fetch failed (${status}): ${competitor.name} — ${msg}`);
+    console.error(`  ✗ Fetch failed (${status}, render=${renderMode}): ${competitor.name} — ${msg}`);
     db.prepare(`UPDATE competitors SET last_check_status = ?, last_check_error = ?, last_check_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(status, msg.slice(0, 500), competitor.id);
     return { ok: false, status, error: msg };

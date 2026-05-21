@@ -5,7 +5,8 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "postinstall": "playwright install chromium"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -19,6 +20,7 @@
     "express-session": "^1.19.0",
     "helmet": "^8.1.0",
     "node-cron": "^3.0.3",
+    "playwright": "^1.60.0",
     "sql.js": "^1.12.0",
     "uuid": "^9.0.1"
   },
