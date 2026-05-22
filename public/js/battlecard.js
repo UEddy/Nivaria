@@ -25,6 +25,12 @@ const BattleCard = {
     const talkingPoints = Array.isArray(c.talking_points) ? c.talking_points : (a.talking_points || []);
     const keyChanges = Array.isArray(a.key_changes) ? a.key_changes : [];
     const threat = c.threat_level || 'low';
+    // Phase 6: "Analyzed for: [Company]" label shown only when the AI actually
+    // saw the user's business context (context_used flag set at insert time)
+    // AND a company name is on file. If either is missing, render generic.
+    const analyzedFor = (c.context_used === 1 && c.user_company_name && c.user_company_name.trim())
+      ? c.user_company_name.trim()
+      : null;
     // Phase 5: historical context + recent prior changes for this competitor.
     // historical_context lives either on the change row directly (post-Phase 5)
     // or, for older Phase-4 rows, never — guard for both.
@@ -44,6 +50,13 @@ const BattleCard = {
 
     return `
       <div class="bc-wrap">
+
+        ${analyzedFor ? `
+          <div class="bc-analyzed-for" title="This battle card was personalized using your saved business context. Edit in Settings.">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Analyzed for: ${esc(analyzedFor)}
+          </div>
+        ` : ''}
 
         <!-- Header -->
         <div class="bc-header">

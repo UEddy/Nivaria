@@ -103,9 +103,11 @@ router.get('/stats', (req, res) => {
 router.get('/:id', (req, res) => {
   const db = getDb();
   const row = db.prepare(`
-    SELECT ch.*, c.name AS competitor_name, c.url AS competitor_url, c.description AS competitor_description
+    SELECT ch.*, c.name AS competitor_name, c.url AS competitor_url, c.description AS competitor_description,
+           uc.company_name AS user_company_name
     FROM changes ch
     JOIN competitors c ON ch.competitor_id = c.id
+    LEFT JOIN user_context uc ON uc.user_id = c.user_id
     WHERE ch.id = ? AND c.user_id = ?
   `).get(req.params.id, req.userId);
 

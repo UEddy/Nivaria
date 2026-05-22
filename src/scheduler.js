@@ -6,6 +6,7 @@ const { classifyChange } = require('./changeGate');
 const { sendAlerts } = require('./webhooks');
 const { canUseWebhooks } = require('./payments');
 const { getCompetitorHistory, invalidateCompetitorHistory } = require('./historicalContext');
+const { getUserContext, formatContextForPrompt, hasMeaningfulContext } = require('./userContext');
 
 function fetchErrorToStatus(err) {
   if (err && err.code === 'BLOCKED_PAGE')       return { status: 'blocked',             msg: err.message };
@@ -68,6 +69,7 @@ async function checkCompetitor(competitor, db) {
   let aiOutputTokens = null;
   let patternTagsJson      = null;
   let historicalContextStr = null;
+  let contextUsed = 0;
 
   if (hashChanged) {
     console.log(`  ⚡ Change detected: ${competitor.name}`);
@@ -121,8 +123,29 @@ async function checkCompetitor(competitor, db) {
         ? `${historyMeta.count} prior changes included${historyMeta.cacheHit ? ' (cached)' : ''}`
         : `skipped (${historyMeta.skipReason})`}`);
 
+      // Phase 6: pull the user's business context so the AI can frame the
+      // analysis from their perspective (ICP, positioning, deal size). Same
+      // degradation rule as history — a fetch failure must never block the
+      // AI call; we fall back to a context-less generic prompt.
+      let userContextText = '';
+      let contextMeta = { included: false, skipReason: 'no_user_context' };
       try {
-        const result = await analyzeChange(competitor, before, content, diff, historyText);
+        const userCtx = getUserContext(competitor.user_id);
+        if (hasMeaningfulContext(userCtx)) {
+          userContextText = formatContextForPrompt(userCtx);
+          contextMeta = { included: true, skipReason: null, companyName: userCtx.company_name || null };
+          contextUsed = 1;
+        }
+      } catch (ctxErr) {
+        contextMeta.skipReason = `context_fetch_failed: ${ctxErr.message}`;
+        console.warn(`  ⚠️  User-context fetch failed for ${competitor.name}: ${ctxErr.message}`);
+      }
+      console.log(`  👤 User context: ${contextMeta.included
+        ? `included${contextMeta.companyName ? ` (${contextMeta.companyName})` : ''}`
+        : `skipped (${contextMeta.skipReason})`}`);
+
+      try {
+        const result = await analyzeChange(competitor, before, content, diff, historyText, userContextText);
         analysis = result.analysis;
         analysisStatus = 'ok';
         if (result.usage) {
@@ -158,8 +181,8 @@ async function checkCompetitor(competitor, db) {
     }
 
     const insertResult = db.prepare(`
-      INSERT INTO changes (competitor_id, content_before, content_after, diff_summary, analysis, threat_level, recommended_response, talking_points, headline, analysis_status, analysis_error, is_meaningful, gate_category, gate_reason, ai_input_tokens, ai_output_tokens, pattern_tags, historical_context)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO changes (competitor_id, content_before, content_after, diff_summary, analysis, threat_level, recommended_response, talking_points, headline, analysis_status, analysis_error, is_meaningful, gate_category, gate_reason, ai_input_tokens, ai_output_tokens, pattern_tags, historical_context, context_used)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       competitor.id,
       previousChange?.content_after || null,
@@ -179,6 +202,7 @@ async function checkCompetitor(competitor, db) {
       aiOutputTokens,
       patternTagsJson,
       historicalContextStr,
+      contextUsed,
     );
     changeRowId = insertResult.lastInsertRowid;
 

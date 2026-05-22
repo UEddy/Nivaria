@@ -15,6 +15,7 @@ const authRouter        = require('./routes/auth');
 const competitorsRouter = require('./routes/competitors');
 const changesRouter     = require('./routes/changes');
 const settingsRouter    = require('./routes/settings');
+const userContextRouter = require('./routes/userContext');
 
 // ── DB-backed session store ────────────────────────────────────────────────────
 
@@ -175,9 +176,10 @@ function requireAuth(req, res, next) {
 app.use('/api/auth', authRouter);
 
 // Protected endpoints: general rate limit + auth + CSRF
-app.use('/api/competitors', limits.api, requireAuth, csrfProtect, competitorsRouter);
-app.use('/api/changes',     limits.api, requireAuth, csrfProtect, changesRouter);
-app.use('/api/settings',    limits.api, requireAuth, csrfProtect, settingsRouter);
+app.use('/api/competitors',  limits.api, requireAuth, csrfProtect, competitorsRouter);
+app.use('/api/changes',      limits.api, requireAuth, csrfProtect, changesRouter);
+app.use('/api/settings',     limits.api, requireAuth, csrfProtect, settingsRouter);
+app.use('/api/user/context', limits.api, requireAuth, csrfProtect, userContextRouter);
 
 // Stripe webhook (raw body, no CSRF needed — validated by Stripe signature)
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {

@@ -1,14 +1,15 @@
 const Dashboard = {
   async render() {
     try {
-      const [stats, changesData, competitors] = await Promise.all([
+      const [stats, changesData, competitors, ctxData] = await Promise.all([
         API.getStats(),
         API.getChanges({ limit: 6 }),
         API.getCompetitors(),
+        API.getUserContext().catch(() => null), // never block dashboard on context fetch
       ]);
       App.stats = stats;
       App.updateBadges();
-      el('page-root').innerHTML = Dashboard.html(stats, changesData.changes, competitors);
+      el('page-root').innerHTML = Dashboard.html(stats, changesData.changes, competitors, ctxData);
       Dashboard.animateStats(stats);
       window.staggerIn?.('.feed-item', 80, 70);
       window.staggerIn?.('.competitor-mini', 120, 55);
@@ -22,6 +23,53 @@ const Dashboard = {
           <div class="empty-desc">${esc(e.message)}</div>
         </div>`;
     }
+  },
+
+  // Phase 6: soft, dismissible banner that nudges users who haven't filled in
+  // their business context. Reappears every 14 days. Stored in localStorage
+  // — never sent to the server.
+  CTX_BANNER_KEY: 'cs-ctx-banner-dismissed',
+  CTX_BANNER_REAPPEAR_MS: 14 * 24 * 60 * 60 * 1000,
+
+  contextBannerHtml(ctxData) {
+    if (!ctxData) return ''; // fetch failed; stay silent
+    if (ctxData.exists) {
+      // Treat fully-empty rows the same as missing — same semantics as
+      // hasMeaningfulContext on the server.
+      const c = ctxData.context || {};
+      const anyText = ['company_name','what_we_sell','target_icp','our_positioning'].some(k => c[k] && String(c[k]).trim());
+      const anyEnum = !!(c.typical_deal_size || c.sales_motion);
+      if (anyText || anyEnum) return '';
+    }
+
+    // Dismissed within the last 14 days? Stay hidden.
+    try {
+      const ts = parseInt(localStorage.getItem(Dashboard.CTX_BANNER_KEY) || '0', 10);
+      if (ts && (Date.now() - ts) < Dashboard.CTX_BANNER_REAPPEAR_MS) return '';
+    } catch (_) { /* localStorage unavailable — show banner */ }
+
+    return `
+      <div class="ctx-banner" id="ctx-banner">
+        <span class="ctx-banner-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        </span>
+        <span class="ctx-banner-text">
+          <strong>Add your business context</strong> to get sharper competitor analysis tailored to your ICP, positioning, and deal size.
+        </span>
+        <span class="ctx-banner-actions">
+          <a href="#/onboarding" class="btn btn-primary btn-sm">Add now</a>
+          <button class="btn btn-ghost btn-sm" onclick="Dashboard.dismissContextBanner()" title="Dismiss for 14 days">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </span>
+      </div>
+    `;
+  },
+
+  dismissContextBanner() {
+    try { localStorage.setItem(Dashboard.CTX_BANNER_KEY, String(Date.now())); } catch (_) {}
+    const node = document.getElementById('ctx-banner');
+    if (node) node.remove();
   },
 
   animateStats(stats) {
@@ -42,7 +90,7 @@ const Dashboard = {
     });
   },
 
-  html(stats, changes, competitors) {
+  html(stats, changes, competitors, ctxData) {
     const score = stats.total_competitors > 0
       ? Math.min(100, Math.round((stats.total_changes / Math.max(1, stats.total_competitors)) * 12 + stats.active_competitors * 8))
       : 0;
@@ -52,6 +100,7 @@ const Dashboard = {
     const slotWarn = slotMax && stats.total_competitors / slotMax > 0.8;
 
     return `
+      ${Dashboard.contextBannerHtml(ctxData)}
       <!-- Hero Stats -->
       <div class="hero-stats">
         <div class="hero-stat stat-indigo">
@@ -203,3 +252,4 @@ const Dashboard = {
     `;
   },
 };
+window.Dashboard = Dashboard;

@@ -209,6 +209,11 @@ const App = {
       el('page-sub').textContent = 'Choose the plan that fits your team';
       root.innerHTML = Skeleton.cards(3);
       Pricing.render(); transition();
+    } else if (page === 'onboarding') {
+      el('page-title').textContent = 'Welcome to Foresight';
+      el('page-sub').textContent = 'One quick step to personalize your analyses';
+      root.innerHTML = Skeleton.cards(3);
+      Onboarding.render().then(transition);
     } else {
       root.innerHTML = `<div class="empty-state">
         <div class="empty-icon">

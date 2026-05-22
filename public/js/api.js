@@ -66,6 +66,10 @@ const API = (() => {
     getSettings:  ()          => API.get('/settings'),
     saveSettings: (data)      => API.put('/settings', data),
     testWebhook:  (type, url) => API.post('/settings/test-webhook', { type, url }),
+
+    // User business context (Phase 6)
+    getUserContext: ()        => API.get('/user/context'),
+    saveUserContext: (data)   => API.put('/user/context', data),
   };
 })();
 window.API = API;

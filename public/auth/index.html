@@ -863,7 +863,9 @@ async function doRegisterComplete(password) {
   setLoading(true);
   try {
     await post('/api/auth/register/complete', { email: State.email, token: State.verifiedToken, password });
-    window.location.href = '/app';
+    // Phase 6: new accounts land on the business-context onboarding form
+    // before the dashboard. Skipping is allowed and still gets them in.
+    window.location.href = '/app#/onboarding';
   } catch (err) {
     showMsg(err.message || 'Something went wrong. Please try again.');
     setLoading(false);

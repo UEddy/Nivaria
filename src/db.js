@@ -161,6 +161,24 @@ const SCHEMA = `
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
+
+  -- Phase 6: per-user business context fed into every AI analysis prompt so
+  -- battle cards reflect the user's ICP, positioning, and deal size instead of
+  -- generic outside-observer analysis. All fields nullable — context is
+  -- entirely optional and the AI degrades gracefully without it.
+  CREATE TABLE IF NOT EXISTS user_context (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER UNIQUE NOT NULL,
+    company_name TEXT,
+    what_we_sell TEXT,
+    target_icp TEXT,
+    our_positioning TEXT,
+    typical_deal_size TEXT CHECK(typical_deal_size IN ('small','mid','large','enterprise') OR typical_deal_size IS NULL),
+    sales_motion TEXT CHECK(sales_motion IN ('plg','slg','hybrid') OR sales_motion IS NULL),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
 `;
 
 async function initDb() {
@@ -213,6 +231,10 @@ async function initDb() {
   // and persist the AI's narrative on how the change fits the competitor's trajectory.
   if (!changeCols.includes('pattern_tags'))       sqlDb.run('ALTER TABLE changes ADD COLUMN pattern_tags TEXT');
   if (!changeCols.includes('historical_context')) sqlDb.run('ALTER TABLE changes ADD COLUMN historical_context TEXT');
+
+  // Phase 6: audit flag — did the AI have user business context to work from?
+  // Lets us measure context coverage and surface "Analyzed for: …" in the UI.
+  if (!changeCols.includes('context_used')) sqlDb.run('ALTER TABLE changes ADD COLUMN context_used INTEGER DEFAULT 0');
 
   // Phase 5: speed up per-competitor reverse-chronological lookups used by
   // historicalContext.getCompetitorHistory and the new timeline endpoints.

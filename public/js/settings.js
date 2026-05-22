@@ -1,8 +1,11 @@
 const Settings = {
   async render() {
     try {
-      const { settings, user } = await API.getSettings();
-      el('page-root').innerHTML = Settings.html(settings || {}, user);
+      const [{ settings, user }, ctxData] = await Promise.all([
+        API.getSettings(),
+        API.getUserContext().catch(() => null), // never block settings on context fetch
+      ]);
+      el('page-root').innerHTML = Settings.html(settings || {}, user, ctxData);
     } catch (e) {
       el('page-root').innerHTML = `
         <div class="empty-state">
@@ -13,14 +16,77 @@ const Settings = {
     }
   },
 
-  html(s, user) {
+  html(s, user, ctxData) {
     const tier = user?.tier || 'free';
     const isProPlus = tier === 'pro' || tier === 'team';
     const tierLabel = { free: 'Free', pro: 'Pro', team: 'Team' }[tier] || tier;
     const limits = { free: '1', pro: '10', team: '∞' };
+    const c = ctxData?.context || {};
 
     return `
       <div class="settings-grid">
+
+        <!-- Business context (Phase 6) -->
+        <div class="card">
+          <div class="card-header" style="margin-bottom:16px">
+            <div>
+              <div class="card-title">Business context</div>
+              <div class="card-sub">Fed into every AI battle card so analyses reflect your ICP, positioning, and deal size. Updates apply to future analyses only — past battle cards are not regenerated.</div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="form-group">
+              <label class="form-label">Company name</label>
+              <input class="form-input" id="ctx-company-name" maxlength="200"
+                placeholder="What's your company called?" value="${esc(c.company_name || '')}" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">What we sell</label>
+              <textarea class="form-input form-textarea" id="ctx-what-we-sell" rows="3" maxlength="5000"
+                placeholder="Describe your product in 1–3 sentences.">${esc(c.what_we_sell || '')}</textarea>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Target ICP</label>
+              <textarea class="form-input form-textarea" id="ctx-target-icp" rows="3" maxlength="5000"
+                placeholder="Who do you sell to? Industry, company size, and the typical role you sell to.">${esc(c.target_icp || '')}</textarea>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Our positioning</label>
+              <textarea class="form-input form-textarea" id="ctx-our-positioning" rows="3" maxlength="5000"
+                placeholder="How do you differentiate from competitors?">${esc(c.our_positioning || '')}</textarea>
+            </div>
+
+            <div class="form-row two-col">
+              <div class="form-group">
+                <label class="form-label">Typical deal size</label>
+                <select class="form-input" id="ctx-deal-size">
+                  <option value=""           ${!c.typical_deal_size ? 'selected' : ''}>— Select —</option>
+                  <option value="small"      ${c.typical_deal_size === 'small' ? 'selected' : ''}>Small ($5K–25K ACV)</option>
+                  <option value="mid"        ${c.typical_deal_size === 'mid' ? 'selected' : ''}>Mid-market ($25K–100K ACV)</option>
+                  <option value="large"      ${c.typical_deal_size === 'large' ? 'selected' : ''}>Large ($100K+ ACV)</option>
+                  <option value="enterprise" ${c.typical_deal_size === 'enterprise' ? 'selected' : ''}>Enterprise ($250K+ ACV)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Sales motion</label>
+                <select class="form-input" id="ctx-sales-motion">
+                  <option value=""       ${!c.sales_motion ? 'selected' : ''}>— Select —</option>
+                  <option value="plg"    ${c.sales_motion === 'plg' ? 'selected' : ''}>PLG (product-led / self-serve)</option>
+                  <option value="slg"    ${c.sales_motion === 'slg' ? 'selected' : ''}>SLG (sales-led)</option>
+                  <option value="hybrid" ${c.sales_motion === 'hybrid' ? 'selected' : ''}>Hybrid (PLG + SLG)</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end">
+              <button class="btn btn-primary btn-sm" onclick="Settings.saveContext(this)">Save business context</button>
+            </div>
+          </div>
+        </div>
 
         <!-- Account Info -->
         <div class="card">
@@ -185,6 +251,33 @@ const Settings = {
       } else {
         toast(e.message, 'error');
       }
+    }
+  },
+
+  async saveContext(btn) {
+    const payload = {
+      company_name:      document.getElementById('ctx-company-name').value.trim(),
+      what_we_sell:      document.getElementById('ctx-what-we-sell').value.trim(),
+      target_icp:        document.getElementById('ctx-target-icp').value.trim(),
+      our_positioning:   document.getElementById('ctx-our-positioning').value.trim(),
+      typical_deal_size: document.getElementById('ctx-deal-size').value || null,
+      sales_motion:      document.getElementById('ctx-sales-motion').value || null,
+    };
+
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = 'Saving…';
+    try {
+      await API.saveUserContext(payload);
+      // The dashboard banner uses localStorage to gate visibility; a save
+      // means the banner shouldn't reappear, so clear any prior dismissal.
+      try { localStorage.removeItem('cs-ctx-banner-dismissed'); } catch (_) {}
+      toast('Business context saved — applies to future analyses', 'success');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
     }
   },
 

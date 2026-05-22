@@ -106,6 +106,30 @@ the PRIOR CHANGES section is absent or empty, simply omit historical_context
 or set it to an empty string. Inventing patterns from sparse data is worse
 than saying nothing.
 
+USER'S BUSINESS CONTEXT (Phase 6):
+When the prompt includes a "USER'S BUSINESS CONTEXT" section, this describes
+the SaaS company you are advising — their product, ICP, positioning, deal size,
+and sales motion. Treat it as ground truth and write the entire analysis from
+their strategic perspective:
+  • Frame why_it_matters and recommended_response in terms of THEIR business —
+    not a generic outside view. Reference their ICP, deal size, or motion when
+    relevant ("this affects your mid-market HR-tech buyers because…", "your
+    PLG signup flow is now harder to differentiate from theirs…").
+  • Compare the competitor's move against the user's stated positioning. When
+    the competitor moves toward something the user owns (e.g. user competes on
+    depth, competitor adds enterprise-grade workflows), say so explicitly and
+    treat the threat as higher. When the move is in a space the user does not
+    play in, treat it as lower.
+  • Adjust threat level based on whether the change directly affects the user's
+    typical deal size and ICP, vs being adjacent. A pricing change at $9/mo
+    matters less to an enterprise-only seller than a $250K-ACV competitor pivot.
+  • Talking_points should reference the user's own product/strengths when the
+    context provides them.
+
+When no USER'S BUSINESS CONTEXT section is provided, fall back to the
+generic outside-observer voice. Do NOT invent context the user didn't supply,
+do NOT speculate about their product, and do NOT pretend to know their ICP.
+
 OUTPUT FORMAT (strict): return ONE JSON object, no markdown fences, no prose
 before or after. The object MUST contain these fields, all required:
 
@@ -135,16 +159,21 @@ only meta tags rewritten — set is_meaningful=false, threat_level="low", and
 fill the other fields with the trivial-case defaults above. Do NOT invent
 strategic significance for changes that don't have it.`;
 
-function buildPrompt(competitor, diff, historyText) {
+function buildPrompt(competitor, diff, historyText, userContextText) {
   // Only emit the PRIOR CHANGES block when there's actually something to say —
   // an empty section invites the model to comment on its emptiness.
   const historyBlock = historyText && historyText.trim()
     ? `\nPRIOR CHANGES (last 90 days) — most recent first, format "YYYY-MM-DD | THREAT [tags] | summary":\n${historyText}\n`
     : '';
 
+  // Same rationale for user business context — only inject when meaningful.
+  const contextBlock = userContextText && userContextText.trim()
+    ? `\nUSER'S BUSINESS CONTEXT (write the analysis from this company's strategic perspective):\n${userContextText}\n`
+    : '';
+
   return `Competitor: ${competitor.name}
 URL: ${competitor.url}
-${competitor.description ? `Internal context: ${competitor.description}\n` : ''}${historyBlock}
+${competitor.description ? `Internal context: ${competitor.description}\n` : ''}${contextBlock}${historyBlock}
 CHANGES DETECTED:
 
 Page title: "${diff.beforeTitle || ''}" → "${diff.afterTitle || ''}"
@@ -246,12 +275,12 @@ async function callAnthropic(prompt, retryContext) {
   return { raw, usage };
 }
 
-async function analyzeChange(competitor, before, after, diff, historyText) {
+async function analyzeChange(competitor, before, after, diff, historyText, userContextText) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return { analysis: buildFallbackAnalysis(competitor, diff), usage: null };
   }
 
-  const prompt = buildPrompt(competitor, diff, historyText);
+  const prompt = buildPrompt(competitor, diff, historyText, userContextText);
 
   // First attempt
   const first = await callAnthropic(prompt, null);
