@@ -220,6 +220,7 @@ function check(name, before, after, expectedMeaningful, expectedCategory) {
         analysis_status TEXT DEFAULT 'ok', analysis_error TEXT,
         is_meaningful INTEGER DEFAULT 1, gate_category TEXT, gate_reason TEXT,
         ai_input_tokens INTEGER, ai_output_tokens INTEGER,
+        pattern_tags TEXT, historical_context TEXT,
         detected_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
       CREATE TABLE settings (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER UNIQUE NOT NULL);

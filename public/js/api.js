@@ -46,11 +46,14 @@ const API = (() => {
 
     // Competitors
     getCompetitors:   ()           => API.get('/competitors'),
+    getCompetitor:    (id)         => API.get(`/competitors/${id}`),
     addCompetitor:    (data)       => API.post('/competitors', data),
     updateCompetitor: (id, data)   => API.put(`/competitors/${id}`, data),
     deleteCompetitor: (id)         => API.delete(`/competitors/${id}`),
     toggleCompetitor: (id)         => API.put(`/competitors/${id}/toggle`),
     checkCompetitor:  (id)         => API.post(`/competitors/${id}/check`),
+    getCompetitorHistory:  (id)    => API.get(`/competitors/${id}/history`),
+    getCompetitorPatterns: (id)    => API.get(`/competitors/${id}/patterns`),
 
     // Changes
     getChanges: (params = {}) => {

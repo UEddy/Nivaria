@@ -5,6 +5,7 @@ const { analyzeChange, buildFallbackAnalysis, estimateCostUsd } = require('./ana
 const { classifyChange } = require('./changeGate');
 const { sendAlerts } = require('./webhooks');
 const { canUseWebhooks } = require('./payments');
+const { getCompetitorHistory, invalidateCompetitorHistory } = require('./historicalContext');
 
 function fetchErrorToStatus(err) {
   if (err && err.code === 'BLOCKED_PAGE')       return { status: 'blocked',             msg: err.message };
@@ -65,6 +66,8 @@ async function checkCompetitor(competitor, db) {
   let gateReason   = null;
   let aiInputTokens  = null;
   let aiOutputTokens = null;
+  let patternTagsJson      = null;
+  let historicalContextStr = null;
 
   if (hashChanged) {
     console.log(`  ⚡ Change detected: ${competitor.name}`);
@@ -95,15 +98,45 @@ async function checkCompetitor(competitor, db) {
       analysisStatus = 'no_ai_key';
       analysisError  = 'ANTHROPIC_API_KEY not configured';
     } else {
+      // Phase 5: pull the competitor's recent history so the AI can reference
+      // patterns ("third pricing change this quarter") instead of analyzing
+      // each diff in isolation. Failures here must NEVER block the AI call —
+      // we degrade silently to a history-less prompt.
+      let historyText = '';
+      let historyMeta = { count: 0, cacheHit: false, included: false, skipReason: null };
       try {
-        const result = await analyzeChange(competitor, before, content, diff);
+        const hist = getCompetitorHistory(competitor.id, { userId: competitor.user_id });
+        historyText = hist.formatted;
+        historyMeta = {
+          count: hist.count,
+          cacheHit: hist.cacheHit,
+          included: hist.count > 0,
+          skipReason: hist.count === 0 ? 'no_prior_changes' : null,
+        };
+      } catch (histErr) {
+        historyMeta.skipReason = `history_fetch_failed: ${histErr.message}`;
+        console.warn(`  ⚠️  History fetch failed for ${competitor.name}: ${histErr.message}`);
+      }
+      console.log(`  📜 History: ${historyMeta.included
+        ? `${historyMeta.count} prior changes included${historyMeta.cacheHit ? ' (cached)' : ''}`
+        : `skipped (${historyMeta.skipReason})`}`);
+
+      try {
+        const result = await analyzeChange(competitor, before, content, diff, historyText);
         analysis = result.analysis;
         analysisStatus = 'ok';
         if (result.usage) {
           aiInputTokens  = result.usage.input_tokens;
           aiOutputTokens = result.usage.output_tokens;
           const cost = estimateCostUsd(result.usage);
-          console.log(`  💰 AI usage: in=${aiInputTokens} out=${aiOutputTokens} ≈$${cost.toFixed(4)}`);
+          console.log(`  💰 AI usage: in=${aiInputTokens} out=${aiOutputTokens} ≈$${cost.toFixed(4)}${historyMeta.included ? ` [+history: ${historyMeta.count} rows]` : ''}`);
+        }
+        // Persist Phase 5 fields if the AI produced them.
+        if (Array.isArray(analysis.pattern_tags) && analysis.pattern_tags.length > 0) {
+          patternTagsJson = JSON.stringify(analysis.pattern_tags);
+        }
+        if (typeof analysis.historical_context === 'string' && analysis.historical_context.trim()) {
+          historicalContextStr = analysis.historical_context.trim().slice(0, 1000);
         }
         // Post-hoc downgrade: AI looked at the diff and decided there was
         // nothing of strategic significance. Treat exactly like a gated row —
@@ -125,8 +158,8 @@ async function checkCompetitor(competitor, db) {
     }
 
     const insertResult = db.prepare(`
-      INSERT INTO changes (competitor_id, content_before, content_after, diff_summary, analysis, threat_level, recommended_response, talking_points, headline, analysis_status, analysis_error, is_meaningful, gate_category, gate_reason, ai_input_tokens, ai_output_tokens)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO changes (competitor_id, content_before, content_after, diff_summary, analysis, threat_level, recommended_response, talking_points, headline, analysis_status, analysis_error, is_meaningful, gate_category, gate_reason, ai_input_tokens, ai_output_tokens, pattern_tags, historical_context)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       competitor.id,
       previousChange?.content_after || null,
@@ -144,8 +177,14 @@ async function checkCompetitor(competitor, db) {
       gateReason ? gateReason.slice(0, 500) : null,
       aiInputTokens,
       aiOutputTokens,
+      patternTagsJson,
+      historicalContextStr,
     );
     changeRowId = insertResult.lastInsertRowid;
+
+    // Phase 5: drop cached history for this competitor so the next analysis
+    // (manual or scheduled) picks up this change instead of serving stale data.
+    invalidateCompetitorHistory(competitor.id);
 
     // Alert only when (a) AI analysis succeeded, AND (b) the change is
     // meaningful (gate + AI both agree it's worth a sales team's attention).

@@ -176,10 +176,17 @@ const App = {
       root.innerHTML = Skeleton.dashboard();
       Dashboard.render().then(transition);
     } else if (page === 'competitors') {
-      el('page-title').textContent = 'Competitors';
-      el('page-sub').textContent = 'Manage the pages you track';
-      root.innerHTML = Skeleton.table();
-      Competitors.render().then(transition);
+      if (id) {
+        el('page-title').textContent = 'Competitor Timeline';
+        el('page-sub').textContent = 'All detected changes for this competitor';
+        root.innerHTML = Skeleton.cards(5);
+        CompetitorDetail.render(id).then(transition);
+      } else {
+        el('page-title').textContent = 'Competitors';
+        el('page-sub').textContent = 'Manage the pages you track';
+        root.innerHTML = Skeleton.table();
+        Competitors.render().then(transition);
+      }
     } else if (page === 'history') {
       if (id) {
         el('page-title').textContent = 'Battle Card';
@@ -247,6 +254,13 @@ function formatDate(dateStr) {
   return new Date(dateStr).toLocaleString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit',
+  });
+}
+
+function formatShortDate(dateStr) {
+  if (!dateStr) return '—';
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
   });
 }
 

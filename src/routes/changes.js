@@ -110,7 +110,39 @@ router.get('/:id', (req, res) => {
   `).get(req.params.id, req.userId);
 
   if (!row) return res.status(404).json({ error: 'Not found' });
-  res.json(parseChange(row));
+
+  // Phase 5: include the 5 most-recent prior changes for the same competitor
+  // so the battle card can render a "Recent changes from this competitor"
+  // strip without a separate round-trip. Always scoped to user_id via the
+  // competitors join we already performed above.
+  const recentRows = db.prepare(`
+    SELECT ch.id, ch.detected_at, ch.threat_level, ch.headline, ch.pattern_tags, ch.is_meaningful
+    FROM changes ch
+    JOIN competitors c ON ch.competitor_id = c.id
+    WHERE ch.competitor_id = ?
+      AND c.user_id = ?
+      AND ch.id != ?
+      AND ch.detected_at < ?
+      AND (ch.is_meaningful IS NULL OR ch.is_meaningful = 1)
+    ORDER BY ch.detected_at DESC
+    LIMIT 5
+  `).all(row.competitor_id, req.userId, row.id, row.detected_at);
+
+  const recent_changes = recentRows.map(r => ({
+    id: r.id,
+    detected_at: r.detected_at,
+    threat_level: r.threat_level || 'low',
+    headline: r.headline || '',
+    pattern_tags: (() => {
+      try { return r.pattern_tags ? JSON.parse(r.pattern_tags) : []; } catch (_) { return []; }
+    })(),
+  }));
+
+  const parsed = parseChange(row);
+  // Surface pattern_tags on the change object too (parsed from the raw column).
+  let pattern_tags = [];
+  try { pattern_tags = row.pattern_tags ? JSON.parse(row.pattern_tags) : []; } catch (_) {}
+  res.json({ ...parsed, pattern_tags, recent_changes });
 });
 
 module.exports = router;

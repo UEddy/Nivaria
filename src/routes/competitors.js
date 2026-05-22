@@ -3,6 +3,7 @@ const router  = express.Router();
 const { getDb }            = require('../db');
 const { checkCompetitor }  = require('../scheduler');
 const { canAddCompetitor } = require('../payments');
+const { getCompetitorHistory, generatePatternCallouts } = require('../historicalContext');
 
 // ── Input validation ───────────────────────────────────────────────────────────
 
@@ -177,6 +178,52 @@ router.get('/:id', (req, res) => {
   const row = db.prepare('SELECT * FROM competitors WHERE id = ? AND user_id = ?').get(req.params.id, req.userId);
   if (!row) return res.status(404).json({ error: 'Not found' });
   res.json(row);
+});
+
+// Phase 5: chronological change history for a single competitor. Used by the
+// timeline view on the competitor detail page. Scoped to user_id via the
+// historicalContext helper (which joins on competitors.user_id).
+router.get('/:id/history', (req, res) => {
+  const db = getDb();
+  const competitorId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(competitorId)) return res.status(400).json({ error: 'invalid id' });
+
+  // 404 before fetching history — don't leak whether the id exists for a
+  // different user.
+  const own = db.prepare('SELECT id, name FROM competitors WHERE id = ? AND user_id = ?')
+    .get(competitorId, req.userId);
+  if (!own) return res.status(404).json({ error: 'Not found' });
+
+  const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 90));
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 50));
+
+  const hist = getCompetitorHistory(competitorId, { userId: req.userId, days, maxRows: limit });
+  res.json({
+    competitor_id: competitorId,
+    competitor_name: own.name,
+    days,
+    count: hist.count,
+    truncated: hist.truncated,
+    changes: hist.changes,
+  });
+});
+
+// Phase 5: auto-generated pattern callouts for the competitor detail page.
+// Derived inline from the cached history — cheap, no separate job needed.
+router.get('/:id/patterns', (req, res) => {
+  const db = getDb();
+  const competitorId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(competitorId)) return res.status(400).json({ error: 'invalid id' });
+
+  const own = db.prepare('SELECT id FROM competitors WHERE id = ? AND user_id = ?')
+    .get(competitorId, req.userId);
+  if (!own) return res.status(404).json({ error: 'Not found' });
+
+  const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 90));
+  const hist = getCompetitorHistory(competitorId, { userId: req.userId, days });
+  const callouts = generatePatternCallouts(hist.changes);
+
+  res.json({ competitor_id: competitorId, days, callouts, source_count: hist.count });
 });
 
 router.delete('/:id', (req, res) => {

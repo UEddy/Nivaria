@@ -41,6 +41,25 @@ function categorizeAnthropicError(err) {
   return new AIAnalysisError('ai_error', `AI analysis failed: ${msg}`, err);
 }
 
+// Canonical pattern tag vocabulary. The model is told to pick from this set so
+// historical grouping is consistent and the UI can render predictable callouts.
+const ALLOWED_PATTERN_TAGS = [
+  'pricing_change',
+  'plan_restructure',
+  'feature_launch',
+  'feature_removal',
+  'positioning_shift',
+  'enterprise_push',
+  'smb_push',
+  'integration',
+  'partnership',
+  'certification',
+  'hiring_signal',
+  'comparison_page',
+  'messaging_refresh',
+  'other',
+];
+
 const SYSTEM_PROMPT = `You are a competitive intelligence analyst writing battle cards for a SaaS sales team.
 You analyze diffs of competitor website content and decide what — if anything — the sales team needs to know.
 
@@ -71,6 +90,22 @@ HIGH — directly affects a live sales conversation, reserve for these only:
 Reserve "high" for changes that would directly affect a sales conversation.
 When in doubt between two levels, choose the lower one.
 
+HISTORICAL CONTEXT (Phase 5):
+When the prompt includes a "PRIOR CHANGES (last 90 days)" section, treat it as
+ground truth about this competitor's recent trajectory. Use it to:
+  • Reference recurring patterns when relevant — e.g. "third pricing adjustment
+    in 6 weeks", "fourth enterprise-focused update since September".
+  • Identify acceleration, deceleration, or directional shifts across the
+    sequence (feature-led → enterprise-led, premium → SMB, etc.).
+  • Calibrate threat level when a pattern shows escalation (a single pricing
+    tweak is medium; the third in two months may warrant high).
+
+Be SILENT about history when there is no relevant pattern. Do NOT write filler
+like "this is their first observed change" or "no prior changes exist". When
+the PRIOR CHANGES section is absent or empty, simply omit historical_context
+or set it to an empty string. Inventing patterns from sparse data is worse
+than saying nothing.
+
 OUTPUT FORMAT (strict): return ONE JSON object, no markdown fences, no prose
 before or after. The object MUST contain these fields, all required:
 
@@ -89,7 +124,9 @@ before or after. The object MUST contain these fields, all required:
       "description": string,
       "impact": string }
   ],
-  "opportunity": string (any opportunity this creates for our company, or empty string)
+  "opportunity": string (any opportunity this creates for our company, or empty string),
+  "historical_context": string (1-2 sentences ONLY when a meaningful pattern exists in PRIOR CHANGES; empty string when no prior history or no real pattern),
+  "pattern_tags": [ array of 1-3 short tags from this vocabulary: ${ALLOWED_PATTERN_TAGS.join(', ')} — used to group this change with future ones; pick "other" only if nothing fits ]
 }
 
 If after reading the diff you conclude there is no real change worth a sales
@@ -98,10 +135,16 @@ only meta tags rewritten — set is_meaningful=false, threat_level="low", and
 fill the other fields with the trivial-case defaults above. Do NOT invent
 strategic significance for changes that don't have it.`;
 
-function buildPrompt(competitor, diff) {
+function buildPrompt(competitor, diff, historyText) {
+  // Only emit the PRIOR CHANGES block when there's actually something to say —
+  // an empty section invites the model to comment on its emptiness.
+  const historyBlock = historyText && historyText.trim()
+    ? `\nPRIOR CHANGES (last 90 days) — most recent first, format "YYYY-MM-DD | THREAT [tags] | summary":\n${historyText}\n`
+    : '';
+
   return `Competitor: ${competitor.name}
 URL: ${competitor.url}
-${competitor.description ? `Internal context: ${competitor.description}\n` : ''}
+${competitor.description ? `Internal context: ${competitor.description}\n` : ''}${historyBlock}
 CHANGES DETECTED:
 
 Page title: "${diff.beforeTitle || ''}" → "${diff.afterTitle || ''}"
@@ -150,6 +193,23 @@ function tryParseAnalysis(text) {
   if (!Array.isArray(obj.talking_points)) obj.talking_points = [];
   if (!Array.isArray(obj.key_changes))    obj.key_changes    = [];
   if (typeof obj.opportunity !== 'string') obj.opportunity   = '';
+
+  // Phase 5: historical_context and pattern_tags are optional in the response
+  // (we don't fail validation if the model omits them — older prompts and the
+  // fallback path don't produce them). Normalize when present.
+  if (typeof obj.historical_context !== 'string') obj.historical_context = '';
+  if (!Array.isArray(obj.pattern_tags)) {
+    obj.pattern_tags = [];
+  } else {
+    // Filter to the allowed vocabulary, dedupe, cap at 3 tags. Anything else
+    // gets dropped — we'd rather store nothing than store noise.
+    const allowed = new Set(ALLOWED_PATTERN_TAGS);
+    const seen = new Set();
+    obj.pattern_tags = obj.pattern_tags
+      .map(t => String(t || '').trim().toLowerCase())
+      .filter(t => allowed.has(t) && !seen.has(t) && (seen.add(t), true))
+      .slice(0, 3);
+  }
   return { ok: true, value: obj };
 }
 
@@ -186,12 +246,12 @@ async function callAnthropic(prompt, retryContext) {
   return { raw, usage };
 }
 
-async function analyzeChange(competitor, before, after, diff) {
+async function analyzeChange(competitor, before, after, diff, historyText) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return { analysis: buildFallbackAnalysis(competitor, diff), usage: null };
   }
 
-  const prompt = buildPrompt(competitor, diff);
+  const prompt = buildPrompt(competitor, diff, historyText);
 
   // First attempt
   const first = await callAnthropic(prompt, null);
@@ -234,6 +294,8 @@ function buildFallbackAnalysis(competitor, diff) {
     summary: `Changes detected on ${competitor.url}. ${hasPricingChanges ? 'Pricing section was modified. ' : ''}${hasHeadingChanges ? 'Page structure and headings changed. ' : ''}Enable ANTHROPIC_API_KEY for detailed AI analysis.`,
     key_changes: [{ category: 'other', description: 'Page content changed', impact: 'Requires manual review' }],
     opportunity: '',
+    historical_context: '',
+    pattern_tags: [],
   };
 }
 
@@ -249,8 +311,10 @@ function estimateCostUsd(usage) {
 module.exports = {
   analyzeChange,
   buildFallbackAnalysis,
+  buildPrompt,
   AIAnalysisError,
   categorizeAnthropicError,
   tryParseAnalysis,
   estimateCostUsd,
+  ALLOWED_PATTERN_TAGS,
 };

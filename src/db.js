@@ -143,9 +143,14 @@ const SCHEMA = `
     gate_reason TEXT,
     ai_input_tokens INTEGER,
     ai_output_tokens INTEGER,
+    pattern_tags TEXT,
+    historical_context TEXT,
     detected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (competitor_id) REFERENCES competitors(id)
   );
+
+  CREATE INDEX IF NOT EXISTS idx_changes_competitor_detected
+    ON changes(competitor_id, detected_at DESC);
 
   CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -204,6 +209,14 @@ async function initDb() {
   if (!changeCols.includes('gate_reason'))      sqlDb.run('ALTER TABLE changes ADD COLUMN gate_reason TEXT');
   if (!changeCols.includes('ai_input_tokens'))  sqlDb.run('ALTER TABLE changes ADD COLUMN ai_input_tokens INTEGER');
   if (!changeCols.includes('ai_output_tokens')) sqlDb.run('ALTER TABLE changes ADD COLUMN ai_output_tokens INTEGER');
+  // Phase 5: historical pattern analysis — tag each change for cross-time grouping,
+  // and persist the AI's narrative on how the change fits the competitor's trajectory.
+  if (!changeCols.includes('pattern_tags'))       sqlDb.run('ALTER TABLE changes ADD COLUMN pattern_tags TEXT');
+  if (!changeCols.includes('historical_context')) sqlDb.run('ALTER TABLE changes ADD COLUMN historical_context TEXT');
+
+  // Phase 5: speed up per-competitor reverse-chronological lookups used by
+  // historicalContext.getCompetitorHistory and the new timeline endpoints.
+  sqlDb.exec('CREATE INDEX IF NOT EXISTS idx_changes_competitor_detected ON changes(competitor_id, detected_at DESC);');
 
   saveDb();
 

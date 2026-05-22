@@ -25,6 +25,15 @@ const BattleCard = {
     const talkingPoints = Array.isArray(c.talking_points) ? c.talking_points : (a.talking_points || []);
     const keyChanges = Array.isArray(a.key_changes) ? a.key_changes : [];
     const threat = c.threat_level || 'low';
+    // Phase 5: historical context + recent prior changes for this competitor.
+    // historical_context lives either on the change row directly (post-Phase 5)
+    // or, for older Phase-4 rows, never — guard for both.
+    const historicalContext = (typeof c.historical_context === 'string' && c.historical_context.trim())
+      ? c.historical_context.trim()
+      : (typeof a.historical_context === 'string' ? a.historical_context.trim() : '');
+    const patternTags = Array.isArray(c.pattern_tags) ? c.pattern_tags
+                       : (Array.isArray(a.pattern_tags) ? a.pattern_tags : []);
+    const recentChanges = Array.isArray(c.recent_changes) ? c.recent_changes : [];
 
     const threatMeta = {
       high:   { color: 'var(--red)',    label: 'HIGH THREAT',   bg: 'var(--red-dim)',    border: 'rgba(239,68,68,0.25)' },
@@ -71,6 +80,21 @@ const BattleCard = {
           <div class="bc-section bc-summary">
             <div class="bc-section-label">Executive Summary</div>
             <div class="bc-section-body">${esc(a.summary)}</div>
+          </div>
+        ` : ''}
+
+        <!-- Pattern context (Phase 5) -->
+        ${historicalContext ? `
+          <div class="bc-section bc-pattern-context">
+            <div class="bc-section-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 12 8 12 11 5 14 19 17 12 21 12"/></svg>
+              Pattern context
+            </div>
+            <div class="bc-section-body">${esc(historicalContext)}</div>
+            ${patternTags.length > 0 ? `
+              <div class="bc-pattern-tags">
+                ${patternTags.map(t => `<span class="pattern-tag">${esc(t.replace(/_/g, ' '))}</span>`).join('')}
+              </div>` : ''}
           </div>
         ` : ''}
 
@@ -146,6 +170,32 @@ const BattleCard = {
           ` : ''}
 
         </div>
+
+        <!-- Recent changes from this competitor (Phase 5) -->
+        ${recentChanges.length > 0 ? `
+          <div class="bc-section bc-recent">
+            <div class="bc-section-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              Recent changes from this competitor
+            </div>
+            <ul class="recent-changes-list">
+              ${recentChanges.map(r => `
+                <li class="recent-change-item" onclick="navigate('/history/${r.id}')">
+                  <span class="recent-change-date">${esc(formatShortDate(r.detected_at))}</span>
+                  ${threatBadge(r.threat_level)}
+                  <span class="recent-change-headline">${esc(r.headline || 'Change detected')}</span>
+                  ${(r.pattern_tags && r.pattern_tags.length) ? `<span class="recent-change-tags">${r.pattern_tags.slice(0, 2).map(t => `<span class="pattern-tag pattern-tag-sm">${esc(t.replace(/_/g, ' '))}</span>`).join('')}</span>` : ''}
+                </li>
+              `).join('')}
+            </ul>
+            <div class="recent-changes-footer">
+              <a href="#/competitors/${c.competitor_id}" class="btn btn-ghost btn-sm">
+                View full timeline
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </a>
+            </div>
+          </div>
+        ` : ''}
 
         <!-- Footer -->
         <div class="bc-footer">
