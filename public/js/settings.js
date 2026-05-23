@@ -1,5 +1,5 @@
 const Settings = {
-  async render() {
+  async render(routeQuery) {
     try {
       const [{ settings, user }, ctxData, calData] = await Promise.all([
         API.getSettings(),
@@ -7,7 +7,7 @@ const Settings = {
         API.getCalendarConnections().catch(() => ({ encryption_configured: false, connections: [] })),
       ]);
       el('page-root').innerHTML = Settings.html(settings || {}, user, ctxData, calData);
-      Settings.handleCalendarReturnParams();
+      Settings.handleCalendarReturnParams(routeQuery);
     } catch (e) {
       el('page-root').innerHTML = `
         <div class="empty-state">
@@ -175,13 +175,43 @@ const Settings = {
           </div>
         </div>
 
-        <!-- Calendar (Phase 7) -->
-        ${Settings.calendarHtml(s, calData)}
-
-        <!-- Save row -->
-        <div class="settings-save-row">
-          <button class="btn btn-primary" onclick="Settings.save()">Save Settings</button>
+        <!-- Pre-meeting briefings (Phase 7) — notification preferences, grouped
+             with Slack/Discord under the same Save action. The Calendar card
+             below only manages the OAuth connection. -->
+        <div class="card">
+          <div class="card-header" style="margin-bottom:14px">
+            <div>
+              <div class="card-title">Pre-meeting briefings</div>
+              <div class="card-sub">When a meeting on your calendar mentions a tracked competitor, push a battle card to your webhook(s) above. Requires a connected calendar (see below).</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="form-group">
+              <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input type="checkbox" id="briefings-enabled" ${(s?.briefings_enabled ?? 1) === 1 ? 'checked' : ''} />
+                <span>Send pre-meeting briefings to my Slack/Discord webhook</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Send briefings how long before the meeting?</label>
+              <select id="briefing-lead" class="form-input" style="max-width:200px">
+                <option value="15" ${(s?.briefing_lead_minutes ?? 30) === 15 ? 'selected' : ''}>15 minutes before</option>
+                <option value="30" ${(s?.briefing_lead_minutes ?? 30) === 30 ? 'selected' : ''}>30 minutes before</option>
+                <option value="60" ${(s?.briefing_lead_minutes ?? 30) === 60 ? 'selected' : ''}>60 minutes before</option>
+              </select>
+            </div>
+          </div>
         </div>
+
+        <!-- Save row — single button persists all four notification fields
+             (slack, discord, briefings_enabled, briefing_lead_minutes). -->
+        <div class="settings-save-row" style="display:flex;align-items:center;gap:12px;padding:14px 0">
+          <span id="notif-save-feedback" class="form-hint" style="flex:1"></span>
+          <button class="btn btn-primary" onclick="Settings.saveNotifications(this)">Save Notification Settings</button>
+        </div>
+
+        <!-- Calendar (Phase 7) — connection state only -->
+        ${Settings.calendarHtml(s, calData)}
 
       </div>
 
@@ -242,25 +272,80 @@ const Settings = {
     }
   },
 
-  async save() {
-    const slack = document.getElementById('slack-url')?.value.trim() || null;
-    const discord = document.getElementById('discord-url')?.value.trim() || null;
-    const briefingsEnabledEl = document.getElementById('briefings-enabled');
-    const briefingsLeadEl    = document.getElementById('briefing-lead');
-    const payload = { slack_webhook: slack, discord_webhook: discord };
-    if (briefingsEnabledEl) payload.briefings_enabled = briefingsEnabledEl.checked ? 1 : 0;
-    if (briefingsLeadEl)    payload.briefing_lead_minutes = parseInt(briefingsLeadEl.value, 10);
+  // Client-side webhook URL shape check. Mirrors the validators on the server
+  // (src/routes/settings.js) so users get instant feedback instead of paying
+  // a round-trip to discover a typo. Server-side validation remains the
+  // source of truth.
+  _isValidSlackWebhook(url) {
+    if (!url) return true; // empty = clear
+    try {
+      const u = new URL(url);
+      return u.protocol === 'https:' &&
+        (u.hostname === 'hooks.slack.com' || u.hostname.endsWith('.slack.com'));
+    } catch { return false; }
+  },
+  _isValidDiscordWebhook(url) {
+    if (!url) return true;
+    try {
+      const u = new URL(url);
+      return u.protocol === 'https:' &&
+        (u.hostname === 'discord.com' || u.hostname === 'discordapp.com' ||
+         u.hostname.endsWith('.discord.com'));
+    } catch { return false; }
+  },
 
+  async saveNotifications(btn) {
+    const slack    = document.getElementById('slack-url')?.value.trim() || '';
+    const discord  = document.getElementById('discord-url')?.value.trim() || '';
+    const enabledEl = document.getElementById('briefings-enabled');
+    const leadEl    = document.getElementById('briefing-lead');
+    const feedback  = document.getElementById('notif-save-feedback');
+
+    const setFeedback = (msg, isErr) => {
+      if (!feedback) return;
+      feedback.textContent = msg;
+      feedback.style.color = isErr ? 'var(--red)' : 'var(--green)';
+    };
+
+    if (slack   && !Settings._isValidSlackWebhook(slack)) {
+      setFeedback('Slack webhook must be https://hooks.slack.com/services/…', true);
+      toast('Invalid Slack webhook URL', 'error');
+      return;
+    }
+    if (discord && !Settings._isValidDiscordWebhook(discord)) {
+      setFeedback('Discord webhook must be https://discord.com/api/webhooks/…', true);
+      toast('Invalid Discord webhook URL', 'error');
+      return;
+    }
+
+    const payload = {
+      slack_webhook:         slack   || null,
+      discord_webhook:       discord || null,
+      briefings_enabled:     enabledEl ? (enabledEl.checked ? 1 : 0) : undefined,
+      briefing_lead_minutes: leadEl    ? parseInt(leadEl.value, 10)  : undefined,
+    };
+
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = 'Saving…';
+    setFeedback('', false);
     try {
       await API.saveSettings(payload);
-      toast('Settings saved', 'success');
+      setFeedback('Saved ✓', false);
+      toast('Notification settings saved', 'success');
+      setTimeout(() => setFeedback('', false), 4000);
     } catch (e) {
       if (e.upgrade_required) {
+        setFeedback(e.message, true);
         toast(e.message, 'error');
         navigate('/pricing');
       } else {
+        setFeedback(e.message, true);
         toast(e.message, 'error');
       }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
     }
   },
 
@@ -270,15 +355,13 @@ const Settings = {
     const conns = calData?.connections || [];
     const encryptionOk = !!calData?.encryption_configured;
     const google = conns.find(c => c.provider === 'google');
-    const briefingsEnabled = (s?.briefings_enabled ?? 1) === 1;
-    const briefingLead     = s?.briefing_lead_minutes ?? 30;
 
     return `
       <div class="card">
         <div class="card-header" style="margin-bottom:14px">
           <div>
-            <div class="card-title">Calendar &amp; pre-meeting briefings</div>
-            <div class="card-sub">Connect your calendar so Foresight pings your webhook with a battle card before any meeting that mentions a tracked competitor.</div>
+            <div class="card-title">Calendar connection</div>
+            <div class="card-sub">Connect your calendar so Foresight can match upcoming meetings to tracked competitors. Briefing delivery prefs live in the Notifications section above.</div>
           </div>
         </div>
 
@@ -293,44 +376,26 @@ const Settings = {
             </div>
           </div>` : ''}
 
-        <div style="display:flex;flex-direction:column;gap:14px">
-          ${google ? `
-            <div class="form-group" style="border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;align-items:center;gap:14px">
-              <div style="font-size:22px">📅</div>
-              <div style="flex:1;min-width:0">
-                <div style="font-weight:600">Google Calendar</div>
-                <div class="text-muted text-sm">
-                  ${esc(google.account_email || 'unknown account')}
-                  · status <strong>${esc(google.status)}</strong>
-                  ${google.last_synced_at ? `· last sync ${timeAgo(google.last_synced_at)}` : ''}
-                </div>
-                ${google.last_sync_error ? `<div class="text-sm" style="color:var(--red);margin-top:4px">${esc(google.last_sync_error)}</div>` : ''}
+        ${google ? `
+          <div class="form-group" style="border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;align-items:center;gap:14px">
+            <div style="font-size:22px">📅</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600">Google Calendar</div>
+              <div class="text-muted text-sm">
+                ${esc(google.account_email || 'unknown account')}
+                · status <strong>${esc(google.status)}</strong>
+                ${google.last_synced_at ? `· last sync ${timeAgo(google.last_synced_at)}` : ''}
               </div>
-              <button class="btn btn-ghost btn-sm" onclick="Settings.disconnectCalendar('google')">Disconnect</button>
+              ${google.last_sync_error ? `<div class="text-sm" style="color:var(--red);margin-top:4px">${esc(google.last_sync_error)}</div>` : ''}
             </div>
-          ` : `
-            <div style="display:flex;gap:10px;flex-wrap:wrap">
-              <a class="btn btn-primary btn-sm" href="/api/calendar/google/connect" ${!encryptionOk ? 'aria-disabled="true" onclick="event.preventDefault(); toast(\'Set CALENDAR_TOKEN_ENCRYPTION_KEY first\', \'error\');"' : ''}>Connect Google Calendar</a>
-              <button class="btn btn-secondary btn-sm" disabled title="Coming soon">Connect Microsoft 365 (coming soon)</button>
-            </div>
-          `}
-
-          <div class="form-group">
-            <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-              <input type="checkbox" id="briefings-enabled" ${briefingsEnabled ? 'checked' : ''} />
-              <span>Send pre-meeting briefings to my Slack/Discord webhook</span>
-            </label>
+            <button class="btn btn-ghost btn-sm" onclick="Settings.disconnectCalendar('google')">Disconnect</button>
           </div>
-
-          <div class="form-group">
-            <label class="form-label">Send briefings how long before the meeting?</label>
-            <select id="briefing-lead" class="form-input" style="max-width:180px">
-              <option value="15" ${briefingLead === 15 ? 'selected' : ''}>15 minutes before</option>
-              <option value="30" ${briefingLead === 30 ? 'selected' : ''}>30 minutes before</option>
-              <option value="60" ${briefingLead === 60 ? 'selected' : ''}>60 minutes before</option>
-            </select>
+        ` : `
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <a class="btn btn-primary btn-sm" href="/api/calendar/google/connect" ${!encryptionOk ? 'aria-disabled="true" onclick="event.preventDefault(); toast(\'Set CALENDAR_TOKEN_ENCRYPTION_KEY first\', \'error\');"' : ''}>Connect Google Calendar</a>
+            <button class="btn btn-secondary btn-sm" disabled title="Coming soon">Connect Microsoft 365 (coming soon)</button>
           </div>
-        </div>
+        `}
       </div>
     `;
   },
@@ -345,12 +410,18 @@ const Settings = {
   },
 
   // Handle ?calendar_connected=google or ?calendar_error=... appended by the
-  // OAuth callback when redirecting back to the SPA.
-  handleCalendarReturnParams() {
-    const hash = window.location.hash || '';
-    const qIdx = hash.indexOf('?');
-    if (qIdx === -1) return;
-    const params = new URLSearchParams(hash.slice(qIdx + 1));
+  // OAuth callback when redirecting back to the SPA. The router parses the
+  // hash's query string and passes a URLSearchParams object; for direct
+  // callers (re-render after disconnect, demoPlan, etc.) we fall back to
+  // parsing the live hash so the function stays usable standalone.
+  handleCalendarReturnParams(routeQuery) {
+    let params = routeQuery instanceof URLSearchParams ? routeQuery : null;
+    if (!params) {
+      const hash = window.location.hash || '';
+      const qIdx = hash.indexOf('?');
+      if (qIdx === -1) return;
+      params = new URLSearchParams(hash.slice(qIdx + 1));
+    }
     if (params.has('calendar_connected')) {
       toast(`${params.get('calendar_connected')} calendar connected — initial sync running`, 'success');
     } else if (params.has('calendar_error')) {
@@ -358,8 +429,10 @@ const Settings = {
     } else {
       return;
     }
-    // Strip the query params from the hash so a refresh doesn't re-toast.
-    history.replaceState(null, '', hash.slice(0, qIdx));
+    // Strip the query params from the URL so a refresh doesn't re-toast.
+    const hash = window.location.hash || '';
+    const qIdx = hash.indexOf('?');
+    if (qIdx !== -1) history.replaceState(null, '', hash.slice(0, qIdx));
   },
 
   async saveContext(btn) {
