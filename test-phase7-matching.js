@@ -1,9 +1,20 @@
-// One-shot test runner for Phase 7 matching logic — exercises matchEvent
-// against the live competitors table and end-to-end through tracked_meetings
-// via direct INSERTs (no OAuth round-trip required).
+// Phase 7 — pure-logic test runner (no external services required).
 //
-// Runs: Test 2 (title match), Test 3 (domain match), Test 6 (manual tag).
-// Tests 1, 4, 5, 7 need live OAuth + a real webhook.
+// What it tests:
+//   • Test 2  — title match: "Acme deal review" → matches "Acme" competitor
+//   • Test 3  — domain match: attendee jane@acme.com → matches "Acme"
+//   • Test 6  — manual tag: route-handler shape verified at the DB layer
+//   • Token encryption round-trip (AES-256-GCM via src/calendarTokens.js)
+//   • Attendee sanitization edge cases (control chars, malformed emails)
+//
+// How to run (server can be running OR stopped — script reads competitors
+// table but only mutates tracked_meetings rows it created itself):
+//   node test-phase7-matching.js
+//
+// Prerequisites:
+//   • Database initialized (npm start at least once)
+//   • CALENDAR_TOKEN_ENCRYPTION_KEY in .env, OR script generates an
+//     ephemeral one (encryption round-trip works either way).
 
 require('dotenv').config();
 process.env.CALENDAR_TOKEN_ENCRYPTION_KEY ||= require('crypto').randomBytes(32).toString('hex');

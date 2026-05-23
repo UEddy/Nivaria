@@ -1,6 +1,19 @@
-// Phase 7 — Haiku condensation + payload formatter smoke test.
-// Real Anthropic call to verify the prompt + parse round-trip.
-// Webhook payloads are validated structurally (no URL needed).
+// Phase 7 — Haiku condensation + payload-shape smoke test.
+//
+// What it tests:
+//   • Real Anthropic Haiku call: condenses a verbose battle-card's
+//     talking_points into 2-3 pre-meeting one-liners, prints usage + cost
+//   • Slack payload block shape (header + sections + battle-card link)
+//   • Discord embed shape (title, color by threat_level, embed.url to card)
+//   • Empty-change variant — verifies the "no material changes" copy path
+//
+// How to run (server irrelevant — no DB writes, only Anthropic + in-memory
+// payload assembly):
+//   node test-phase7-briefing.js
+//
+// Prerequisites:
+//   • ANTHROPIC_API_KEY in .env with non-zero balance
+//   • No webhook URL needed — payloads are inspected, not POSTed
 
 require('dotenv').config();
 process.env.CALENDAR_TOKEN_ENCRYPTION_KEY ||= require('crypto').randomBytes(32).toString('hex');
