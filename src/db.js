@@ -179,6 +179,58 @@ const SCHEMA = `
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
+
+  -- Phase 7: calendar OAuth connections. Tokens are AES-256-GCM encrypted by
+  -- src/calendarTokens.js before storage. UNIQUE(user_id, provider) means
+  -- re-connecting the same provider updates in-place rather than orphaning rows.
+  CREATE TABLE IF NOT EXISTS calendar_connections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    provider TEXT NOT NULL CHECK(provider IN ('google','microsoft')),
+    account_email TEXT,
+    access_token_enc TEXT NOT NULL,
+    refresh_token_enc TEXT,
+    expires_at DATETIME,
+    scope TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','expired','revoked')),
+    last_synced_at DATETIME,
+    last_sync_error TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    UNIQUE(user_id, provider)
+  );
+
+  -- Phase 7: per-meeting state cached from the calendar provider, plus the
+  -- match against tracked competitors and the briefing dispatch state.
+  -- UNIQUE(user_id, provider, external_event_id) makes sync idempotent.
+  CREATE TABLE IF NOT EXISTS tracked_meetings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    connection_id INTEGER,
+    provider TEXT NOT NULL,
+    external_event_id TEXT NOT NULL,
+    title TEXT,
+    start_time DATETIME NOT NULL,
+    end_time DATETIME,
+    attendees TEXT,
+    matched_competitor_id INTEGER,
+    match_reason TEXT CHECK(match_reason IN ('title','domain','manual','none') OR match_reason IS NULL),
+    briefing_status TEXT DEFAULT 'pending' CHECK(briefing_status IN ('pending','sent','skipped','failed')),
+    briefing_sent_at DATETIME,
+    briefing_error TEXT,
+    last_synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (matched_competitor_id) REFERENCES competitors(id),
+    UNIQUE(user_id, provider, external_event_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_tracked_meetings_dispatch
+    ON tracked_meetings(briefing_status, start_time);
+  CREATE INDEX IF NOT EXISTS idx_tracked_meetings_user_start
+    ON tracked_meetings(user_id, start_time);
+  CREATE INDEX IF NOT EXISTS idx_tracked_meetings_competitor
+    ON tracked_meetings(matched_competitor_id, start_time);
 `;
 
 async function initDb() {
@@ -235,6 +287,28 @@ async function initDb() {
   // Phase 6: audit flag — did the AI have user business context to work from?
   // Lets us measure context coverage and surface "Analyzed for: …" in the UI.
   if (!changeCols.includes('context_used')) sqlDb.run('ALTER TABLE changes ADD COLUMN context_used INTEGER DEFAULT 0');
+
+  // Phase 7: bare domain ("acme.com") on each competitor for attendee-email
+  // matching. Backfilled from URL below for any rows that pre-date this column.
+  if (!compCols.includes('domain')) {
+    sqlDb.run('ALTER TABLE competitors ADD COLUMN domain TEXT');
+    try {
+      const rows = (sqlDb.exec('SELECT id, url FROM competitors')[0]?.values || []);
+      for (const [id, url] of rows) {
+        const domain = extractDomainFromUrl(url);
+        if (domain) sqlDb.run('UPDATE competitors SET domain = ? WHERE id = ?', [domain, id]);
+      }
+    } catch (e) {
+      console.warn('Phase 7 domain backfill failed (non-fatal):', e.message);
+    }
+  }
+
+  // Phase 7: per-user briefing preferences. Lives on the existing settings
+  // table to avoid duplicating webhook config — slack_webhook/discord_webhook
+  // already exist here and are reused as the briefing delivery channel.
+  const settingsCols = (sqlDb.exec('PRAGMA table_info(settings)')[0]?.values || []).map(v => v[1]);
+  if (!settingsCols.includes('briefings_enabled'))     sqlDb.run('ALTER TABLE settings ADD COLUMN briefings_enabled INTEGER DEFAULT 1');
+  if (!settingsCols.includes('briefing_lead_minutes')) sqlDb.run('ALTER TABLE settings ADD COLUMN briefing_lead_minutes INTEGER DEFAULT 30');
 
   // Phase 5: speed up per-competitor reverse-chronological lookups used by
   // historicalContext.getCompetitorHistory and the new timeline endpoints.
@@ -361,4 +435,14 @@ function getDb() {
   return db;
 }
 
-module.exports = { initDb, getDb };
+// Phase 7 helper — extract bare domain from a URL (used by the migration and
+// re-used by routes/competitors when a competitor row is created/updated).
+function extractDomainFromUrl(url) {
+  if (!url) return null;
+  try {
+    const host = new URL(String(url)).hostname.toLowerCase();
+    return host.replace(/^www\./, '') || null;
+  } catch (_) { return null; }
+}
+
+module.exports = { initDb, getDb, extractDomainFromUrl };

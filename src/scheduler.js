@@ -275,6 +275,24 @@ function startScheduler() {
   cron.schedule('0 9 * * *', () => {
     runScheduledChecks().catch(err => console.error('Scheduler error:', err));
   });
+
+  // Phase 7: calendar sync every 15 min, briefing dispatch every 5 min.
+  // Lazy-require so the scheduler still boots if the new modules have a
+  // syntax issue (we'd rather lose Phase 7 than the whole change pipeline).
+  try {
+    const { runScheduledSync }     = require('./calendarSync');
+    const { runScheduledDispatch } = require('./briefingDispatch');
+    cron.schedule('*/15 * * * *', () => {
+      runScheduledSync().catch(err => console.error('[calendar] sync error:', err.message));
+    });
+    cron.schedule('*/5 * * * *', () => {
+      runScheduledDispatch().catch(err => console.error('[briefing] dispatch error:', err.message));
+    });
+    console.log('⏰ Phase 7 calendar sync (15m) + briefing dispatch (5m) scheduled');
+  } catch (e) {
+    console.warn('Phase 7 scheduler hooks not loaded:', e.message);
+  }
+
   console.log('⏰ Scheduler started — daily checks at 9:00 AM');
 }
 

@@ -70,6 +70,14 @@ const API = (() => {
     // User business context (Phase 6)
     getUserContext: ()        => API.get('/user/context'),
     saveUserContext: (data)   => API.put('/user/context', data),
+
+    // Calendar / pre-meeting briefings (Phase 7)
+    getCalendarConnections:    ()           => API.get('/calendar/connections'),
+    disconnectCalendar:        (provider)   => API.post(`/calendar/${provider}/disconnect`),
+    getUpcomingMeetings:       ()           => API.get('/calendar/meetings/upcoming'),
+    getMeetingsByCompetitor:   (id)         => API.get(`/calendar/meetings/by-competitor/${id}`),
+    tagMeeting:                (id, competitorId) => API.put(`/calendar/meetings/${id}/tag`, { competitor_id: competitorId }),
+    triggerCalendarSync:       ()           => API.post('/calendar/sync-now'),
   };
 })();
 window.API = API;

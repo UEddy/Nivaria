@@ -46,7 +46,8 @@ router.get('/', (req, res) => {
 
 router.put('/', (req, res) => {
   const db = getDb();
-  const { slack_webhook, discord_webhook, notification_email } = req.body;
+  const { slack_webhook, discord_webhook, notification_email,
+          briefings_enabled, briefing_lead_minutes } = req.body;
 
   // Validate webhook URLs if provided
   if (slack_webhook && !isValidSlackWebhook(slack_webhook)) {
@@ -57,6 +58,14 @@ router.put('/', (req, res) => {
   }
   if (notification_email && !isValidEmail(notification_email)) {
     return res.status(400).json({ error: 'Invalid notification email address.' });
+  }
+
+  // Phase 7 briefing prefs — only validated when supplied (partial-update friendly)
+  if (briefing_lead_minutes !== undefined && briefing_lead_minutes !== null) {
+    const n = parseInt(briefing_lead_minutes, 10);
+    if (![15, 30, 60].includes(n)) {
+      return res.status(400).json({ error: 'briefing_lead_minutes must be 15, 30, or 60' });
+    }
   }
 
   // Enforce length limits
@@ -73,14 +82,34 @@ router.put('/', (req, res) => {
     });
   }
 
+  // Resolve briefing prefs against existing row so partial updates don't blow
+  // away unrelated fields.
+  const existing = db.prepare('SELECT * FROM settings WHERE user_id = ?').get(req.userId) || {};
+  const finalBriefingsEnabled = briefings_enabled === undefined
+    ? (existing.briefings_enabled ?? 1)
+    : (briefings_enabled ? 1 : 0);
+  const finalBriefingLead = briefing_lead_minutes === undefined
+    ? (existing.briefing_lead_minutes ?? 30)
+    : parseInt(briefing_lead_minutes, 10);
+
   db.prepare(`
-    INSERT INTO settings (user_id, slack_webhook, discord_webhook, notification_email)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO settings (user_id, slack_webhook, discord_webhook, notification_email,
+                          briefings_enabled, briefing_lead_minutes)
+    VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id) DO UPDATE SET
-      slack_webhook      = excluded.slack_webhook,
-      discord_webhook    = excluded.discord_webhook,
-      notification_email = excluded.notification_email
-  `).run(req.userId, slack_webhook || null, discord_webhook || null, notification_email || null);
+      slack_webhook         = excluded.slack_webhook,
+      discord_webhook       = excluded.discord_webhook,
+      notification_email    = excluded.notification_email,
+      briefings_enabled     = excluded.briefings_enabled,
+      briefing_lead_minutes = excluded.briefing_lead_minutes
+  `).run(
+    req.userId,
+    slack_webhook || null,
+    discord_webhook || null,
+    notification_email || null,
+    finalBriefingsEnabled,
+    finalBriefingLead,
+  );
 
   res.json({ success: true });
 });

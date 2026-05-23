@@ -19,6 +19,7 @@ I demonstrated my ability to scope, develop, and release a true full-stack solut
 - AI-generated battle cards: headline, summary, threat score (low, medium, high), recommended response, and sales talking points
 - Slack and Discord webhook alerts when changes are detected
 - Daily scheduled checks via cron, with per-competitor manual re-check
+- Pre-meeting briefings: connect Google Calendar and get a battle card pushed to your webhook 30 min before any meeting that mentions a tracked competitor (by title or attendee domain)
 - Three-mode theme system (system, light, dark) with anti-flash inline detection
 
 ## Tech stack
@@ -61,6 +62,32 @@ I demonstrated my ability to scope, develop, and release a true full-stack solut
    ```
 5. Open http://localhost:3000. Demo data is seeded on first run, and demo credentials are printed to the console.
 
+## Calendar setup (pre-meeting briefings)
+
+Phase 7 connects Google Calendar so Foresight can push a briefing to your Slack/Discord webhook 30 minutes before any meeting that mentions a tracked competitor.
+
+1. **Generate the token-encryption key** and paste it into `.env` as `CALENDAR_TOKEN_ENCRYPTION_KEY`:
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+2. **Create Google OAuth credentials**:
+   - Visit [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials).
+   - "Create Credentials" → "OAuth client ID" → application type "Web application".
+   - Under "Authorized redirect URIs" add exactly: `http://localhost:3000/api/calendar/google/callback` (replace host for production).
+   - Under "APIs & Services → Library", enable the **Google Calendar API**.
+   - Paste the client ID and secret into `.env` as `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`.
+3. **Restart the server**, open `/app#/settings`, and click "Connect Google Calendar".
+4. While the OAuth app is in "Testing" status, only emails listed under "OAuth consent screen → Test users" can complete the flow. For production, follow Google's app verification process — see "Production OAuth verification" below.
+
+### Production OAuth verification
+
+Before launching publicly, the Google OAuth app must move from "Testing" → "In production" via Google's verification process. While unverified:
+- Users hit a "Google hasn't verified this app" warning screen at consent time
+- "Continue" requires clicking "Advanced" → "Go to Foresight (unsafe)"
+- The 100-user test cap applies
+
+Verification is a separate launch task — submit at OAuth consent screen → "Publish app" with a privacy policy URL, app domain, and brand verification artifacts. Sensitive scopes (Calendar API counts as sensitive) require a 4–8 week review.
+
 ## Roadmap
 
 ### Next 7 days
@@ -71,10 +98,10 @@ I demonstrated my ability to scope, develop, and release a true full-stack solut
 
 ### Next 30 days
 
-- Pre-meeting briefings: auto-generated summary for an upcoming sales call
 - Slack slash commands for on-demand competitor lookups
 - Win/loss tagging tied to competitor activity, surfacing patterns over time
 - Vertical-specific battle card templates (fintech, devtools, healthcare)
+- Microsoft 365 Calendar provider (Phase 7 has a Google-only implementation; the abstraction is provider-agnostic)
 
 ---
 

@@ -1,11 +1,13 @@
 const Settings = {
   async render() {
     try {
-      const [{ settings, user }, ctxData] = await Promise.all([
+      const [{ settings, user }, ctxData, calData] = await Promise.all([
         API.getSettings(),
         API.getUserContext().catch(() => null), // never block settings on context fetch
+        API.getCalendarConnections().catch(() => ({ encryption_configured: false, connections: [] })),
       ]);
-      el('page-root').innerHTML = Settings.html(settings || {}, user, ctxData);
+      el('page-root').innerHTML = Settings.html(settings || {}, user, ctxData, calData);
+      Settings.handleCalendarReturnParams();
     } catch (e) {
       el('page-root').innerHTML = `
         <div class="empty-state">
@@ -16,7 +18,7 @@ const Settings = {
     }
   },
 
-  html(s, user, ctxData) {
+  html(s, user, ctxData, calData) {
     const tier = user?.tier || 'free';
     const isProPlus = tier === 'pro' || tier === 'team';
     const tierLabel = { free: 'Free', pro: 'Pro', team: 'Team' }[tier] || tier;
@@ -173,6 +175,9 @@ const Settings = {
           </div>
         </div>
 
+        <!-- Calendar (Phase 7) -->
+        ${Settings.calendarHtml(s, calData)}
+
         <!-- Save row -->
         <div class="settings-save-row">
           <button class="btn btn-primary" onclick="Settings.save()">Save Settings</button>
@@ -240,9 +245,14 @@ const Settings = {
   async save() {
     const slack = document.getElementById('slack-url')?.value.trim() || null;
     const discord = document.getElementById('discord-url')?.value.trim() || null;
+    const briefingsEnabledEl = document.getElementById('briefings-enabled');
+    const briefingsLeadEl    = document.getElementById('briefing-lead');
+    const payload = { slack_webhook: slack, discord_webhook: discord };
+    if (briefingsEnabledEl) payload.briefings_enabled = briefingsEnabledEl.checked ? 1 : 0;
+    if (briefingsLeadEl)    payload.briefing_lead_minutes = parseInt(briefingsLeadEl.value, 10);
 
     try {
-      await API.saveSettings({ slack_webhook: slack, discord_webhook: discord });
+      await API.saveSettings(payload);
       toast('Settings saved', 'success');
     } catch (e) {
       if (e.upgrade_required) {
@@ -252,6 +262,104 @@ const Settings = {
         toast(e.message, 'error');
       }
     }
+  },
+
+  // ── Calendar / Phase 7 ──────────────────────────────────────────────────────
+
+  calendarHtml(s, calData) {
+    const conns = calData?.connections || [];
+    const encryptionOk = !!calData?.encryption_configured;
+    const google = conns.find(c => c.provider === 'google');
+    const briefingsEnabled = (s?.briefings_enabled ?? 1) === 1;
+    const briefingLead     = s?.briefing_lead_minutes ?? 30;
+
+    return `
+      <div class="card">
+        <div class="card-header" style="margin-bottom:14px">
+          <div>
+            <div class="card-title">Calendar &amp; pre-meeting briefings</div>
+            <div class="card-sub">Connect your calendar so Foresight pings your webhook with a battle card before any meeting that mentions a tracked competitor.</div>
+          </div>
+        </div>
+
+        ${!encryptionOk ? `
+          <div class="alert-banner" style="margin-bottom:14px">
+            <div class="alert-banner-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
+            <div>
+              <div class="alert-banner-title">CALENDAR_TOKEN_ENCRYPTION_KEY not set</div>
+              <div class="alert-banner-sub">Server-side encryption key required before connecting a calendar — see README "Calendar setup".</div>
+            </div>
+          </div>` : ''}
+
+        <div style="display:flex;flex-direction:column;gap:14px">
+          ${google ? `
+            <div class="form-group" style="border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;align-items:center;gap:14px">
+              <div style="font-size:22px">📅</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:600">Google Calendar</div>
+                <div class="text-muted text-sm">
+                  ${esc(google.account_email || 'unknown account')}
+                  · status <strong>${esc(google.status)}</strong>
+                  ${google.last_synced_at ? `· last sync ${timeAgo(google.last_synced_at)}` : ''}
+                </div>
+                ${google.last_sync_error ? `<div class="text-sm" style="color:var(--red);margin-top:4px">${esc(google.last_sync_error)}</div>` : ''}
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="Settings.disconnectCalendar('google')">Disconnect</button>
+            </div>
+          ` : `
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <a class="btn btn-primary btn-sm" href="/api/calendar/google/connect" ${!encryptionOk ? 'aria-disabled="true" onclick="event.preventDefault(); toast(\'Set CALENDAR_TOKEN_ENCRYPTION_KEY first\', \'error\');"' : ''}>Connect Google Calendar</a>
+              <button class="btn btn-secondary btn-sm" disabled title="Coming soon">Connect Microsoft 365 (coming soon)</button>
+            </div>
+          `}
+
+          <div class="form-group">
+            <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="briefings-enabled" ${briefingsEnabled ? 'checked' : ''} />
+              <span>Send pre-meeting briefings to my Slack/Discord webhook</span>
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Send briefings how long before the meeting?</label>
+            <select id="briefing-lead" class="form-input" style="max-width:180px">
+              <option value="15" ${briefingLead === 15 ? 'selected' : ''}>15 minutes before</option>
+              <option value="30" ${briefingLead === 30 ? 'selected' : ''}>30 minutes before</option>
+              <option value="60" ${briefingLead === 60 ? 'selected' : ''}>60 minutes before</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  async disconnectCalendar(provider) {
+    if (!confirm(`Disconnect ${provider === 'google' ? 'Google' : provider} Calendar? Pre-meeting briefings will stop until you reconnect.`)) return;
+    try {
+      await API.disconnectCalendar(provider);
+      toast('Calendar disconnected', 'success');
+      Settings.render();
+    } catch (e) { toast(e.message, 'error'); }
+  },
+
+  // Handle ?calendar_connected=google or ?calendar_error=... appended by the
+  // OAuth callback when redirecting back to the SPA.
+  handleCalendarReturnParams() {
+    const hash = window.location.hash || '';
+    const qIdx = hash.indexOf('?');
+    if (qIdx === -1) return;
+    const params = new URLSearchParams(hash.slice(qIdx + 1));
+    if (params.has('calendar_connected')) {
+      toast(`${params.get('calendar_connected')} calendar connected — initial sync running`, 'success');
+    } else if (params.has('calendar_error')) {
+      toast(`Calendar connect failed: ${params.get('calendar_error')}`, 'error');
+    } else {
+      return;
+    }
+    // Strip the query params from the hash so a refresh doesn't re-toast.
+    history.replaceState(null, '', hash.slice(0, qIdx));
   },
 
   async saveContext(btn) {

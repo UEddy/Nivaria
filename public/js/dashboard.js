@@ -1,15 +1,16 @@
 const Dashboard = {
   async render() {
     try {
-      const [stats, changesData, competitors, ctxData] = await Promise.all([
+      const [stats, changesData, competitors, ctxData, meetingsData] = await Promise.all([
         API.getStats(),
         API.getChanges({ limit: 6 }),
         API.getCompetitors(),
         API.getUserContext().catch(() => null), // never block dashboard on context fetch
+        API.getUpcomingMeetings().catch(() => ({ meetings: [] })), // never block dashboard on calendar
       ]);
       App.stats = stats;
       App.updateBadges();
-      el('page-root').innerHTML = Dashboard.html(stats, changesData.changes, competitors, ctxData);
+      el('page-root').innerHTML = Dashboard.html(stats, changesData.changes, competitors, ctxData, meetingsData);
       Dashboard.animateStats(stats);
       window.staggerIn?.('.feed-item', 80, 70);
       window.staggerIn?.('.competitor-mini', 120, 55);
@@ -72,6 +73,76 @@ const Dashboard = {
     if (node) node.remove();
   },
 
+  // Phase 7 — upcoming competitor-relevant meetings. Stays hidden when the
+  // user hasn't connected a calendar (the meetings array is empty AND we don't
+  // want to advertise the feature on the dashboard — that's the Settings card's
+  // job). Once they connect, we show up to 5 next meetings with matches first.
+  upcomingMeetingsHtml(meetingsData, competitors) {
+    const meetings = meetingsData?.meetings || [];
+    if (meetings.length === 0) return '';
+
+    const matched = meetings.filter(m => m.matched_competitor_id);
+    const unmatched = meetings.filter(m => !m.matched_competitor_id);
+    const visible = [...matched, ...unmatched].slice(0, 5);
+    if (visible.length === 0) return '';
+
+    const compOptions = (competitors || []).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+
+    return `
+      <div class="card" style="margin-bottom:24px">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Upcoming competitor-relevant meetings</div>
+            <div class="card-sub">Next ${visible.length} on your calendar · briefings fire ~30 min before</div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${visible.map(m => {
+            const when  = new Date(m.start_time);
+            const whenStr = when.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+            const matchBadge = m.matched_competitor_id
+              ? `<span class="pattern-tag pattern-tag-sm" style="background:rgba(99,102,241,0.15);color:var(--accent)">${esc(m.competitor_name)} · ${esc(m.match_reason)}</span>`
+              : `<span class="pattern-tag pattern-tag-sm" style="background:var(--bg-hover);color:var(--txt-3)">unmatched</span>`;
+            const statusBadge = m.matched_competitor_id
+              ? `<span class="text-sm" style="color:${m.briefing_status === 'sent' ? 'var(--green)' : m.briefing_status === 'failed' ? 'var(--red)' : 'var(--txt-3)'}">${esc(m.briefing_status)}</span>`
+              : '';
+
+            return `
+              <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:8px">
+                <div style="flex:1;min-width:0">
+                  <div style="font-weight:500">${esc(m.title || '(untitled)')}</div>
+                  <div class="text-muted text-sm">${esc(whenStr)} · ${matchBadge}</div>
+                </div>
+                ${statusBadge}
+                ${!m.matched_competitor_id ? `
+                  <select id="tag-meeting-${m.id}" class="form-input" style="max-width:180px;font-size:12px;padding:6px 8px">
+                    <option value="">Tag manually…</option>
+                    ${compOptions}
+                  </select>
+                  <button class="btn btn-ghost btn-sm" onclick="Dashboard.tagMeeting(${m.id})">Tag</button>
+                ` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  },
+
+  async tagMeeting(meetingId) {
+    const sel = document.getElementById(`tag-meeting-${meetingId}`);
+    const competitorId = parseInt(sel?.value, 10);
+    if (!Number.isInteger(competitorId)) {
+      toast('Pick a competitor first', 'error'); return;
+    }
+    try {
+      await API.tagMeeting(meetingId, competitorId);
+      toast('Meeting tagged — briefing queued', 'success');
+      Dashboard.render();
+    } catch (e) { toast(e.message, 'error'); }
+  },
+
   animateStats(stats) {
     const score = stats.total_competitors > 0
       ? Math.min(100, Math.round((stats.total_changes / Math.max(1, stats.total_competitors)) * 12 + stats.active_competitors * 8))
@@ -90,7 +161,7 @@ const Dashboard = {
     });
   },
 
-  html(stats, changes, competitors, ctxData) {
+  html(stats, changes, competitors, ctxData, meetingsData) {
     const score = stats.total_competitors > 0
       ? Math.min(100, Math.round((stats.total_changes / Math.max(1, stats.total_competitors)) * 12 + stats.active_competitors * 8))
       : 0;
@@ -161,6 +232,8 @@ const Dashboard = {
         </div>
         <div class="radar-next">09:00 daily</div>
       </div>
+
+      ${Dashboard.upcomingMeetingsHtml(meetingsData, competitors)}
 
       <!-- Main grid -->
       <div class="dashboard-grid">

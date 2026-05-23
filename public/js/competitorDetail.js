@@ -14,14 +14,17 @@ const CompetitorDetail = {
       </a>`;
 
     try {
-      // Parallel: competitor row, history, patterns. Server-side scoping on
-      // user_id means a wrong id returns 404 before any data leaks.
-      const [comp, hist, pat] = await Promise.all([
+      // Parallel: competitor row, history, patterns, upcoming meetings.
+      // Server-side scoping on user_id means a wrong id returns 404 before
+      // any data leaks. Calendar fetch may 401 if not connected — we
+      // swallow that so the rest of the page still renders.
+      const [comp, hist, pat, meetings] = await Promise.all([
         API.getCompetitor(id),
         API.getCompetitorHistory(id),
         API.getCompetitorPatterns(id),
+        API.getMeetingsByCompetitor(id).catch(() => ({ meetings: [] })),
       ]);
-      el('page-root').innerHTML = CompetitorDetail.html(comp, hist, pat);
+      el('page-root').innerHTML = CompetitorDetail.html(comp, hist, pat, meetings);
     } catch (e) {
       el('page-root').innerHTML = `
         <div class="empty-state">
@@ -33,9 +36,10 @@ const CompetitorDetail = {
     }
   },
 
-  html(comp, hist, pat) {
+  html(comp, hist, pat, meetingsData) {
     const callouts = pat.callouts || [];
     const changes = hist.changes || [];
+    const meetings = meetingsData?.meetings || [];
 
     return `
       <div class="cd-wrap">
@@ -60,6 +64,31 @@ const CompetitorDetail = {
               ? `<div class="cd-empty-callouts">No patterns detected yet — needs more tagged changes over the last ${hist.days} days.</div>`
               : '')
         }
+
+        ${meetings.length > 0 ? `
+          <div class="cd-timeline" style="margin-bottom:16px">
+            <div class="cd-timeline-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              Upcoming meetings mentioning ${esc(comp.name)}
+              <span class="text-muted text-sm" style="margin-left:auto">${meetings.length} in next 14 days</span>
+            </div>
+            <ul class="cd-feed">
+              ${meetings.map(m => {
+                const whenStr = new Date(m.start_time).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+                return `
+                  <li class="cd-feed-item">
+                    <div class="cd-feed-row">
+                      <span class="cd-feed-date">${esc(whenStr)}</span>
+                      <span class="pattern-tag pattern-tag-sm">${esc(m.match_reason || 'auto')}</span>
+                      <span class="cd-feed-headline">${esc(m.title || '(untitled)')}</span>
+                      <span class="text-muted text-sm" style="margin-left:auto">briefing ${esc(m.briefing_status)}</span>
+                    </div>
+                  </li>
+                `;
+              }).join('')}
+            </ul>
+          </div>
+        ` : ''}
 
         <!-- Timeline -->
         <div class="cd-timeline">

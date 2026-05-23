@@ -16,6 +16,7 @@ const competitorsRouter = require('./routes/competitors');
 const changesRouter     = require('./routes/changes');
 const settingsRouter    = require('./routes/settings');
 const userContextRouter = require('./routes/userContext');
+const calendarRouter    = require('./routes/calendar');
 
 // ── DB-backed session store ────────────────────────────────────────────────────
 
@@ -180,6 +181,12 @@ app.use('/api/competitors',  limits.api, requireAuth, csrfProtect, competitorsRo
 app.use('/api/changes',      limits.api, requireAuth, csrfProtect, changesRouter);
 app.use('/api/settings',     limits.api, requireAuth, csrfProtect, settingsRouter);
 app.use('/api/user/context', limits.api, requireAuth, csrfProtect, userContextRouter);
+
+// Phase 7 — calendar router does its own auth + CSRF internally because OAuth
+// callback + the navigational /connect redirect cannot use the standard
+// requireAuth+csrfProtect mounting (callback has no session-cookie path tied
+// to the API CSRF token, and the redirect is a top-level GET).
+app.use('/api/calendar', limits.api, calendarRouter);
 
 // Stripe webhook (raw body, no CSRF needed — validated by Stripe signature)
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {

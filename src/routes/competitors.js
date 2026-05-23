@@ -1,6 +1,6 @@
 const express = require('express');
 const router  = express.Router();
-const { getDb }            = require('../db');
+const { getDb, extractDomainFromUrl } = require('../db');
 const { checkCompetitor }  = require('../scheduler');
 const { canAddCompetitor } = require('../payments');
 const { getCompetitorHistory, generatePatternCallouts } = require('../historicalContext');
@@ -94,9 +94,11 @@ router.post('/', (req, res) => {
     });
   }
 
+  const domain = extractDomainFromUrl(url);
+
   const result = db.prepare(
-    'INSERT INTO competitors (user_id, name, url, description, css_selector, render_mode) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(req.userId, name, url, description || null, sel.value, rm.value);
+    'INSERT INTO competitors (user_id, name, url, description, css_selector, render_mode, domain) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(req.userId, name, url, description || null, sel.value, rm.value, domain);
 
   res.status(201).json(db.prepare('SELECT * FROM competitors WHERE id = ?').get(result.lastInsertRowid));
 });
@@ -151,6 +153,10 @@ router.put('/:id', (req, res) => {
     renderMode = rm.value;
   }
 
+  // Re-derive bare domain if URL changed. Cheap; keeps attendee matching in
+  // sync with whatever the competitor's primary URL now points at.
+  const domain = extractDomainFromUrl(url);
+
   // When URL, selector, or render mode changes, the previous baseline is no
   // longer comparable. Clear it so the next check captures a fresh baseline
   // rather than firing a bogus "change detected" against content from a
@@ -158,16 +164,16 @@ router.put('/:id', (req, res) => {
   if (resetHash) {
     db.prepare(`
       UPDATE competitors
-      SET name = ?, url = ?, description = ?, css_selector = ?, render_mode = ?,
+      SET name = ?, url = ?, description = ?, css_selector = ?, render_mode = ?, domain = ?,
           last_content_hash = NULL, last_check_status = NULL, last_check_error = NULL
       WHERE id = ?
-    `).run(name, url, description, cssSelector, renderMode, row.id);
+    `).run(name, url, description, cssSelector, renderMode, domain, row.id);
   } else {
     db.prepare(`
       UPDATE competitors
-      SET name = ?, url = ?, description = ?, css_selector = ?, render_mode = ?
+      SET name = ?, url = ?, description = ?, css_selector = ?, render_mode = ?, domain = ?
       WHERE id = ?
-    `).run(name, url, description, cssSelector, renderMode, row.id);
+    `).run(name, url, description, cssSelector, renderMode, domain, row.id);
   }
 
   res.json(db.prepare('SELECT * FROM competitors WHERE id = ?').get(row.id));
