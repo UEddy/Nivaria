@@ -28,6 +28,12 @@ const { csrfProtect }    = require('../middleware/security');
 const { syncOneConnection } = require('../calendarSync');
 const rateLimit = require('express-rate-limit');
 
+// Diagnostic logging for the OAuth flow. Off by default; flip OAUTH_DEBUG=1
+// in .env when you need to trace a misbehaving connect/callback. Tokens are
+// already redacted in the call sites, but silencing them in production keeps
+// the log volume down.
+const oauthDebug = (msg) => { if (process.env.OAUTH_DEBUG) console.log(msg); };
+
 // Dedicated limiter for the OAuth callback — discourages anyone trying to
 // brute-force state values.
 const callbackLimiter = rateLimit({
@@ -78,8 +84,13 @@ router.get('/google/connect', requireAuthSession, (req, res) => {
       userId: req.userId,
       issuedAt: Date.now(),
     };
+    oauthDebug(`[calendar:connect] before save sid=${String(req.sessionID).slice(0,8)}… userId=${req.userId} state8=${state.slice(0,8)} cookieHeader=${req.headers.cookie ? 'present' : 'absent'}`);
     req.session.save((err) => {
-      if (err) return res.status(500).json({ error: 'Session error' });
+      if (err) {
+        console.error(`[calendar:connect] session.save FAILED: ${err.message}`);
+        return res.status(500).json({ error: 'Session error' });
+      }
+      oauthDebug(`[calendar:connect] session.save ok — redirecting to Google with state8=${state.slice(0,8)}`);
       const { providerFor } = require('../calendarOAuth');
       const url = providerFor('google').getAuthUrl(state);
       res.redirect(url);
@@ -94,13 +105,18 @@ router.get('/google/connect', requireAuthSession, (req, res) => {
 
 router.get('/google/callback', callbackLimiter, async (req, res) => {
   // No CSRF middleware here on purpose — we use the state param + session.
+  const sessKeys = req.session ? Object.keys(req.session).filter(k => k !== 'cookie') : [];
+  oauthDebug(`[calendar:callback] ENTRY cookieHeader=${req.headers.cookie ? 'present' : 'ABSENT'} sid=${String(req.sessionID || '').slice(0,8)}… sessionKeys=[${sessKeys.join(',')}] userId=${req.session?.userId ?? 'undef'} hasState=${!!req.session?.calendarOAuthState} query.state8=${String(req.query.state || '').slice(0,8)} query.codeLen=${String(req.query.code || '').length} query.error=${req.query.error || 'none'}`);
+
   if (!req.session?.userId) {
+    oauthDebug(`[calendar:callback] REJECT reason=no_session_userId → redirect /login`);
     return res.redirect('/login?returnTo=' + encodeURIComponent('/app#/settings'));
   }
   const userId = req.session.userId;
 
   // Surface OAuth errors back to the user instead of leaving them stranded.
   if (req.query.error) {
+    oauthDebug(`[calendar:callback] REJECT reason=google_returned_error error=${req.query.error}`);
     const msg = encodeURIComponent(String(req.query.error_description || req.query.error).slice(0, 200));
     return res.redirect(`/app#/settings?calendar_error=${msg}`);
   }
@@ -109,35 +125,44 @@ router.get('/google/callback', callbackLimiter, async (req, res) => {
   const incomingState = String(req.query.state || '');
   const incomingCode  = String(req.query.code  || '');
 
+  oauthDebug(`[calendar:callback] state-check expected.provider=${expected?.provider} expected.userId=${expected?.userId} expected.state8=${(expected?.state || '').slice(0,8)} incoming.state8=${incomingState.slice(0,8)} match=${expected?.state === incomingState}`);
+
   // Wipe the state slot before any failure path so a single failed callback
   // can't be replayed.
   req.session.calendarOAuthState = null;
 
   if (!expected || expected.provider !== 'google' || expected.userId !== userId) {
+    oauthDebug(`[calendar:callback] REJECT reason=state_missing_or_mismatched expected=${!!expected} provider=${expected?.provider} expectedUser=${expected?.userId} sessionUser=${userId}`);
     return res.redirect('/app#/settings?calendar_error=' + encodeURIComponent('OAuth state missing or mismatched. Start the flow again.'));
   }
   // Constant-time comparison — state is hex so lengths are predictable.
   const a = Buffer.from(expected.state, 'utf8');
   const b = Buffer.from(incomingState, 'utf8');
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    oauthDebug(`[calendar:callback] REJECT reason=state_bytes_mismatch expectedLen=${a.length} incomingLen=${b.length}`);
     return res.redirect('/app#/settings?calendar_error=' + encodeURIComponent('OAuth state mismatch. Possible CSRF — start the flow again.'));
   }
   if (Date.now() - expected.issuedAt > 10 * 60 * 1000) {
+    oauthDebug(`[calendar:callback] REJECT reason=state_expired ageMs=${Date.now() - expected.issuedAt}`);
     return res.redirect('/app#/settings?calendar_error=' + encodeURIComponent('OAuth flow timed out. Start the flow again.'));
   }
   if (!incomingCode) {
+    oauthDebug(`[calendar:callback] REJECT reason=no_auth_code`);
     return res.redirect('/app#/settings?calendar_error=' + encodeURIComponent('No authorization code returned.'));
   }
 
   try {
+    oauthDebug(`[calendar:callback] state ok → exchanging code (len=${incomingCode.length}) for tokens`);
     const provider = providerFor('google');
     const tokens   = await provider.exchangeCode(incomingCode);
+    oauthDebug(`[calendar:callback] token exchange ok accessLen=${(tokens.access||'').length} refreshLen=${(tokens.refresh||'').length} expiresAt=${tokens.expiresAt || 'null'} scope=${(tokens.scope||'').length}chars`);
     if (!tokens.access) throw new Error('Provider returned no access token');
 
     const email = await provider.getUserEmail(tokens.access);
+    oauthDebug(`[calendar:callback] userinfo email=${email ? email.slice(0,3)+'***@'+(email.split('@')[1]||'?') : 'null'}`);
 
     const db = getDb();
-    db.prepare(`
+    const result = db.prepare(`
       INSERT INTO calendar_connections
         (user_id, provider, account_email, access_token_enc, refresh_token_enc, expires_at, scope, status)
       VALUES (?, 'google', ?, ?, ?, ?, ?, 'active')
@@ -157,18 +182,21 @@ router.get('/google/callback', callbackLimiter, async (req, res) => {
       tokens.expiresAt,
       tokens.scope,
     );
+    oauthDebug(`[calendar:callback] DB upsert ok lastInsertRowid=${result.lastInsertRowid} for userId=${userId}`);
 
     // Best-effort initial sync so the user sees populated meetings immediately
     // instead of waiting up to 15 minutes for the cron tick.
     try {
-      await syncOneConnection({ userId, provider: 'google' });
+      const syncSummary = await syncOneConnection({ userId, provider: 'google' });
+      oauthDebug(`[calendar:callback] initial sync ok: ${JSON.stringify(syncSummary)}`);
     } catch (syncErr) {
-      console.warn('Initial calendar sync failed:', syncErr.message);
+      console.warn(`[calendar:callback] initial sync FAILED (non-fatal): ${syncErr.message}`);
     }
 
+    oauthDebug(`[calendar:callback] SUCCESS → redirecting to /app#/settings?calendar_connected=google`);
     res.redirect('/app#/settings?calendar_connected=google');
   } catch (e) {
-    console.error('Google OAuth callback failed:', e.message);
+    console.error(`[calendar:callback] EXCEPTION in token/insert path: ${e.message}\n${e.stack?.split('\n').slice(0,4).join('\n')}`);
     res.redirect('/app#/settings?calendar_error=' + encodeURIComponent(e.message.slice(0, 200)));
   }
 });
