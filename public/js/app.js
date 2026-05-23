@@ -155,8 +155,18 @@ const App = {
   },
 
   route() {
-    const hash = window.location.hash.replace('#', '') || '/';
-    const [base, ...rest] = hash.split('/').filter(Boolean);
+    // A hash fragment can carry a query string (e.g. /app#/settings?calendar_connected=google
+    // landing from the OAuth callback). Split path from query before parsing,
+    // and pass the parsed query down to renders that opt in. Without this
+    // split, "settings?calendar_connected=google" was treated as a page name
+    // and fell through to the 404 branch.
+    const rawHash = (window.location.hash || '#').slice(1) || '/';
+    const qIdx = rawHash.indexOf('?');
+    const pathPart  = qIdx === -1 ? rawHash : rawHash.slice(0, qIdx);
+    const queryStr  = qIdx === -1 ? ''      : rawHash.slice(qIdx + 1);
+    const routeQuery = new URLSearchParams(queryStr);
+
+    const [base, ...rest] = pathPart.split('/').filter(Boolean);
     const page = base || 'dashboard';
 
     document.querySelectorAll('.nav-item').forEach(a => {
@@ -203,7 +213,7 @@ const App = {
       el('page-title').textContent = 'Settings';
       el('page-sub').textContent = 'Webhooks, notifications, and account';
       root.innerHTML = Skeleton.cards(4);
-      Settings.render().then(transition);
+      Settings.render(routeQuery).then(transition);
     } else if (page === 'pricing') {
       el('page-title').textContent = 'Plans & Pricing';
       el('page-sub').textContent = 'Choose the plan that fits your team';
