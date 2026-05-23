@@ -109,7 +109,12 @@ app.use(session({
   cookie: {
     httpOnly: true,
     secure:   process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    // 'lax' (not 'strict') so the session cookie is sent on top-level
+    // cross-site navigations like Google's OAuth 302 back to
+    // /api/calendar/google/callback. CSRF is still protected: csrfProtect
+    // middleware enforces a double-submit token on every POST/PUT/DELETE,
+    // and 'lax' continues to block cookies on cross-site POST/iframe loads.
+    sameSite: 'lax',
     // No maxAge by default = session cookie (browser-close expiry).
     // Login route sets maxAge = 30 days when "Remember me" is checked.
   },
