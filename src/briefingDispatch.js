@@ -123,7 +123,7 @@ function formatSlackPayload({ competitor, meeting, change, points, matchReason, 
       { type: 'section', text: { type: 'mrkdwn', text: `*${meeting.title}*\n${startStr} · ${matchLabel}` } },
       { type: 'section', text: { type: 'mrkdwn', text: `*${competitor.name}* — most recent change (${changeDate}):\n${emoji} *${change.headline || 'Change detected'}*` } },
       { type: 'section', text: { type: 'mrkdwn', text: pointBlock } },
-      { type: 'context', elements: [{ type: 'mrkdwn', text: `Foresight · <${appUrl}/app#/history/${change.id}|Full battle card>` }] },
+      { type: 'context', elements: [{ type: 'mrkdwn', text: `Foresight · <${appUrl}/app#/history/${change.id}|Full brief>` }] },
     ],
   };
 }

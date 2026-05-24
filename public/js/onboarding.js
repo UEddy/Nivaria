@@ -68,7 +68,7 @@ const Onboarding = {
             </div>
             <div>
               <h2 class="onboarding-title">Tell us about your business</h2>
-              <p class="onboarding-sub">Foresight uses this context to write battle cards from your strategic perspective. All fields are optional. You can edit any of this later in Settings.</p>
+              <p class="onboarding-sub">Foresight uses this context to write briefs from your strategic perspective. All fields are optional. You can edit any of this later in Settings.</p>
             </div>
           </div>
 
@@ -78,7 +78,7 @@ const Onboarding = {
               <label class="form-label">Company name</label>
               <input class="form-input" id="ob-company-name" maxlength="200"
                 placeholder="What's your company called?" value="${esc(c.company_name || '')}" />
-              <span class="form-hint">Shown on your battle cards as "Analyzed for: [your company]".</span>
+              <span class="form-hint">Shown on your briefs as "Analyzed for: [your company]".</span>
             </div>
 
             <div class="form-group">

@@ -20,7 +20,7 @@ const BattleCard = {
       el('page-root').innerHTML = `
         <div class="empty-state">
           <div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
-          <div class="empty-title">Battle card not found</div>
+          <div class="empty-title">Brief not found</div>
           <div class="empty-desc">${esc(e.message)}</div>
           <a href="#/history" class="btn btn-secondary">← Back to Feed</a>
         </div>`;
@@ -59,7 +59,7 @@ const BattleCard = {
       <div class="bc-wrap">
 
         ${analyzedFor ? `
-          <div class="bc-analyzed-for" title="This battle card was personalized using your saved business context. Edit in Settings.">
+          <div class="bc-analyzed-for" title="This brief was personalized using your saved business context. Edit in Settings.">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             Analyzed for: ${esc(analyzedFor)}
           </div>
@@ -90,7 +90,7 @@ const BattleCard = {
             ${threatBadge(threat)}
             <button class="btn btn-ghost btn-sm" onclick="BattleCard.copy(${c.id})">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              Copy Battle Card
+              Copy Brief
             </button>
           </div>
         </div>
@@ -258,7 +258,7 @@ const BattleCard = {
       const points = Array.isArray(c.talking_points) ? c.talking_points : (a.talking_points || []);
 
       const text = [
-        `BATTLE CARD: ${c.competitor_name}`,
+        `BRIEF: ${c.competitor_name}`,
         `Date: ${formatDate(c.detected_at)}`,
         `Threat Level: ${(c.threat_level || 'unknown').toUpperCase()}`,
         '',
@@ -277,7 +277,7 @@ const BattleCard = {
       ].join('\n');
 
       await navigator.clipboard.writeText(text);
-      toast('Battle card copied to clipboard', 'success');
+      toast('Brief copied to clipboard', 'success');
     } catch (e) {
       toast('Could not copy: ' + e.message, 'error');
     }

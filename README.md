@@ -4,11 +4,11 @@
 
 ## Overview
 
-Foresight watches competitor websites on a schedule, detects meaningful changes, and uses Claude to turn each diff into a structured battle card with threat scoring and a recommended response. Sales teams learn about a competitor's new pricing, feature launch, or messaging shift the day it ships, not weeks later from a deal they lost. The product replaces a manual research process that most B2B teams either skip entirely or assign to whoever has the least to do.
+Foresight watches competitor websites on a schedule, detects meaningful changes, and uses Claude to turn each diff into a structured brief with threat scoring and a recommended response. Sales teams learn about a competitor's new pricing, feature launch, or messaging shift the day it ships, not weeks later from a deal they lost. The product replaces a manual research process that most B2B teams either skip entirely or assign to whoever has the least to do.
 
 ## Why I built this
 
-I demonstrated my ability to scope, develop, and release a true full-stack solution on short notice by building Foresight from start to finish in 48 hours using Claude Code. The choice of WASM SQLite over a native driver, the synchronous DB adapter, the DB-backed session storage, the tier-enforcement layer, the multi-step OTP authentication flow, and the AI prompt structure for combat cards are all architectural choices that I oversaw. The idea was to demonstrate both rapidity and judgment.
+I demonstrated my ability to scope, develop, and release a true full-stack solution on short notice by building Foresight from start to finish in 48 hours using Claude Code. The choice of WASM SQLite over a native driver, the synchronous DB adapter, the DB-backed session storage, the tier-enforcement layer, the multi-step OTP authentication flow, and the AI prompt structure for briefs are all architectural choices that I oversaw. The idea was to demonstrate both rapidity and judgment.
 
 ## Features
 
@@ -16,10 +16,10 @@ I demonstrated my ability to scope, develop, and release a true full-stack solut
 - Password reset flow with rate-limited OTP delivery
 - Three-tier pricing (Free, Pro, Team) with usage enforcement on every protected route
 - Competitor monitoring dashboard with paused or active state and per-source change history
-- AI-generated battle cards: headline, summary, threat score (low, medium, high), recommended response, and sales talking points
+- AI-generated briefs: headline, summary, threat score (low, medium, high), recommended response, and sales talking points
 - Slack and Discord webhook alerts when changes are detected
 - Daily scheduled checks via cron, with per-competitor manual re-check
-- Pre-meeting briefings: connect Google Calendar and get a battle card pushed to your webhook 30 min before any meeting that mentions a tracked competitor (by title or attendee domain)
+- Pre-meeting briefings: connect Google Calendar and get a brief pushed to your webhook 30 min before any meeting that mentions a tracked competitor (by title or attendee domain)
 - Three-mode theme system (system, light, dark) with anti-flash inline detection
 
 ## Tech stack
@@ -38,7 +38,7 @@ I demonstrated my ability to scope, develop, and release a true full-stack solut
 
 ![Dashboard](screenshots/dashboard.png)
 
-![Battle card](screenshots/battlecard.png)
+![Brief](screenshots/battlecard.png)
 
 ## Running locally
 
@@ -100,7 +100,7 @@ Verification is a separate launch task — submit at OAuth consent screen → "P
 
 - Slack slash commands for on-demand competitor lookups
 - Win/loss tagging tied to competitor activity, surfacing patterns over time
-- Vertical-specific battle card templates (fintech, devtools, healthcare)
+- Vertical-specific brief templates (fintech, devtools, healthcare)
 - Microsoft 365 Calendar provider (Phase 7 has a Google-only implementation; the abstraction is provider-agnostic)
 
 ---

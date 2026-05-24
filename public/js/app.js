@@ -199,7 +199,7 @@ const App = {
       }
     } else if (page === 'history') {
       if (id) {
-        el('page-title').textContent = 'Battle Card';
+        el('page-title').textContent = 'Brief';
         el('page-sub').textContent = 'Detailed competitive analysis';
         root.innerHTML = Skeleton.cards(5);
         BattleCard.render(id).then(transition);
@@ -318,11 +318,11 @@ const Pricing = {
     const plans = [
       {
         id: 'free', name: 'Free', price: 0, desc: 'Try it out, no credit card needed',
-        features: ['1 competitor URL', 'Manual checks only', 'Basic AI battle cards', 'Community support'],
+        features: ['1 competitor URL', 'Manual checks only', 'Basic AI briefs', 'Community support'],
       },
       {
         id: 'pro', name: 'Pro', price: 20, desc: 'For growing competitive teams',
-        features: ['10 competitor URLs', 'Automatic daily checks', 'Slack & Discord alerts', 'Full AI battle cards', 'Priority email support'],
+        features: ['10 competitor URLs', 'Automatic daily checks', 'Slack & Discord alerts', 'Full AI briefs', 'Priority email support'],
         popular: true,
       },
       {

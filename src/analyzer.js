@@ -60,7 +60,7 @@ const ALLOWED_PATTERN_TAGS = [
   'other',
 ];
 
-const SYSTEM_PROMPT = `You are a competitive intelligence analyst writing battle cards for a SaaS sales team.
+const SYSTEM_PROMPT = `You are a competitive intelligence analyst writing briefs for a SaaS sales team.
 You analyze diffs of competitor website content and decide what — if anything — the sales team needs to know.
 
 THREAT-LEVEL CALIBRATION (apply strictly):

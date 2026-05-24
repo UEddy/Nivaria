@@ -36,7 +36,7 @@ const Settings = {
           <div class="card-header" style="margin-bottom:16px">
             <div>
               <div class="card-title">Business context</div>
-              <div class="card-sub">Fed into every AI battle card so analyses reflect your ICP, positioning, and deal size. Updates apply to future analyses only — past battle cards are not regenerated.</div>
+              <div class="card-sub">Fed into every AI brief so analyses reflect your ICP, positioning, and deal size. Updates apply to future analyses only — past briefs are not regenerated.</div>
             </div>
           </div>
 
@@ -187,7 +187,7 @@ const Settings = {
           <div class="card-header" style="margin-bottom:14px">
             <div>
               <div class="card-title">Pre-meeting briefings</div>
-              <div class="card-sub">When a meeting on your calendar mentions a tracked competitor, push a battle card to your webhook(s) above. Requires a connected calendar (see below).</div>
+              <div class="card-sub">When a meeting on your calendar mentions a tracked competitor, push a brief to your webhook(s) above. Requires a connected calendar (see below).</div>
             </div>
           </div>
           <div style="display:flex;flex-direction:column;gap:14px">
@@ -460,7 +460,7 @@ const Settings = {
         <div class="card-header" style="margin-bottom:16px">
           <div>
             <div class="card-title">Voice profile</div>
-            <div class="card-sub">Drives the "Outreach" section on your battle cards. Tune these so generated messages sound like you, not like a chatbot. Updates apply to future generations only — already-generated outreach is unchanged until you regenerate it.</div>
+            <div class="card-sub">Drives the "Outreach" section on your briefs. Tune these so generated messages sound like you, not like a chatbot. Updates apply to future generations only — already-generated outreach is unchanged until you regenerate it.</div>
           </div>
         </div>
 

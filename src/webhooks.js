@@ -40,7 +40,7 @@ async function sendSlackAlert(webhookUrl, competitor, analysis, changeId) {
       {
         type: 'context',
         elements: [
-          { type: 'mrkdwn', text: `Foresight | <${appUrl}/#/history/${changeId}|View Full Battle Card>` },
+          { type: 'mrkdwn', text: `Foresight | <${appUrl}/#/history/${changeId}|View Full Brief>` },
         ],
       },
     ],

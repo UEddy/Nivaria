@@ -180,7 +180,7 @@ const Dashboard = {
         <div class="card-header">
           <div>
             <div class="card-title">Recent outreach generated</div>
-            <div class="card-sub">AI-drafted messages waiting for you to send · click to jump to the battle card</div>
+            <div class="card-sub">AI-drafted messages waiting for you to send · click to jump to the brief</div>
           </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">

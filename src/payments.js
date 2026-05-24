@@ -13,7 +13,7 @@ const PLANS = {
     automaticChecks: false,
     webhooks: false,
     stripePriceId: null,
-    features: ['1 competitor URL', 'Manual checks only', 'Basic battle cards', 'Community support'],
+    features: ['1 competitor URL', 'Manual checks only', 'Basic briefs', 'Community support'],
   },
   pro: {
     name: 'Pro',
@@ -22,7 +22,7 @@ const PLANS = {
     automaticChecks: true,
     webhooks: true,
     stripePriceId: process.env.STRIPE_PRO_PRICE_ID,
-    features: ['10 competitor URLs', 'Daily automatic checks', 'Slack & Discord alerts', 'Full AI battle cards', 'Priority support'],
+    features: ['10 competitor URLs', 'Daily automatic checks', 'Slack & Discord alerts', 'Full AI briefs', 'Priority support'],
   },
   team: {
     name: 'Team',

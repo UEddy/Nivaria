@@ -45,7 +45,7 @@ const History = {
             ${f.label}
           </button>
         `).join('')}
-        <span class="text-muted text-sm" style="margin-left:auto;align-self:center" title="Trivial changes are gated before reaching the AI — no battle card, no alert, no token spend.">Pre-AI gate</span>
+        <span class="text-muted text-sm" style="margin-left:auto;align-self:center" title="Trivial changes are gated before reaching the AI — no brief, no alert, no token spend.">Pre-AI gate</span>
       </div>
       <div class="filter-row">
         ${filters.map(f => `
@@ -105,7 +105,7 @@ const History = {
           }
           <div class="change-actions">
             <a href="#/history/${c.id}" class="btn btn-primary btn-sm" onclick="event.stopPropagation()">
-              View Battle Card
+              View Brief
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
             </a>
             <a href="${esc(c.competitor_url)}" target="_blank" class="btn btn-ghost btn-sm" onclick="event.stopPropagation()">

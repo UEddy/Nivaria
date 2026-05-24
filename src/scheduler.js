@@ -322,7 +322,7 @@ function buildTrivialAnalysis(competitor, gate) {
     recommended_response: 'No action needed.',
     talking_points: [],
     headline: `${competitor.name} — trivial change skipped`,
-    summary: `Change detected but classified by the pre-AI gate as "${gate.category}": ${gate.reason}. No battle card generated.`,
+    summary: `Change detected but classified by the pre-AI gate as "${gate.category}": ${gate.reason}. No brief generated.`,
     key_changes: [{ category: 'other', description: gate.reason, impact: 'None — gated as trivial' }],
     opportunity: '',
   };

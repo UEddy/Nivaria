@@ -31,7 +31,7 @@ const Competitors = {
             </svg>
           </div>
           <div class="empty-title">No competitors yet</div>
-          <div class="empty-desc">Add your first competitor URL to start monitoring for changes and generating battle cards.</div>
+          <div class="empty-desc">Add your first competitor URL to start monitoring for changes and generating briefs.</div>
           <button class="btn btn-primary" onclick="Competitors.showAddModal()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add First Competitor
@@ -407,7 +407,7 @@ const Competitors = {
       <div class="modal-body">
         <p style="color:var(--txt-2);line-height:1.7">
           Are you sure you want to delete <strong style="color:var(--txt)">${esc(name)}</strong>?
-          This will permanently remove all tracked changes and battle cards for this competitor.
+          This will permanently remove all tracked changes and briefs for this competitor.
         </p>
       </div>
       <div class="modal-footer">
