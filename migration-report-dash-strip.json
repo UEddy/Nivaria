@@ -1,0 +1,140 @@
+{
+  "backup_path": "C:\\Users\\Eddy\\competitor-shadow\\data\\competitor-shadow.db.pre-dash-strip-2026-05-24T19-49-42-065Z.bak",
+  "per_column_stats": {
+    "changes.headline": {
+      "rows_scanned": 9,
+      "rows_modified": 4,
+      "replacements": 4
+    },
+    "changes.recommended_response": {
+      "rows_scanned": 9,
+      "rows_modified": 1,
+      "replacements": 1
+    },
+    "changes.historical_context": {
+      "rows_scanned": 9,
+      "rows_modified": 0,
+      "replacements": 0
+    },
+    "changes.gate_reason": {
+      "rows_scanned": 9,
+      "rows_modified": 0,
+      "replacements": 0
+    },
+    "changes.analysis_error": {
+      "rows_scanned": 9,
+      "rows_modified": 0,
+      "replacements": 0
+    },
+    "changes.analysis": {
+      "rows_scanned": 9,
+      "rows_modified": 8,
+      "replacements": 20
+    },
+    "changes.talking_points": {
+      "rows_scanned": 9,
+      "rows_modified": 4,
+      "replacements": 4
+    },
+    "generated_playbooks.subject_line": {
+      "rows_scanned": 9,
+      "rows_modified": 0,
+      "replacements": 0
+    },
+    "generated_playbooks.body": {
+      "rows_scanned": 9,
+      "rows_modified": 0,
+      "replacements": 0
+    },
+    "generated_playbooks.generation_error": {
+      "rows_scanned": 9,
+      "rows_modified": 0,
+      "replacements": 0
+    },
+    "competitors.last_check_error": {
+      "rows_scanned": 7,
+      "rows_modified": 2,
+      "replacements": 2
+    },
+    "tracked_meetings.briefing_error": {
+      "rows_scanned": 1,
+      "rows_modified": 0,
+      "replacements": 0
+    }
+  },
+  "total_replacements": 31,
+  "total_rows_modified": 19,
+  "samples": [
+    {
+      "column": "changes.headline",
+      "row_id": 1,
+      "replacements": 1,
+      "before": "Acme Corp slashed Pro plan pricing by 30% — aggressive market move",
+      "after": "Acme Corp slashed Pro plan pricing by 30%. Aggressive market move"
+    },
+    {
+      "column": "changes.analysis",
+      "row_id": 1,
+      "replacements": 3,
+      "before": "{\"headline\":\"Acme Corp slashed Pro plan pricing by 30% — aggressive market move\",\"summary\":\"Acme Corp reduced their Pro plan from $49/mo to $34/mo and removed the seat limit. This ...",
+      "after": "{\"headline\":\"Acme Corp slashed Pro plan pricing by 30%. Aggressive market move\",\"summary\":\"Acme Corp reduced their Pro plan from $49/mo to $34/mo and removed the seat limit. This i..."
+    },
+    {
+      "column": "changes.headline",
+      "row_id": 2,
+      "replacements": 1,
+      "before": "NovaTech launches AI writing assistant — enters our core feature territory",
+      "after": "NovaTech launches AI writing assistant. Enters our core feature territory"
+    },
+    {
+      "column": "changes.analysis",
+      "row_id": 2,
+      "replacements": 3,
+      "before": "{\"headline\":\"NovaTech launches AI writing assistant — enters our core feature territory\",\"summary\":\"NovaTech has quietly launched an AI-powered content generation feature that dire...",
+      "after": "{\"headline\":\"NovaTech launches AI writing assistant. Enters our core feature territory\",\"summary\":\"NovaTech has quietly launched an AI-powered content generation feature that direc..."
+    },
+    {
+      "column": "changes.analysis",
+      "row_id": 4,
+      "replacements": 1,
+      "before": "{\"headline\":\"Brightlane cuts Enterprise plan 31% and removes workspace limits\",\"summary\":\"Brightlane dropped Enterprise pricing from $129/user/mo to $89/user/mo and removed the 5-w...",
+      "after": "{\"headline\":\"Brightlane cuts Enterprise plan 31% and removes workspace limits\",\"summary\":\"Brightlane dropped Enterprise pricing from $129/user/mo to $89/user/mo and removed the 5-w..."
+    },
+    {
+      "column": "changes.talking_points",
+      "row_id": 4,
+      "replacements": 1,
+      "before": "[\"Our Enterprise plan includes a dedicated Customer Success Manager; Brightlane only offers pooled support even on the new pricing\",\"Audit logging retention is 7 years on our plan ...",
+      "after": "[\"Our Enterprise plan includes a dedicated Customer Success Manager; Brightlane only offers pooled support even on the new pricing\",\"Audit logging retention is 7 years on our plan ..."
+    },
+    {
+      "column": "changes.analysis",
+      "row_id": 5,
+      "replacements": 4,
+      "before": "{\"headline\":\"Pulse Analytics ships native Salesforce two-way sync\",\"summary\":\"Pulse released a native Salesforce integration with bidirectional record sync and custom field mapping...",
+      "after": "{\"headline\":\"Pulse Analytics ships native Salesforce two-way sync\",\"summary\":\"Pulse released a native Salesforce integration with bidirectional record sync and custom field mapping..."
+    },
+    {
+      "column": "changes.talking_points",
+      "row_id": 5,
+      "replacements": 1,
+      "before": "[\"Our Salesforce integration syncs custom objects and supports custom Apex triggers; Pulse only syncs the four standard objects (Lead, Contact, Account, Opportunity)\",\"We are a man...",
+      "after": "[\"Our Salesforce integration syncs custom objects and supports custom Apex triggers; Pulse only syncs the four standard objects (Lead, Contact, Account, Opportunity)\",\"We are a man..."
+    },
+    {
+      "column": "changes.recommended_response",
+      "row_id": 6,
+      "replacements": 1,
+      "before": "No immediate action. Note for the next quarterly competitive review — if Veritas is genuinely vacating the enterprise space, our enterprise-only positioning becomes stronger.",
+      "after": "No immediate action. Note for the next quarterly competitive review. If Veritas is genuinely vacating the enterprise space, our enterprise-only positioning becomes stronger."
+    },
+    {
+      "column": "changes.analysis",
+      "row_id": 6,
+      "replacements": 2,
+      "before": "{\"headline\":\"Veritas Labs rebrands homepage from enterprise messaging to SMB-friendly\",\"summary\":\"Veritas updated their homepage hero from \\\"Enterprise-grade reliability for missio...",
+      "after": "{\"headline\":\"Veritas Labs rebrands homepage from enterprise messaging to SMB-friendly\",\"summary\":\"Veritas updated their homepage hero from \\\"Enterprise-grade reliability for missio..."
+    }
+  ],
+  "verification_leftover": 0
+}
