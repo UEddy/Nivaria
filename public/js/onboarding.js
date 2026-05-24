@@ -1,19 +1,30 @@
-// Phase 6 — onboarding form.
+// Phase 6 + Phase 8 — onboarding form.
+//
+// Two sequential optional steps:
+//   Step 1 — business context (Phase 6)
+//   Step 2 — voice profile     (Phase 8)
+//
+// Each step can be saved-and-continued or skipped. State lives in a single
+// rendered card; on transition between steps we re-render in place.
 //
 // Routes:
 //   #/onboarding         → first-time setup (after register/verify)
 //   #/onboarding?from=settings → user opened it from the dashboard banner
-//
-// All fields are optional; the user can "Skip for now" and land at the
-// dashboard. The banner on the dashboard will remind them later.
 
 const Onboarding = {
+  _step:    1,
+  _context: {},
+  _voice:   {},
+
   async render() {
     el('topbar-actions').innerHTML = '';
 
-    let data;
+    let ctxData, voiceData;
     try {
-      data = await API.getUserContext();
+      [ctxData, voiceData] = await Promise.all([
+        API.getUserContext(),
+        API.getVoiceProfile().catch(() => null),
+      ]);
     } catch (e) {
       el('page-root').innerHTML = `
         <div class="empty-state">
@@ -24,25 +35,44 @@ const Onboarding = {
       return;
     }
 
-    const c = data.context || {};
-    el('page-root').innerHTML = Onboarding.html(c);
+    Onboarding._context = ctxData?.context || {};
+    Onboarding._voice   = voiceData?.profile || {};
+    Onboarding._step    = 1;
+    Onboarding._draw();
   },
 
-  html(c) {
+  _draw() {
+    if (Onboarding._step === 1) {
+      el('page-root').innerHTML = Onboarding.htmlStep1(Onboarding._context);
+    } else {
+      el('page-root').innerHTML = Onboarding.htmlStep2(Onboarding._voice);
+    }
+  },
+
+  // ── Step 1: business context ────────────────────────────────────────────
+
+  htmlStep1(c) {
     return `
       <div class="onboarding-wrap">
         <div class="onboarding-card">
+          <div class="onboarding-step-indicator">
+            <span class="onboarding-step onboarding-step--active">1</span>
+            <span class="onboarding-step-bar"></span>
+            <span class="onboarding-step">2</span>
+            <span class="onboarding-step-label">Step 1 of 2 · Business context</span>
+          </div>
+
           <div class="onboarding-header">
             <div class="onboarding-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
             </div>
             <div>
               <h2 class="onboarding-title">Tell us about your business</h2>
-              <p class="onboarding-sub">Foresight uses this context to write battle cards from your strategic perspective — your ICP, positioning, deal size — instead of a generic outside view. All fields are optional. You can edit any of this later in Settings.</p>
+              <p class="onboarding-sub">Foresight uses this context to write battle cards from your strategic perspective. All fields are optional. You can edit any of this later in Settings.</p>
             </div>
           </div>
 
-          <form id="onboarding-form" class="onboarding-form" onsubmit="event.preventDefault(); Onboarding.submit();">
+          <form id="onboarding-form" class="onboarding-form" onsubmit="event.preventDefault(); Onboarding.submitStep1();">
 
             <div class="form-group">
               <label class="form-label">Company name</label>
@@ -55,21 +85,18 @@ const Onboarding = {
               <label class="form-label">What we sell</label>
               <textarea class="form-input form-textarea" id="ob-what-we-sell" rows="3" maxlength="5000"
                 placeholder="Describe your product in 1–3 sentences.">${esc(c.what_we_sell || '')}</textarea>
-              <span class="form-hint">Helps the AI understand what category you're in and what changes are competitive vs adjacent.</span>
             </div>
 
             <div class="form-group">
               <label class="form-label">Target ICP</label>
               <textarea class="form-input form-textarea" id="ob-target-icp" rows="3" maxlength="5000"
                 placeholder="Who do you sell to? Industry, company size, and the typical role you sell to.">${esc(c.target_icp || '')}</textarea>
-              <span class="form-hint">Lets the AI flag changes that hit your ICP harder than competitor moves in adjacent markets.</span>
             </div>
 
             <div class="form-group">
               <label class="form-label">Our positioning</label>
               <textarea class="form-input form-textarea" id="ob-our-positioning" rows="3" maxlength="5000"
-                placeholder="How do you differentiate from competitors? Speed, price, depth, niche focus, etc.">${esc(c.our_positioning || '')}</textarea>
-              <span class="form-hint">When a competitor moves toward your differentiator, the AI will treat that as a higher threat.</span>
+                placeholder="How do you differentiate from competitors?">${esc(c.our_positioning || '')}</textarea>
             </div>
 
             <div class="form-row two-col">
@@ -96,7 +123,7 @@ const Onboarding = {
             </div>
 
             <div class="onboarding-actions">
-              <button type="button" class="btn btn-ghost" onclick="Onboarding.skip()">Skip for now</button>
+              <button type="button" class="btn btn-ghost" onclick="Onboarding.skipAll()">Skip for now</button>
               <button type="submit" class="btn btn-primary" id="ob-submit">Save and continue</button>
             </div>
           </form>
@@ -105,7 +132,7 @@ const Onboarding = {
     `;
   },
 
-  async submit() {
+  async submitStep1() {
     const btn = el('ob-submit');
     btn.disabled = true;
     btn.textContent = 'Saving…';
@@ -121,10 +148,10 @@ const Onboarding = {
 
     try {
       await API.saveUserContext(payload);
-      // Clear any cached dismissal so the banner doesn't reappear immediately
       try { localStorage.removeItem('cs-ctx-banner-dismissed'); } catch (_) {}
-      toast('Business context saved — future analyses will reflect it', 'success');
-      navigate('/');
+      Onboarding._context = { ...Onboarding._context, ...payload };
+      Onboarding._step = 2;
+      Onboarding._draw();
     } catch (e) {
       btn.disabled = false;
       btn.textContent = 'Save and continue';
@@ -132,9 +159,168 @@ const Onboarding = {
     }
   },
 
-  skip() {
-    // Honor "Skip for now" — but mark the dismissal so the banner waits the
-    // standard 14 days before reminding.
+  // ── Step 2: voice profile ────────────────────────────────────────────────
+
+  htmlStep2(v) {
+    const radio = (name, value, label, helper) => `
+      <label class="voice-radio">
+        <input type="radio" name="${name}" value="${value}" ${v[name] === value ? 'checked' : ''} />
+        <span class="voice-radio-body">
+          <span class="voice-radio-label">${label}</span>
+          ${helper ? `<span class="voice-radio-helper">${helper}</span>` : ''}
+        </span>
+      </label>`;
+
+    return `
+      <div class="onboarding-wrap">
+        <div class="onboarding-card">
+          <div class="onboarding-step-indicator">
+            <span class="onboarding-step onboarding-step--done">✓</span>
+            <span class="onboarding-step-bar onboarding-step-bar--done"></span>
+            <span class="onboarding-step onboarding-step--active">2</span>
+            <span class="onboarding-step-label">Step 2 of 2 · Voice profile (optional)</span>
+          </div>
+
+          <div class="onboarding-header">
+            <div class="onboarding-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            </div>
+            <div>
+              <h2 class="onboarding-title">Tell us about your voice</h2>
+              <p class="onboarding-sub">Optional — helps us write outreach messages that sound like you, not like a chatbot. Skip this and we'll use sensible defaults.</p>
+            </div>
+          </div>
+
+          <form id="voice-form" class="onboarding-form" onsubmit="event.preventDefault(); Onboarding.submitStep2();">
+
+            <div class="form-group">
+              <label class="form-label">Formality</label>
+              <div class="voice-radio-group">
+                ${radio('formality', 'casual',   'Casual',   'Like texting a colleague')}
+                ${radio('formality', 'balanced', 'Balanced', 'Professional but human')}
+                ${radio('formality', 'formal',   'Formal',   'Buttoned-up enterprise')}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Contractions</label>
+              <div class="voice-radio-group">
+                ${radio('contraction_style', 'always',    'Always use them', `"don't", "I'll", "we're"`)}
+                ${radio('contraction_style', 'sometimes', 'Sometimes',       'Natural mix')}
+                ${radio('contraction_style', 'never',     'Never',           `"do not", "I will", "we are"`)}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Opener style</label>
+              <div class="voice-radio-group voice-radio-group--stack">
+                ${radio('opener_style', 'direct',
+                  'Direct',
+                  `<em>"Saw the BambooHR change — wanted to flag it before our call"</em>`)}
+                ${radio('opener_style', 'warm',
+                  'Warm',
+                  `<em>"Hope your week's going well — quick heads up on BambooHR"</em>`)}
+                ${radio('opener_style', 'context-first',
+                  'Context-first',
+                  `<em>"BambooHR just made a pricing change that affects how we should approach this deal"</em>`)}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Sentence rhythm</label>
+              <div class="voice-radio-group voice-radio-group--stack">
+                ${radio('sentence_rhythm', 'short_punchy',
+                  'Short and punchy',
+                  `<em>"They dropped their price. Big deal."</em>`)}
+                ${radio('sentence_rhythm', 'mixed',
+                  'Mixed lengths',
+                  `<em>"Acme just cut their Pro plan. It's aggressive — and it changes how we should pitch."</em>`)}
+                ${radio('sentence_rhythm', 'measured',
+                  'Longer measured sentences',
+                  `<em>"Acme has reduced their Pro plan by 30%, which represents a substantive shift in market positioning."</em>`)}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Sign-off examples</label>
+              <textarea class="form-input form-textarea" id="ob-signoff" rows="3" maxlength="1000"
+                placeholder="Cheers,&#10;Eddy&#10;&#10;— or —&#10;&#10;Thanks!&#10;-E">${esc(v.sign_off_examples || '')}</textarea>
+              <span class="form-hint">How do you usually sign off? Paste 2-3 examples — the AI will mirror these instead of inventing closers.</span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Voice sample</label>
+              <textarea class="form-input form-textarea" id="ob-voice-sample" rows="6" maxlength="4000"
+                placeholder="Paste 1-2 short examples of emails you've written.">${esc(v.voice_sample || '')}</textarea>
+              <span class="form-hint">Optional but powerful — the AI studies your phrasing, rhythm, and word choice to write like you.</span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Phrases to avoid</label>
+              <textarea class="form-input form-textarea" id="ob-avoid" rows="3" maxlength="1000"
+                placeholder="delve, leverage, synergy, circle back, I hope this email finds you well">${esc(v.avoid_phrases || '')}</textarea>
+              <span class="form-hint">Words or phrases you hate. Comma-separated. Anything you list here will never appear in your outreach.</span>
+            </div>
+
+            <div class="onboarding-actions">
+              <button type="button" class="btn btn-ghost" onclick="Onboarding.skipStep2()">Skip — use defaults</button>
+              <button type="submit" class="btn btn-primary" id="voice-submit">Save and finish</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+  },
+
+  async submitStep2() {
+    const btn = el('voice-submit');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    const getRadio = (name) => {
+      const checked = document.querySelector(`input[name="${name}"]:checked`);
+      return checked ? checked.value : null;
+    };
+
+    const payload = {
+      formality:         getRadio('formality'),
+      contraction_style: getRadio('contraction_style'),
+      opener_style:      getRadio('opener_style'),
+      sentence_rhythm:   getRadio('sentence_rhythm'),
+      sign_off_examples: el('ob-signoff').value.trim(),
+      voice_sample:      el('ob-voice-sample').value.trim(),
+      avoid_phrases:     el('ob-avoid').value.trim(),
+    };
+
+    // Strip nulls so we don't submit empty enums — saveVoiceProfile accepts
+    // null to clear, but for first-save we want to leave unselected fields
+    // alone so defaults kick in.
+    for (const k of Object.keys(payload)) {
+      if (payload[k] === null || payload[k] === '') delete payload[k];
+    }
+
+    if (Object.keys(payload).length === 0) {
+      // User skipped everything — same as the explicit Skip button.
+      return Onboarding.skipStep2();
+    }
+
+    try {
+      await API.saveVoiceProfile(payload);
+      toast('Voice profile saved — your outreach will sound like you', 'success');
+      navigate('/');
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Save and finish';
+      toast(e.message, 'error');
+    }
+  },
+
+  skipStep2() {
+    toast('Skipped — you can add a voice profile any time from Settings', 'info');
+    navigate('/');
+  },
+
+  skipAll() {
     try { localStorage.setItem('cs-ctx-banner-dismissed', String(Date.now())); } catch (_) {}
     toast('Skipped — you can add context any time from Settings', 'info');
     navigate('/');

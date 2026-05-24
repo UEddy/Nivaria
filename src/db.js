@@ -231,6 +231,53 @@ const SCHEMA = `
     ON tracked_meetings(user_id, start_time);
   CREATE INDEX IF NOT EXISTS idx_tracked_meetings_competitor
     ON tracked_meetings(matched_competitor_id, start_time);
+
+  -- Phase 8: per-user voice calibration profile. One row per user. All fields
+  -- nullable; the playbook generator falls back to sensible defaults when a
+  -- row is missing or partially filled. voice_sample and avoid_phrases are
+  -- free-text user input — the playbook module sanitizes them before feeding
+  -- to the AI prompt to defuse prompt-injection.
+  CREATE TABLE IF NOT EXISTS user_voice_profile (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER UNIQUE NOT NULL,
+    formality TEXT CHECK(formality IN ('casual','balanced','formal') OR formality IS NULL),
+    contraction_style TEXT CHECK(contraction_style IN ('always','sometimes','never') OR contraction_style IS NULL),
+    opener_style TEXT CHECK(opener_style IN ('direct','warm','context-first') OR opener_style IS NULL),
+    sentence_rhythm TEXT CHECK(sentence_rhythm IN ('short_punchy','mixed','measured') OR sentence_rhythm IS NULL),
+    sign_off_examples TEXT,
+    voice_sample TEXT,
+    avoid_phrases TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  -- Phase 8: ready-to-send outreach messages generated per meaningful change,
+  -- tied to the user who owns the underlying change. Lookup is keyed by
+  -- (change_id, user_id) so the battle-card render fetches all variants in
+  -- one indexed read.
+  CREATE TABLE IF NOT EXISTS generated_playbooks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    change_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    message_type TEXT NOT NULL CHECK(message_type IN ('email_to_prospect','slack_to_team','followup_email')),
+    subject_line TEXT,
+    body TEXT NOT NULL,
+    ai_input_tokens INTEGER,
+    ai_output_tokens INTEGER,
+    estimated_cost_usd REAL,
+    generation_status TEXT DEFAULT 'ok',
+    generation_error TEXT,
+    generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    regenerated_count INTEGER DEFAULT 0,
+    FOREIGN KEY (change_id) REFERENCES changes(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_playbooks_change_user
+    ON generated_playbooks(change_id, user_id);
+  CREATE INDEX IF NOT EXISTS idx_playbooks_user_recent
+    ON generated_playbooks(user_id, generated_at DESC);
 `;
 
 async function initDb() {

@@ -1,4 +1,6 @@
 const BattleCard = {
+  _playbookCache: {}, // change_id → { playbooks: [...] }
+
   async render(id) {
     el('topbar-actions').innerHTML = `
       <a href="#/history" class="btn btn-ghost btn-sm">
@@ -8,7 +10,12 @@ const BattleCard = {
 
     try {
       const c = await API.getChange(id);
+      // Fetch playbooks in parallel after rendering so the battle card paints
+      // immediately without waiting on the playbook table query.
       el('page-root').innerHTML = BattleCard.html(c);
+      if (['high', 'medium'].includes(c.threat_level) && (c.is_meaningful === null || c.is_meaningful === undefined || c.is_meaningful === 1)) {
+        BattleCard.loadPlaybooks(id);
+      }
     } catch (e) {
       el('page-root').innerHTML = `
         <div class="empty-state">
@@ -184,6 +191,21 @@ const BattleCard = {
 
         </div>
 
+        <!-- Outreach (Phase 8) — placeholder; filled by loadPlaybooks() -->
+        ${(['high', 'medium'].includes(threat) && (c.is_meaningful === null || c.is_meaningful === undefined || c.is_meaningful === 1)) ? `
+          <div class="bc-section bc-outreach" id="bc-outreach-${c.id}">
+            <div class="bc-section-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+              Outreach
+              <span class="bc-section-sub">AI-drafted messages in your voice — copy, regenerate, or tweak before sending</span>
+            </div>
+            <div class="outreach-loading">
+              <div class="spinner spinner--sm"></div>
+              <span>Generating outreach drafts…</span>
+            </div>
+          </div>
+        ` : ''}
+
         <!-- Recent changes from this competitor (Phase 5) -->
         ${recentChanges.length > 0 ? `
           <div class="bc-section bc-recent">
@@ -258,6 +280,247 @@ const BattleCard = {
       toast('Battle card copied to clipboard', 'success');
     } catch (e) {
       toast('Could not copy: ' + e.message, 'error');
+    }
+  },
+
+  // ── Outreach playbooks (Phase 8) ───────────────────────────────────────────
+
+  async loadPlaybooks(changeId) {
+    const container = document.getElementById(`bc-outreach-${changeId}`);
+    if (!container) return;
+    try {
+      const data = await API.getPlaybooksForChange(changeId);
+      BattleCard._playbookCache[changeId] = data;
+      BattleCard.renderPlaybooks(changeId, data.playbooks || []);
+    } catch (e) {
+      container.innerHTML = `
+        <div class="bc-section-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+          Outreach
+        </div>
+        <div class="outreach-empty">
+          <p class="text-muted text-sm">Could not load outreach drafts: ${esc(e.message)}</p>
+        </div>`;
+    }
+  },
+
+  renderPlaybooks(changeId, playbooks) {
+    const container = document.getElementById(`bc-outreach-${changeId}`);
+    if (!container) return;
+
+    if (!playbooks || playbooks.length === 0) {
+      container.innerHTML = `
+        <div class="bc-section-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+          Outreach
+          <span class="bc-section-sub">AI-drafted messages in your voice</span>
+        </div>
+        <div class="outreach-empty">
+          <p class="text-muted text-sm">No drafts yet for this change.</p>
+          <button class="btn btn-primary btn-sm" onclick="BattleCard.generatePlaybooks(${changeId}, this)">Generate outreach drafts</button>
+        </div>`;
+      return;
+    }
+
+    const labels = {
+      slack_to_team:     { label: 'Slack to team',    icon: 'slack' },
+      email_to_prospect: { label: 'Email to prospect',icon: 'mail' },
+      followup_email:    { label: 'Follow-up email',  icon: 'mail' },
+    };
+
+    const order = ['slack_to_team', 'email_to_prospect', 'followup_email'];
+    const ordered = order.map(t => playbooks.find(p => p.message_type === t)).filter(Boolean);
+
+    const tabs = ordered.map((p, idx) => `
+      <button class="outreach-tab ${idx === 0 ? 'outreach-tab--active' : ''}" data-tab="${p.message_type}"
+        onclick="BattleCard.switchTab(${changeId}, '${p.message_type}')">
+        ${esc(labels[p.message_type]?.label || p.message_type)}
+        ${p.regenerated_count > 0 ? `<span class="outreach-regen-count" title="Regenerated ${p.regenerated_count}×">↻${p.regenerated_count}</span>` : ''}
+      </button>
+    `).join('');
+
+    const panels = ordered.map((p, idx) => BattleCard.renderPlaybookPanel(changeId, p, idx === 0)).join('');
+
+    container.innerHTML = `
+      <div class="bc-section-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        Outreach
+        <span class="bc-section-sub">AI-drafted messages in your voice — copy, regenerate, or tweak before sending</span>
+      </div>
+      <div class="outreach-tabs">${tabs}</div>
+      <div class="outreach-panels" id="outreach-panels-${changeId}">${panels}</div>
+    `;
+  },
+
+  renderPlaybookPanel(changeId, p, isActive) {
+    const hasSubject = !!p.subject_line && p.message_type !== 'slack_to_team';
+    const body = p.body || '';
+    const safeId = `pb-${p.id}`;
+
+    if (p.generation_status && !['ok', 'ok_with_warnings'].includes(p.generation_status)) {
+      return `
+        <div class="outreach-panel ${isActive ? 'outreach-panel--active' : ''}" data-panel="${p.message_type}">
+          <div class="outreach-error">
+            <strong>Generation failed:</strong> ${esc(p.generation_error || p.generation_status)}
+            <div style="margin-top:10px"><button class="btn btn-secondary btn-sm" onclick="BattleCard.regeneratePlaybook(${p.id}, this)">Try again</button></div>
+          </div>
+        </div>`;
+    }
+
+    return `
+      <div class="outreach-panel ${isActive ? 'outreach-panel--active' : ''}" data-panel="${p.message_type}" id="panel-${safeId}">
+        ${hasSubject ? `
+          <div class="outreach-subject-row">
+            <label class="outreach-subject-label">Subject</label>
+            <div class="outreach-subject-box">
+              <span class="outreach-subject-value" id="${safeId}-subject">${esc(p.subject_line)}</span>
+              <button class="btn btn-ghost btn-sm" onclick="BattleCard.copyText('${safeId}-subject', this)" title="Copy subject">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copy
+              </button>
+            </div>
+          </div>
+        ` : ''}
+
+        <div class="outreach-body-wrap">
+          <div class="outreach-body" id="${safeId}-body" data-original="${esc(body)}">${esc(body).replace(/\n/g, '<br>')}</div>
+          <textarea class="outreach-edit-area" id="${safeId}-edit" style="display:none" rows="10">${esc(body)}</textarea>
+        </div>
+
+        ${p.generation_status === 'ok_with_warnings' && p.generation_error ? `
+          <div class="outreach-warning">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            ${esc(p.generation_error)}
+          </div>` : ''}
+
+        <div class="outreach-actions">
+          <button class="btn btn-primary btn-sm" onclick="BattleCard.copyPlaybookBody('${safeId}', this)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="BattleCard.toggleEdit('${safeId}', this)" id="${safeId}-edit-btn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Edit
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="BattleCard.regeneratePlaybook(${p.id}, this)" title="Generate a fresh draft">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Regenerate
+          </button>
+          <span class="outreach-meta">
+            ${p.regenerated_count > 0 ? `Regenerated ${p.regenerated_count}× · ` : ''}
+            ${esc(formatShortDate(p.generated_at) || '')}
+          </span>
+        </div>
+      </div>`;
+  },
+
+  switchTab(changeId, messageType) {
+    const root = document.getElementById(`bc-outreach-${changeId}`);
+    if (!root) return;
+    root.querySelectorAll('.outreach-tab').forEach(t => {
+      t.classList.toggle('outreach-tab--active', t.dataset.tab === messageType);
+    });
+    root.querySelectorAll('.outreach-panel').forEach(p => {
+      p.classList.toggle('outreach-panel--active', p.dataset.panel === messageType);
+    });
+  },
+
+  async copyText(elementId, btn) {
+    const node = document.getElementById(elementId);
+    if (!node) return;
+    const text = node.textContent || '';
+    try {
+      await navigator.clipboard.writeText(text);
+      const original = btn.innerHTML;
+      btn.innerHTML = '<span style="color:var(--green)">✓ Copied</span>';
+      setTimeout(() => { btn.innerHTML = original; }, 1600);
+      toast('Copied to clipboard', 'success');
+    } catch (e) {
+      toast('Could not copy: ' + e.message, 'error');
+    }
+  },
+
+  async copyPlaybookBody(safeId, btn) {
+    // Copy from the edit textarea if it's open (so edits are honored);
+    // otherwise from the rendered body.
+    const editArea = document.getElementById(`${safeId}-edit`);
+    let text = '';
+    if (editArea && editArea.style.display !== 'none') {
+      text = editArea.value || '';
+    } else {
+      const body = document.getElementById(`${safeId}-body`);
+      text = body?.dataset.original || body?.textContent || '';
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      const original = btn.innerHTML;
+      btn.innerHTML = '<span style="color:var(--green)">✓ Copied</span>';
+      setTimeout(() => { btn.innerHTML = original; }, 1600);
+      toast('Message copied to clipboard', 'success');
+    } catch (e) {
+      toast('Could not copy: ' + e.message, 'error');
+    }
+  },
+
+  toggleEdit(safeId, btn) {
+    const body  = document.getElementById(`${safeId}-body`);
+    const edit  = document.getElementById(`${safeId}-edit`);
+    if (!body || !edit) return;
+
+    if (edit.style.display === 'none') {
+      // Switch to edit mode
+      edit.value = body.dataset.original || body.textContent || '';
+      body.style.display = 'none';
+      edit.style.display = 'block';
+      btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>Done editing';
+      edit.focus();
+    } else {
+      // Switch back — keep the edited text shown
+      body.dataset.original = edit.value;
+      body.innerHTML = esc(edit.value).replace(/\n/g, '<br>');
+      body.style.display = '';
+      edit.style.display = 'none';
+      btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit';
+    }
+  },
+
+  async generatePlaybooks(changeId, btn) {
+    btn.disabled = true;
+    const original = btn.innerHTML;
+    btn.innerHTML = '<div class="spinner spinner--sm"></div> Generating…';
+    try {
+      const data = await API.generatePlaybooks(changeId);
+      BattleCard._playbookCache[changeId] = data;
+      BattleCard.renderPlaybooks(changeId, data.playbooks || []);
+      toast('Outreach drafts generated', 'success');
+    } catch (e) {
+      btn.disabled = false;
+      btn.innerHTML = original;
+      toast(e.message, 'error');
+    }
+  },
+
+  async regeneratePlaybook(playbookId, btn) {
+    btn.disabled = true;
+    const original = btn.innerHTML;
+    btn.innerHTML = '<div class="spinner spinner--sm"></div> Regenerating…';
+    try {
+      const { playbook } = await API.regeneratePlaybook(playbookId);
+      // Find the change_id for this playbook from the cache, then re-render.
+      const changeId = playbook?.change_id;
+      if (changeId) {
+        // Refresh the whole list so order + regen counts update cleanly.
+        const data = await API.getPlaybooksForChange(changeId);
+        BattleCard._playbookCache[changeId] = data;
+        BattleCard.renderPlaybooks(changeId, data.playbooks || []);
+        // Keep focus on the same variant tab the user was on.
+        BattleCard.switchTab(changeId, playbook.message_type);
+      }
+      toast('Regenerated — fresh draft below', 'success');
+    } catch (e) {
+      btn.disabled = false;
+      btn.innerHTML = original;
+      toast(e.message, 'error');
     }
   },
 

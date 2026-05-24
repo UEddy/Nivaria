@@ -16,6 +16,8 @@ const competitorsRouter = require('./routes/competitors');
 const changesRouter     = require('./routes/changes');
 const settingsRouter    = require('./routes/settings');
 const userContextRouter = require('./routes/userContext');
+const voiceProfileRouter = require('./routes/voiceProfile');
+const playbooksRouter    = require('./routes/playbooks');
 const calendarRouter    = require('./routes/calendar');
 
 // ── DB-backed session store ────────────────────────────────────────────────────
@@ -185,7 +187,9 @@ app.use('/api/auth', authRouter);
 app.use('/api/competitors',  limits.api, requireAuth, csrfProtect, competitorsRouter);
 app.use('/api/changes',      limits.api, requireAuth, csrfProtect, changesRouter);
 app.use('/api/settings',     limits.api, requireAuth, csrfProtect, settingsRouter);
-app.use('/api/user/context', limits.api, requireAuth, csrfProtect, userContextRouter);
+app.use('/api/user/context',       limits.api, requireAuth, csrfProtect, userContextRouter);
+app.use('/api/user/voice-profile', limits.api, requireAuth, csrfProtect, voiceProfileRouter);
+app.use('/api/playbooks',          limits.api, requireAuth, csrfProtect, playbooksRouter);
 
 // Phase 7 — calendar router does its own auth + CSRF internally because OAuth
 // callback + the navigational /connect redirect cannot use the standard

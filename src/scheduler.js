@@ -7,6 +7,7 @@ const { sendAlerts } = require('./webhooks');
 const { canUseWebhooks } = require('./payments');
 const { getCompetitorHistory, invalidateCompetitorHistory } = require('./historicalContext');
 const { getUserContext, formatContextForPrompt, hasMeaningfulContext } = require('./userContext');
+const { generatePlaybooksForChange } = require('./playbooks');
 
 function fetchErrorToStatus(err) {
   if (err && err.code === 'BLOCKED_PAGE')       return { status: 'blocked',             msg: err.message };
@@ -222,6 +223,18 @@ async function checkCompetitor(competitor, db) {
           console.error(`  ⚠️  Alert delivery failed for ${competitor.name}: ${alertErr.message}`);
         }
       }
+    }
+
+    // Phase 8: generated response playbooks. Fire-and-forget — must NOT block
+    // the change-detection pipeline. Only runs when (a) analysis succeeded,
+    // (b) the change is meaningful, and (c) threat is high or medium. We
+    // intentionally do not await this — the next scheduled check should run
+    // even if playbook generation is slow or rate-limited.
+    if (analysisStatus === 'ok' && isMeaningful === 1
+        && ['high', 'medium'].includes(analysis.threat_level)) {
+      generatePlaybooksForChange(changeRowId).catch(err => {
+        console.error(`  ⚠️  Playbook generation failed for change#${changeRowId}: ${err.message}`);
+      });
     }
   }
 

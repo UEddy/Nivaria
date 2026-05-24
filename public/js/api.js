@@ -71,6 +71,14 @@ const API = (() => {
     getUserContext: ()        => API.get('/user/context'),
     saveUserContext: (data)   => API.put('/user/context', data),
 
+    // Voice profile + outreach playbooks (Phase 8)
+    getVoiceProfile:        ()                => API.get('/user/voice-profile'),
+    saveVoiceProfile:       (data)            => API.put('/user/voice-profile', data),
+    getPlaybooksForChange:  (changeId)        => API.get(`/playbooks/changes/${changeId}`),
+    generatePlaybooks:      (changeId)        => API.post(`/playbooks/changes/${changeId}/generate`),
+    regeneratePlaybook:     (playbookId)      => API.post(`/playbooks/${playbookId}/regenerate`),
+    getRecentPlaybooks:     (limit = 5)       => API.get(`/playbooks/recent?limit=${limit}`),
+
     // Calendar / pre-meeting briefings (Phase 7)
     getCalendarConnections:    ()           => API.get('/calendar/connections'),
     disconnectCalendar:        (provider)   => API.post(`/calendar/${provider}/disconnect`),

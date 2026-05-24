@@ -1,12 +1,13 @@
 const Settings = {
   async render(routeQuery) {
     try {
-      const [{ settings, user }, ctxData, calData] = await Promise.all([
+      const [{ settings, user }, ctxData, voiceData, calData] = await Promise.all([
         API.getSettings(),
         API.getUserContext().catch(() => null), // never block settings on context fetch
+        API.getVoiceProfile().catch(() => null), // never block settings on voice profile fetch
         API.getCalendarConnections().catch(() => ({ encryption_configured: false, connections: [] })),
       ]);
-      el('page-root').innerHTML = Settings.html(settings || {}, user, ctxData, calData);
+      el('page-root').innerHTML = Settings.html(settings || {}, user, ctxData, voiceData, calData);
       Settings.handleCalendarReturnParams(routeQuery);
     } catch (e) {
       el('page-root').innerHTML = `
@@ -18,12 +19,14 @@ const Settings = {
     }
   },
 
-  html(s, user, ctxData, calData) {
+  html(s, user, ctxData, voiceData, calData) {
     const tier = user?.tier || 'free';
     const isProPlus = tier === 'pro' || tier === 'team';
     const tierLabel = { free: 'Free', pro: 'Pro', team: 'Team' }[tier] || tier;
     const limits = { free: '1', pro: '10', team: '∞' };
     const c = ctxData?.context || {};
+    const v = voiceData?.profile || {};
+    const defaults = voiceData?.defaults || { formality: 'balanced', contraction_style: 'sometimes', opener_style: 'direct', sentence_rhythm: 'mixed' };
 
     return `
       <div class="settings-grid">
@@ -89,6 +92,8 @@ const Settings = {
             </div>
           </div>
         </div>
+
+        ${Settings.voiceProfileHtml(v, defaults)}
 
         <!-- Account Info -->
         <div class="card">
@@ -433,6 +438,139 @@ const Settings = {
     const hash = window.location.hash || '';
     const qIdx = hash.indexOf('?');
     if (qIdx !== -1) history.replaceState(null, '', hash.slice(0, qIdx));
+  },
+
+  // ── Voice profile (Phase 8) ────────────────────────────────────────────────
+
+  voiceProfileHtml(v, defaults) {
+    const radio = (name, value, label, helper) => {
+      const isChecked = v[name] === value || (!v[name] && defaults[name] === value);
+      return `
+      <label class="voice-radio">
+        <input type="radio" name="vp-${name}" value="${value}" ${isChecked ? 'checked' : ''} />
+        <span class="voice-radio-body">
+          <span class="voice-radio-label">${label}</span>
+          ${helper ? `<span class="voice-radio-helper">${helper}</span>` : ''}
+        </span>
+      </label>`;
+    };
+
+    return `
+      <div class="card">
+        <div class="card-header" style="margin-bottom:16px">
+          <div>
+            <div class="card-title">Voice profile</div>
+            <div class="card-sub">Drives the "Outreach" section on your battle cards. Tune these so generated messages sound like you, not like a chatbot. Updates apply to future generations only — already-generated outreach is unchanged until you regenerate it.</div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+
+          <div class="form-group">
+            <label class="form-label">Formality</label>
+            <div class="voice-radio-group">
+              ${radio('formality', 'casual',   'Casual',   'Like texting a colleague')}
+              ${radio('formality', 'balanced', 'Balanced', 'Professional but human')}
+              ${radio('formality', 'formal',   'Formal',   'Buttoned-up enterprise')}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Contractions</label>
+            <div class="voice-radio-group">
+              ${radio('contraction_style', 'always',    'Always use them', `"don't", "I'll", "we're"`)}
+              ${radio('contraction_style', 'sometimes', 'Sometimes',       'Natural mix')}
+              ${radio('contraction_style', 'never',     'Never',           `"do not", "I will", "we are"`)}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Opener style</label>
+            <div class="voice-radio-group voice-radio-group--stack">
+              ${radio('opener_style', 'direct',
+                'Direct',
+                `<em>"Saw the BambooHR change — wanted to flag it before our call"</em>`)}
+              ${radio('opener_style', 'warm',
+                'Warm',
+                `<em>"Hope your week's going well — quick heads up on BambooHR"</em>`)}
+              ${radio('opener_style', 'context-first',
+                'Context-first',
+                `<em>"BambooHR just made a pricing change that affects how we should approach this deal"</em>`)}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Sentence rhythm</label>
+            <div class="voice-radio-group voice-radio-group--stack">
+              ${radio('sentence_rhythm', 'short_punchy',
+                'Short and punchy',
+                `<em>"They dropped their price. Big deal."</em>`)}
+              ${radio('sentence_rhythm', 'mixed',
+                'Mixed lengths',
+                `<em>"Acme just cut their Pro plan. It's aggressive — and it changes how we should pitch."</em>`)}
+              ${radio('sentence_rhythm', 'measured',
+                'Longer measured sentences',
+                `<em>"Acme has reduced their Pro plan by 30%, which represents a substantive shift in market positioning."</em>`)}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Sign-off examples</label>
+            <textarea class="form-input form-textarea" id="vp-signoff" rows="3" maxlength="1000"
+              placeholder="Cheers,&#10;Eddy">${esc(v.sign_off_examples || '')}</textarea>
+            <span class="form-hint">How do you usually sign off? Paste 2-3 examples — the AI will mirror these instead of inventing closers.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Voice sample</label>
+            <textarea class="form-input form-textarea" id="vp-voice-sample" rows="6" maxlength="4000"
+              placeholder="Paste 1-2 short examples of emails you've written.">${esc(v.voice_sample || '')}</textarea>
+            <span class="form-hint">Optional but powerful — the AI studies your phrasing, rhythm, and word choice to write like you.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Phrases to avoid</label>
+            <textarea class="form-input form-textarea" id="vp-avoid" rows="3" maxlength="1000"
+              placeholder="delve, leverage, synergy, circle back, I hope this email finds you well">${esc(v.avoid_phrases || '')}</textarea>
+            <span class="form-hint">Comma-separated. Anything you list here will never appear in your outreach.</span>
+          </div>
+
+          <div style="display:flex;justify-content:flex-end">
+            <button class="btn btn-primary btn-sm" onclick="Settings.saveVoiceProfile(this)">Save voice profile</button>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  async saveVoiceProfile(btn) {
+    const getRadio = (name) => {
+      const checked = document.querySelector(`input[name="vp-${name}"]:checked`);
+      return checked ? checked.value : null;
+    };
+
+    const payload = {
+      formality:         getRadio('formality'),
+      contraction_style: getRadio('contraction_style'),
+      opener_style:      getRadio('opener_style'),
+      sentence_rhythm:   getRadio('sentence_rhythm'),
+      sign_off_examples: el('vp-signoff').value.trim(),
+      voice_sample:      el('vp-voice-sample').value.trim(),
+      avoid_phrases:     el('vp-avoid').value.trim(),
+    };
+
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = 'Saving…';
+    try {
+      await API.saveVoiceProfile(payload);
+      toast('Voice profile saved — applies to future outreach', 'success');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
   },
 
   async saveContext(btn) {

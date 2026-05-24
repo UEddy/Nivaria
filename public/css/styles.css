@@ -2225,3 +2225,223 @@ tbody tr:hover td { background: var(--bg-hover); }
 }
 .bc-analyzed-for svg { opacity: 0.85; }
 
+
+
+/* ── Phase 8: Voice profile radios (settings + onboarding) ───────────────── */
+.voice-radio-group {
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+.voice-radio-group--stack { flex-direction: column; }
+.voice-radio {
+  flex: 1 1 0;
+  min-width: 140px;
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-soft, var(--bg));
+  cursor: pointer;
+  transition: border-color 0.14s, background 0.14s;
+}
+.voice-radio:hover { border-color: var(--border-2, var(--border)); background: var(--bg-hover); }
+.voice-radio input[type="radio"] { margin-top: 3px; accent-color: var(--accent); cursor: pointer; }
+.voice-radio:has(input:checked) { border-color: var(--accent); background: var(--accent-dim, rgba(99,102,241,0.08)); }
+.voice-radio-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.voice-radio-label { font-weight: 600; font-size: 13px; color: var(--txt); }
+.voice-radio-helper { font-size: 12px; color: var(--txt-3); line-height: 1.4; }
+.voice-radio-helper em { font-style: italic; color: var(--txt-2, var(--txt-3)); }
+
+/* ── Phase 8: Onboarding step indicator ────────────────────────────────────── */
+.onboarding-step-indicator {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 18px;
+  font-size: 12px;
+  color: var(--txt-3);
+}
+.onboarding-step {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  color: var(--txt-3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600;
+  border: 1px solid var(--border);
+}
+.onboarding-step--active { background: var(--accent); color: white; border-color: var(--accent); }
+.onboarding-step--done   { background: var(--green); color: white; border-color: var(--green); }
+.onboarding-step-bar {
+  flex: 0 0 36px;
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+}
+.onboarding-step-bar--done { background: var(--green); }
+.onboarding-step-label { margin-left: 8px; font-weight: 500; }
+
+/* ── Phase 8: Outreach section on the battle card ──────────────────────────── */
+.bc-section.bc-outreach { grid-column: 1 / -1; margin-top: 6px; }
+.bc-section-sub {
+  margin-left: auto;
+  font-size: 11px; font-weight: 400;
+  color: var(--txt-3);
+  text-transform: none; letter-spacing: 0;
+}
+.outreach-loading {
+  display: flex; align-items: center; gap: 10px;
+  padding: 24px 0;
+  color: var(--txt-3);
+  font-size: 13px;
+}
+.outreach-empty { padding: 18px 0; display: flex; flex-direction: column; gap: 10px; }
+.outreach-tabs {
+  display: flex; gap: 6px;
+  border-bottom: 1px solid var(--border);
+  margin: 12px 0 0 0;
+}
+.outreach-tab {
+  background: none;
+  border: 1px solid transparent;
+  border-bottom: none;
+  padding: 9px 14px;
+  font-size: 13px; font-weight: 500;
+  color: var(--txt-3);
+  cursor: pointer;
+  border-top-left-radius: 8px; border-top-right-radius: 8px;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: color 0.14s, background 0.14s;
+}
+.outreach-tab:hover { color: var(--txt); background: var(--bg-hover); }
+.outreach-tab--active {
+  color: var(--accent);
+  border-color: var(--border);
+  background: var(--bg-soft, var(--bg));
+  border-bottom-color: var(--bg-soft, var(--bg));
+  margin-bottom: -1px;
+}
+.outreach-regen-count {
+  font-size: 10px; padding: 1px 5px;
+  background: var(--bg-hover); border-radius: 8px;
+  color: var(--txt-3);
+}
+.outreach-panels { padding: 16px 0 4px; }
+.outreach-panel { display: none; }
+.outreach-panel--active { display: block; }
+
+.outreach-subject-row {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 12px;
+}
+.outreach-subject-label {
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--txt-3);
+  flex-shrink: 0;
+}
+.outreach-subject-box {
+  flex: 1;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-soft, var(--bg));
+}
+.outreach-subject-value {
+  flex: 1; font-size: 14px; font-weight: 500;
+  color: var(--txt);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.outreach-body-wrap { margin-bottom: 12px; }
+.outreach-body {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-soft, var(--bg));
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--txt);
+  white-space: normal;
+}
+.outreach-edit-area {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--txt);
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+}
+
+.outreach-actions {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap;
+}
+.outreach-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--txt-3);
+}
+.outreach-warning {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--yellow);
+  background: var(--yellow-dim);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 8px;
+}
+.outreach-error {
+  padding: 14px 16px;
+  font-size: 13px;
+  color: var(--red);
+  background: var(--red-dim);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 10px;
+}
+
+.spinner--sm { width: 12px; height: 12px; border-width: 1.5px; display: inline-block; vertical-align: middle; }
+
+/* ── Phase 8: Recent outreach widget (dashboard) ───────────────────────────── */
+.playbook-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: background 0.14s, border-color 0.14s;
+}
+.playbook-row:hover { background: var(--bg-hover); border-color: var(--border-2, var(--border)); }
+.playbook-row-pip {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--txt-3);
+}
+.playbook-row-pip.high   { background: var(--red); }
+.playbook-row-pip.medium { background: var(--yellow); }
+.playbook-row-pip.low    { background: var(--green); }
+.playbook-row-body { flex: 1; min-width: 0; }
+.playbook-row-headline {
+  font-weight: 500; font-size: 14px;
+  color: var(--txt);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.playbook-row-meta {
+  font-size: 12px; color: var(--txt-3);
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+.playbook-row-type {
+  font-weight: 500;
+  color: var(--accent);
+}
+.playbook-row-subject {
+  font-style: italic;
+  color: var(--txt-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+  max-width: 320px;
+}

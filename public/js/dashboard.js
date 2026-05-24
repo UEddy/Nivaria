@@ -1,16 +1,17 @@
 const Dashboard = {
   async render() {
     try {
-      const [stats, changesData, competitors, ctxData, meetingsData] = await Promise.all([
+      const [stats, changesData, competitors, ctxData, meetingsData, playbookData] = await Promise.all([
         API.getStats(),
         API.getChanges({ limit: 6 }),
         API.getCompetitors(),
         API.getUserContext().catch(() => null), // never block dashboard on context fetch
         API.getUpcomingMeetings().catch(() => ({ meetings: [] })), // never block dashboard on calendar
+        API.getRecentPlaybooks(5).catch(() => ({ playbooks: [] })),
       ]);
       App.stats = stats;
       App.updateBadges();
-      el('page-root').innerHTML = Dashboard.html(stats, changesData.changes, competitors, ctxData, meetingsData);
+      el('page-root').innerHTML = Dashboard.html(stats, changesData.changes, competitors, ctxData, meetingsData, playbookData);
       Dashboard.animateStats(stats);
       window.staggerIn?.('.feed-item', 80, 70);
       window.staggerIn?.('.competitor-mini', 120, 55);
@@ -161,7 +162,51 @@ const Dashboard = {
     });
   },
 
-  html(stats, changes, competitors, ctxData, meetingsData) {
+  // Phase 8 — "Recent outreach generated" widget. Stays hidden until the user
+  // has at least one generated playbook (otherwise it's just noise during
+  // onboarding).
+  recentPlaybooksHtml(playbookData) {
+    const playbooks = playbookData?.playbooks || [];
+    if (playbooks.length === 0) return '';
+
+    const typeLabels = {
+      slack_to_team:     'Slack to team',
+      email_to_prospect: 'Email to prospect',
+      followup_email:    'Follow-up email',
+    };
+
+    return `
+      <div class="card" style="margin-bottom:24px">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Recent outreach generated</div>
+            <div class="card-sub">AI-drafted messages waiting for you to send · click to jump to the battle card</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${playbooks.map(p => `
+            <div class="playbook-row" onclick="navigate('/history/${p.change_id}')" style="cursor:pointer">
+              <div class="playbook-row-pip ${p.threat_level || 'low'}"></div>
+              <div class="playbook-row-body">
+                <div class="playbook-row-headline">${esc(p.change_headline || 'Change detected')}</div>
+                <div class="playbook-row-meta">
+                  <span>${esc(p.competitor_name)}</span>
+                  <span class="feed-dot-sep">·</span>
+                  <span class="playbook-row-type">${esc(typeLabels[p.message_type] || p.message_type)}</span>
+                  ${p.subject_line ? `<span class="feed-dot-sep">·</span><span class="playbook-row-subject">"${esc(p.subject_line.slice(0, 60))}${p.subject_line.length > 60 ? '…' : ''}"</span>` : ''}
+                  <span class="feed-dot-sep">·</span>
+                  <span>${timeAgo(p.generated_at)}</span>
+                </div>
+              </div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--txt-3);flex-shrink:0"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  },
+
+  html(stats, changes, competitors, ctxData, meetingsData, playbookData) {
     const score = stats.total_competitors > 0
       ? Math.min(100, Math.round((stats.total_changes / Math.max(1, stats.total_competitors)) * 12 + stats.active_competitors * 8))
       : 0;
@@ -234,6 +279,8 @@ const Dashboard = {
       </div>
 
       ${Dashboard.upcomingMeetingsHtml(meetingsData, competitors)}
+
+      ${Dashboard.recentPlaybooksHtml(playbookData)}
 
       <!-- Main grid -->
       <div class="dashboard-grid">

@@ -7,6 +7,11 @@
 function csrfProtect(req, res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
 
+  // API-key auth is exempt from CSRF: there is no cookie surface to forge,
+  // and requireAuth has already validated the key by the time we get here.
+  // CSRF only matters for cookie-bearing browser flows.
+  if (req.headers['x-api-key'] && req.userId) return next();
+
   const sessionToken = req.session?.csrfToken;
   const headerToken  = req.headers['x-csrf-token'];
 
