@@ -180,7 +180,7 @@ function safeWrap(label, text) {
     .replace(/<\/?USER_DATA[^>]*>/gi, '')
     .replace(/<\/?SYSTEM[^>]*>/gi, '')
     .replace(/<\/?INSTRUCTIONS?[^>]*>/gi, '')
-    .replace(/ /g, '');
+    .replace(/\u0000/g, '');
   return `<USER_DATA label="${label}">
 ${cleaned}
 </USER_DATA>`;
