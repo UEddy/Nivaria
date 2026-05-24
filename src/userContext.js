@@ -128,8 +128,8 @@ function formatContextForPrompt(ctx) {
   if (!hasMeaningfulContext(ctx)) return '';
 
   const dealSizeLabels = {
-    small:      'small ($5K–25K ACV)',
-    mid:        'mid-market ($25K–100K ACV)',
+    small:      'small ($5K to $25K ACV)',
+    mid:        'mid-market ($25K to $100K ACV)',
     large:      'large ($100K+ ACV)',
     enterprise: 'enterprise ($250K+ ACV)',
   };

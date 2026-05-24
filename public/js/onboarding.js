@@ -84,7 +84,7 @@ const Onboarding = {
             <div class="form-group">
               <label class="form-label">What we sell</label>
               <textarea class="form-input form-textarea" id="ob-what-we-sell" rows="3" maxlength="5000"
-                placeholder="Describe your product in 1–3 sentences.">${esc(c.what_we_sell || '')}</textarea>
+                placeholder="Describe your product in 1 to 3 sentences.">${esc(c.what_we_sell || '')}</textarea>
             </div>
 
             <div class="form-group">
@@ -103,9 +103,9 @@ const Onboarding = {
               <div class="form-group">
                 <label class="form-label">Typical deal size</label>
                 <select class="form-input" id="ob-deal-size">
-                  <option value=""           ${!c.typical_deal_size ? 'selected' : ''}>— Select —</option>
-                  <option value="small"      ${c.typical_deal_size === 'small' ? 'selected' : ''}>Small ($5K–25K ACV)</option>
-                  <option value="mid"        ${c.typical_deal_size === 'mid' ? 'selected' : ''}>Mid-market ($25K–100K ACV)</option>
+                  <option value=""           ${!c.typical_deal_size ? 'selected' : ''}>Select</option>
+                  <option value="small"      ${c.typical_deal_size === 'small' ? 'selected' : ''}>Small ($5K to $25K ACV)</option>
+                  <option value="mid"        ${c.typical_deal_size === 'mid' ? 'selected' : ''}>Mid-market ($25K to $100K ACV)</option>
                   <option value="large"      ${c.typical_deal_size === 'large' ? 'selected' : ''}>Large ($100K+ ACV)</option>
                   <option value="enterprise" ${c.typical_deal_size === 'enterprise' ? 'selected' : ''}>Enterprise ($250K+ ACV)</option>
                 </select>
@@ -114,7 +114,7 @@ const Onboarding = {
               <div class="form-group">
                 <label class="form-label">Sales motion</label>
                 <select class="form-input" id="ob-sales-motion">
-                  <option value=""       ${!c.sales_motion ? 'selected' : ''}>— Select —</option>
+                  <option value=""       ${!c.sales_motion ? 'selected' : ''}>Select</option>
                   <option value="plg"    ${c.sales_motion === 'plg' ? 'selected' : ''}>PLG (product-led / self-serve)</option>
                   <option value="slg"    ${c.sales_motion === 'slg' ? 'selected' : ''}>SLG (sales-led)</option>
                   <option value="hybrid" ${c.sales_motion === 'hybrid' ? 'selected' : ''}>Hybrid (PLG + SLG)</option>
@@ -187,7 +187,7 @@ const Onboarding = {
             </div>
             <div>
               <h2 class="onboarding-title">Tell us about your voice</h2>
-              <p class="onboarding-sub">Optional — helps us write outreach messages that sound like you, not like a chatbot. Skip this and we'll use sensible defaults.</p>
+              <p class="onboarding-sub">Optional. Helps us write outreach messages that sound like you, not like a chatbot. Skip this and we'll use sensible defaults.</p>
             </div>
           </div>
 
@@ -216,10 +216,10 @@ const Onboarding = {
               <div class="voice-radio-group voice-radio-group--stack">
                 ${radio('opener_style', 'direct',
                   'Direct',
-                  `<em>"Saw the BambooHR change — wanted to flag it before our call"</em>`)}
+                  `<em>"Saw the BambooHR change. Wanted to flag it before our call"</em>`)}
                 ${radio('opener_style', 'warm',
                   'Warm',
-                  `<em>"Hope your week's going well — quick heads up on BambooHR"</em>`)}
+                  `<em>"Hope your week's going well. Quick heads up on BambooHR"</em>`)}
                 ${radio('opener_style', 'context-first',
                   'Context-first',
                   `<em>"BambooHR just made a pricing change that affects how we should approach this deal"</em>`)}
@@ -234,7 +234,7 @@ const Onboarding = {
                   `<em>"They dropped their price. Big deal."</em>`)}
                 ${radio('sentence_rhythm', 'mixed',
                   'Mixed lengths',
-                  `<em>"Acme just cut their Pro plan. It's aggressive — and it changes how we should pitch."</em>`)}
+                  `<em>"Acme just cut their Pro plan. It's aggressive, and it changes how we should pitch."</em>`)}
                 ${radio('sentence_rhythm', 'measured',
                   'Longer measured sentences',
                   `<em>"Acme has reduced their Pro plan by 30%, which represents a substantive shift in market positioning."</em>`)}
@@ -244,15 +244,15 @@ const Onboarding = {
             <div class="form-group">
               <label class="form-label">Sign-off examples</label>
               <textarea class="form-input form-textarea" id="ob-signoff" rows="3" maxlength="1000"
-                placeholder="Cheers,&#10;Eddy&#10;&#10;— or —&#10;&#10;Thanks!&#10;-E">${esc(v.sign_off_examples || '')}</textarea>
-              <span class="form-hint">How do you usually sign off? Paste 2-3 examples — the AI will mirror these instead of inventing closers.</span>
+                placeholder="Cheers,&#10;Eddy&#10;&#10;or&#10;&#10;Thanks!&#10;-E">${esc(v.sign_off_examples || '')}</textarea>
+              <span class="form-hint">How do you usually sign off? Paste 2-3 examples. The AI will mirror these instead of inventing closers.</span>
             </div>
 
             <div class="form-group">
               <label class="form-label">Voice sample</label>
               <textarea class="form-input form-textarea" id="ob-voice-sample" rows="6" maxlength="4000"
                 placeholder="Paste 1-2 short examples of emails you've written.">${esc(v.voice_sample || '')}</textarea>
-              <span class="form-hint">Optional but powerful — the AI studies your phrasing, rhythm, and word choice to write like you.</span>
+              <span class="form-hint">Optional but powerful. The AI studies your phrasing, rhythm, and word choice to write like you.</span>
             </div>
 
             <div class="form-group">
@@ -263,7 +263,7 @@ const Onboarding = {
             </div>
 
             <div class="onboarding-actions">
-              <button type="button" class="btn btn-ghost" onclick="Onboarding.skipStep2()">Skip — use defaults</button>
+              <button type="button" class="btn btn-ghost" onclick="Onboarding.skipStep2()">Skip, use defaults</button>
               <button type="submit" class="btn btn-primary" id="voice-submit">Save and finish</button>
             </div>
           </form>
@@ -306,7 +306,7 @@ const Onboarding = {
 
     try {
       await API.saveVoiceProfile(payload);
-      toast('Voice profile saved — your outreach will sound like you', 'success');
+      toast('Voice profile saved. Your outreach will sound like you.', 'success');
       navigate('/');
     } catch (e) {
       btn.disabled = false;
@@ -316,13 +316,13 @@ const Onboarding = {
   },
 
   skipStep2() {
-    toast('Skipped — you can add a voice profile any time from Settings', 'info');
+    toast('Skipped. You can add a voice profile any time from Settings.', 'info');
     navigate('/');
   },
 
   skipAll() {
     try { localStorage.setItem('cs-ctx-banner-dismissed', String(Date.now())); } catch (_) {}
-    toast('Skipped — you can add context any time from Settings', 'info');
+    toast('Skipped. You can add context any time from Settings.', 'info');
     navigate('/');
   },
 };

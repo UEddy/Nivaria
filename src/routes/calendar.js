@@ -140,7 +140,7 @@ router.get('/google/callback', callbackLimiter, async (req, res) => {
   const b = Buffer.from(incomingState, 'utf8');
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
     oauthDebug(`[calendar:callback] REJECT reason=state_bytes_mismatch expectedLen=${a.length} incomingLen=${b.length}`);
-    return res.redirect('/app#/settings?calendar_error=' + encodeURIComponent('OAuth state mismatch. Possible CSRF — start the flow again.'));
+    return res.redirect('/app#/settings?calendar_error=' + encodeURIComponent('OAuth state mismatch. Possible CSRF. Start the flow again.'));
   }
   if (Date.now() - expected.issuedAt > 10 * 60 * 1000) {
     oauthDebug(`[calendar:callback] REJECT reason=state_expired ageMs=${Date.now() - expected.issuedAt}`);
@@ -227,9 +227,9 @@ router.post('/google/disconnect', requireAuthSession, csrfProtect, async (req, r
 
 // ── Microsoft (stubbed) ─────────────────────────────────────────────────────
 
-router.get('/microsoft/connect',    requireAuthSession, (_req, res) => res.status(501).json({ error: 'Microsoft 365 Calendar — coming soon.' }));
-router.get('/microsoft/callback',                          (_req, res) => res.status(501).send('Microsoft 365 Calendar — coming soon.'));
-router.post('/microsoft/disconnect', requireAuthSession, csrfProtect, (_req, res) => res.status(501).json({ error: 'Microsoft 365 Calendar — coming soon.' }));
+router.get('/microsoft/connect',    requireAuthSession, (_req, res) => res.status(501).json({ error: 'Microsoft 365 Calendar: coming soon.' }));
+router.get('/microsoft/callback',                          (_req, res) => res.status(501).send('Microsoft 365 Calendar: coming soon.'));
+router.post('/microsoft/disconnect', requireAuthSession, csrfProtect, (_req, res) => res.status(501).json({ error: 'Microsoft 365 Calendar: coming soon.' }));
 
 // ── Meetings ────────────────────────────────────────────────────────────────
 

@@ -75,7 +75,7 @@ function isDateLikeToken(t) {
 // on first observations).
 function classifyChange(before, after, diff) {
   if (!before || (diff && diff.isFirstCheck)) {
-    return { meaningful: true, category: 'first_seen', reason: 'first observation of this competitor — needs baseline analysis' };
+    return { meaningful: true, category: 'first_seen', reason: 'first observation of this competitor. Needs baseline analysis.' };
   }
 
   const beforeAll = [before.title, before.bodyText, before.pricing, before.features].map(s => s || '').join('\n');

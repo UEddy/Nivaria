@@ -139,7 +139,7 @@ const Dashboard = {
     }
     try {
       await API.tagMeeting(meetingId, competitorId);
-      toast('Meeting tagged — briefing queued', 'success');
+      toast('Meeting tagged. Briefing queued.', 'success');
       Dashboard.render();
     } catch (e) { toast(e.message, 'error'); }
   },

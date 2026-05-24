@@ -131,9 +131,9 @@ router.post('/test-webhook', async (req, res) => {
 
   try {
     if (type === 'slack') {
-      await axios.post(url, { text: '✅ *Foresight* webhook test — everything is connected!' }, { timeout: 8000 });
+      await axios.post(url, { text: '✅ *Foresight* webhook test. Everything is connected!' }, { timeout: 8000 });
     } else if (type === 'discord') {
-      await axios.post(url, { content: '✅ **Foresight** webhook test — everything is connected!' }, { timeout: 8000 });
+      await axios.post(url, { content: '✅ **Foresight** webhook test. Everything is connected!' }, { timeout: 8000 });
     } else {
       return res.status(400).json({ error: 'Invalid type. Use "slack" or "discord"' });
     }

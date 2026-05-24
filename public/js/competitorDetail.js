@@ -61,7 +61,7 @@ const CompetitorDetail = {
         ${callouts.length > 0
           ? `<div class="cd-callouts">${callouts.map(CompetitorDetail.calloutHtml).join('')}</div>`
           : (changes.length > 1
-              ? `<div class="cd-empty-callouts">No patterns detected yet — needs more tagged changes over the last ${hist.days} days.</div>`
+              ? `<div class="cd-empty-callouts">No patterns detected yet. Needs more tagged changes over the last ${hist.days} days.</div>`
               : '')
         }
 

@@ -57,7 +57,7 @@ async function sendDiscordAlert(webhookUrl, competitor, analysis, changeId) {
     username: 'Foresight',
     embeds: [
       {
-        title: `🔍 ${competitor.name} — Page Changed`,
+        title: `🔍 ${competitor.name}: Page Changed`,
         description: `**${analysis.headline}**\n\n${analysis.summary}`,
         color: THREAT_COLOR[analysis.threat_level] || 0x6366f1,
         fields: [

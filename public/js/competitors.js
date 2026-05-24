@@ -79,7 +79,7 @@ const Competitors = {
                   </a>
                 </td>
                 <td>${Competitors.statusPill(c)}</td>
-                <td class="text-muted text-sm">${c.last_checked ? timeAgo(c.last_checked) : '—'}</td>
+                <td class="text-muted text-sm">${c.last_checked ? timeAgo(c.last_checked) : '-'}</td>
                 <td>
                   ${c.change_count > 0
                     ? `<a href="#/history?competitor_id=${c.id}" class="change-count-link">${c.change_count}</a>`
@@ -92,7 +92,7 @@ const Competitors = {
                       ${threatBadge(c.last_threat)}
                       <span class="text-sm" style="color:var(--txt-3)">${timeAgo(c.last_change_at)}</span>
                     </div>
-                  ` : '<span class="text-muted">—</span>'}
+                  ` : '<span class="text-muted">-</span>'}
                 </td>
                 <td>
                   <div class="td-actions">

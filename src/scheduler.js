@@ -12,15 +12,15 @@ const { generatePlaybooksForChange } = require('./playbooks');
 function fetchErrorToStatus(err) {
   if (err && err.code === 'BLOCKED_PAGE')       return { status: 'blocked',             msg: err.message };
   if (err && err.code === 'EMPTY_CONTENT')      return { status: 'empty_content',       msg: err.message };
-  if (err && err.code === 'SELECTOR_NOT_FOUND') return { status: 'selector_not_found',  msg: `Selector "${err.selector}" matched no elements — the page structure may have changed.` };
+  if (err && err.code === 'SELECTOR_NOT_FOUND') return { status: 'selector_not_found',  msg: `Selector "${err.selector}" matched no elements. The page structure may have changed.` };
   if (err && err.code === 'SSRF_BLOCKED')       return { status: 'ssrf_blocked',        msg: err.message };
   if (err && err.code === 'RENDER_FAILED')      return { status: 'render_failed',       msg: err.message };
   const httpStatus = err && err.response && err.response.status;
   if (httpStatus) {
-    if (httpStatus === 403) return { status: 'blocked',      msg: `HTTP 403 — likely bot block` };
-    if (httpStatus === 404) return { status: 'fetch_failed', msg: `HTTP 404 — page not found` };
-    if (httpStatus === 429) return { status: 'fetch_failed', msg: `HTTP 429 — rate limited by site` };
-    if (httpStatus >= 500)  return { status: 'fetch_failed', msg: `HTTP ${httpStatus} — site error` };
+    if (httpStatus === 403) return { status: 'blocked',      msg: `HTTP 403, likely bot block` };
+    if (httpStatus === 404) return { status: 'fetch_failed', msg: `HTTP 404, page not found` };
+    if (httpStatus === 429) return { status: 'fetch_failed', msg: `HTTP 429, rate limited by site` };
+    if (httpStatus >= 500)  return { status: 'fetch_failed', msg: `HTTP ${httpStatus}, site error` };
     return { status: 'fetch_failed', msg: `HTTP ${httpStatus}` };
   }
   if (err && err.code === 'ECONNABORTED') return { status: 'fetch_failed', msg: 'timeout' };
@@ -321,9 +321,9 @@ function buildTrivialAnalysis(competitor, gate) {
     threat_reasoning: `Pre-AI gate classified this change as "${gate.category}".`,
     recommended_response: 'No action needed.',
     talking_points: [],
-    headline: `${competitor.name} — trivial change skipped`,
+    headline: `${competitor.name}: trivial change skipped`,
     summary: `Change detected but classified by the pre-AI gate as "${gate.category}": ${gate.reason}. No brief generated.`,
-    key_changes: [{ category: 'other', description: gate.reason, impact: 'None — gated as trivial' }],
+    key_changes: [{ category: 'other', description: gate.reason, impact: 'None. Gated as trivial.' }],
     opportunity: '',
   };
 }

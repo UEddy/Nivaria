@@ -45,7 +45,7 @@ const History = {
             ${f.label}
           </button>
         `).join('')}
-        <span class="text-muted text-sm" style="margin-left:auto;align-self:center" title="Trivial changes are gated before reaching the AI — no brief, no alert, no token spend.">Pre-AI gate</span>
+        <span class="text-muted text-sm" style="margin-left:auto;align-self:center" title="Trivial changes are gated before reaching the AI: no brief, no alert, no token spend.">Pre-AI gate</span>
       </div>
       <div class="filter-row">
         ${filters.map(f => `

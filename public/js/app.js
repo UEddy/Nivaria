@@ -265,7 +265,7 @@ function timeAgo(dateStr) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return '—';
+  if (!dateStr) return '-';
   return new Date(dateStr).toLocaleString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit',
@@ -273,7 +273,7 @@ function formatDate(dateStr) {
 }
 
 function formatShortDate(dateStr) {
-  if (!dateStr) return '—';
+  if (!dateStr) return '-';
   return new Date(dateStr).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
   });

@@ -62,7 +62,7 @@ async function ensureFreshAccessToken(connection) {
   if (!needsRefresh) return decrypt(connection.access_token_enc);
 
   if (!connection.refresh_token_enc) {
-    throw new Error('Token expired and no refresh token stored — user must re-connect.');
+    throw new Error('Token expired and no refresh token stored. User must re-connect.');
   }
   const provider = providerFor(connection.provider);
   const refresh  = decrypt(connection.refresh_token_enc);
@@ -121,7 +121,7 @@ async function syncOneConnection({ userId, provider = 'google', connectionId } =
     : db.prepare("SELECT * FROM calendar_connections WHERE user_id = ? AND provider = ?").get(userId, provider);
 
   if (!conn) throw new Error('No calendar connection for this user/provider');
-  if (conn.status !== 'active') throw new Error(`Connection status is ${conn.status} — re-authenticate first.`);
+  if (conn.status !== 'active') throw new Error(`Connection status is ${conn.status}. Re-authenticate first.`);
 
   const t0 = Date.now();
   let accessToken;

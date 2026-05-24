@@ -205,7 +205,7 @@ function buildVariantPrompt({ change, competitor, voiceProfile, userContext, his
   ];
 
   const userContextBlock = (userContext && hasMeaningfulContext(userContext))
-    ? `\nUSER'S BUSINESS CONTEXT (their company, ICP, positioning — write as them, for their audience):\n${formatContextForPrompt(userContext)}\n`
+    ? `\nUSER'S BUSINESS CONTEXT (their company, ICP, positioning. Write as them, for their audience):\n${formatContextForPrompt(userContext)}\n`
     : '';
 
   const historyBlock = (historyText && historyText.trim())
@@ -213,15 +213,15 @@ function buildVariantPrompt({ change, competitor, voiceProfile, userContext, his
     : '';
 
   const signOffBlock = voiceProfile.sign_off_examples
-    ? `\nUSER'S TYPICAL SIGN-OFFS (mirror these — do not invent new closers):\n${safeWrap('sign_off_examples', voiceProfile.sign_off_examples)}\n`
+    ? `\nUSER'S TYPICAL SIGN-OFFS (mirror these. Do not invent new closers):\n${safeWrap('sign_off_examples', voiceProfile.sign_off_examples)}\n`
     : '';
 
   const voiceSampleBlock = voiceProfile.voice_sample
-    ? `\nUSER'S VOICE SAMPLE (study the rhythm, phrasing, and texture — write a message that sounds like the same person wrote it):\n${safeWrap('voice_sample', voiceProfile.voice_sample)}\n`
+    ? `\nUSER'S VOICE SAMPLE (study the rhythm, phrasing, and texture. Write a message that sounds like the same person wrote it):\n${safeWrap('voice_sample', voiceProfile.voice_sample)}\n`
     : '';
 
   const avoidBlock = avoidList.length > 0
-    ? `\nFORBIDDEN PHRASES (the user hates these — do not use any of them, even in altered form):\n${safeWrap('avoid_phrases', avoidList.join(', '))}\n`
+    ? `\nFORBIDDEN PHRASES (the user hates these. Do not use any of them, even in altered form):\n${safeWrap('avoid_phrases', avoidList.join(', '))}\n`
     : '';
 
   const prospectBlock = (variantKey === 'email_to_prospect' || variantKey === 'followup_email')
@@ -252,7 +252,7 @@ Target length: ${v.word_target}.
 Variant-specific rules:
 ${extraRules}
 
-Apply ALL human-tone rules from the system prompt. Return JSON only: { "subject": "...", "body": "..." }${v.has_subject ? '' : ' — subject must be an empty string for this variant'}.`;
+Apply ALL human-tone rules from the system prompt. Return JSON only: { "subject": "...", "body": "..." }${v.has_subject ? '' : '. Subject must be an empty string for this variant'}.`;
 }
 
 // ── Post-hoc validators ──────────────────────────────────────────────────────

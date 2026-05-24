@@ -400,13 +400,13 @@ function seedDemoData() {
     .run(1, 'Horizon AI', 'https://horizonai.com', 'AI-first competitor, recently raised Series B', ts(21600000), 'hash_horizon_001', 31).lastInsertRowid;
 
   const highAnalysis = JSON.stringify({
-    headline: 'Acme Corp slashed Pro plan pricing by 30% — aggressive market move',
+    headline: 'Acme Corp slashed Pro plan pricing by 30%, an aggressive market move',
     summary: 'Acme Corp reduced their Pro plan from $49/mo to $34/mo and removed the seat limit. This is a significant pricing response likely targeting our recent customer wins. They also added a new "Starter" tier at $9/mo.',
     threat_level: 'high',
     threat_reasoning: 'Direct price undercut on our core plan with unlimited seats threatens our mid-market positioning.',
     recommended_response: 'Immediate sales team briefing required. Prepare competitive pricing rebuttals and emphasize superior support and integrations.',
     talking_points: [
-      'Our platform includes enterprise SSO and audit logs at the Pro level — Acme charges extra for these',
+      'Our platform includes enterprise SSO and audit logs at the Pro level. Acme charges extra for these',
       'We offer 99.9% SLA with dedicated support; Acme Pro only includes email support',
       'Our API rate limits are 10x higher than Acme at equivalent tiers',
       'Migration from Acme takes 2-3 weeks; we offer free white-glove onboarding'
@@ -416,19 +416,19 @@ function seedDemoData() {
       { category: 'pricing', description: 'New $9/mo Starter tier added', impact: 'Now competes in the SMB entry market we currently own' },
       { category: 'features', description: 'Seat limits removed from Pro plan', impact: 'Eliminates a key objection prospects previously raised against Acme' }
     ],
-    opportunity: 'Aggressive pricing signals margin pressure — emphasize stability and longevity in enterprise deals.'
+    opportunity: 'Aggressive pricing signals margin pressure. Emphasize stability and longevity in enterprise deals.'
   });
 
   const medAnalysis = JSON.stringify({
-    headline: 'NovaTech launches AI writing assistant — enters our core feature territory',
+    headline: 'NovaTech launches AI writing assistant: enters our core feature territory',
     summary: 'NovaTech has quietly launched an AI-powered content generation feature that directly competes with our core offering. Currently in beta but prominently featured on their homepage.',
     threat_level: 'medium',
     threat_reasoning: 'Feature parity in a differentiated area, but NovaTech lacks our integrations ecosystem and enterprise credibility.',
     recommended_response: 'Accelerate roadmap items that further differentiate our AI capabilities. Brief sales team with comparison talking points.',
     talking_points: [
-      'Our AI has been in production for 18 months with 500M+ documents processed — NovaTech is just starting',
+      'Our AI has been in production for 18 months with 500M+ documents processed. NovaTech is just starting',
       'We offer fine-tuning on company data; NovaTech uses generic models only',
-      'Our compliance certifications (SOC2, HIPAA) cover AI features — critical for enterprise',
+      'Our compliance certifications (SOC2, HIPAA) cover AI features, critical for enterprise',
       'We integrate with 150+ tools; NovaTech supports 12'
     ],
     key_changes: [
@@ -460,13 +460,13 @@ function seedDemoData() {
     .run(c1, JSON.stringify({ added: ['$34', 'Starter', 'unlimited seats'], removed: ['$49', 'per seat'] }),
       highAnalysis, 'high', 'Immediate sales team briefing required.',
       JSON.stringify(['Enterprise SSO included', 'Our 99.9% SLA', 'API rate limits 10x higher']),
-      'Acme Corp slashed Pro plan pricing by 30% — aggressive market move', ts(86400000));
+      'Acme Corp slashed Pro plan pricing by 30%, an aggressive market move', ts(86400000));
 
   db.prepare('INSERT INTO changes (competitor_id, diff_summary, analysis, threat_level, recommended_response, talking_points, headline, detected_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
     .run(c2, JSON.stringify({ added: ['AI', 'writing assistant', 'beta'], removed: [] }),
       medAnalysis, 'medium', 'Accelerate roadmap AI differentiation.',
       JSON.stringify(['18 months production history', 'Fine-tuning on company data', 'SOC2/HIPAA certified']),
-      'NovaTech launches AI writing assistant — enters our core feature territory', ts(259200000));
+      'NovaTech launches AI writing assistant: enters our core feature territory', ts(259200000));
 
   db.prepare('INSERT INTO changes (competitor_id, diff_summary, analysis, threat_level, recommended_response, talking_points, headline, detected_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
     .run(c3, JSON.stringify({ added: ['Fortune 500', 'case study'], removed: [] }),

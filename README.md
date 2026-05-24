@@ -77,7 +77,7 @@ Phase 7 connects Google Calendar so Foresight can push a briefing to your Slack/
    - Under "APIs & Services → Library", enable the **Google Calendar API**.
    - Paste the client ID and secret into `.env` as `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`.
 3. **Restart the server**, open `/app#/settings`, and click "Connect Google Calendar".
-4. While the OAuth app is in "Testing" status, only emails listed under "OAuth consent screen → Test users" can complete the flow. For production, follow Google's app verification process — see "Production OAuth verification" below.
+4. While the OAuth app is in "Testing" status, only emails listed under "OAuth consent screen → Test users" can complete the flow. For production, follow Google's app verification process. See "Production OAuth verification" below.
 
 ### Production OAuth verification
 
@@ -86,7 +86,7 @@ Before launching publicly, the Google OAuth app must move from "Testing" → "In
 - "Continue" requires clicking "Advanced" → "Go to Foresight (unsafe)"
 - The 100-user test cap applies
 
-Verification is a separate launch task — submit at OAuth consent screen → "Publish app" with a privacy policy URL, app domain, and brand verification artifacts. Sensitive scopes (Calendar API counts as sensitive) require a 4–8 week review.
+Verification is a separate launch task. Submit at OAuth consent screen → "Publish app" with a privacy policy URL, app domain, and brand verification artifacts. Sensitive scopes (Calendar API counts as sensitive) require a 4 to 8 week review.
 
 ## Roadmap
 
