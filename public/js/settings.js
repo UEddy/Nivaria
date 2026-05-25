@@ -134,7 +134,7 @@ const Settings = {
       <div class="set-card">
         <div class="set-card__head">
           <div class="set-card__title">Business context</div>
-          <div class="set-card__desc">Fed into every brief so analyses reflect your ICP, positioning, and deal size. Updates apply to future analyses only. Past briefs are not regenerated.</div>
+          <div class="set-card__desc">This data is fed into every brief so future analyses reflect your ICP, positioning, and deal size. Updates apply to future analyses only; past briefs will not be regenerated.</div>
         </div>
         <div class="set-card__body" data-dirty-group>
           <div class="form-group">
