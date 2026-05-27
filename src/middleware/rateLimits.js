@@ -29,4 +29,9 @@ module.exports = {
 
   // Password reset request: 5 req / IP / hour
   reset: makeLimiter(60 * 60 * 1000, 5, 60),
+
+  // Slack slash command / interactions: 60 req / IP / min. Slack requests
+  // arrive from Slack's infrastructure; this caps abuse from a single source
+  // without throttling normal usage.
+  slack: makeLimiter(60 * 1000, 60, 1),
 };

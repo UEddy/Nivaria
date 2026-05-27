@@ -1,17 +1,18 @@
 const Dashboard = {
   async render() {
     try {
-      const [stats, changesData, competitors, ctxData, meetingsData, playbookData] = await Promise.all([
+      const [stats, changesData, competitors, ctxData, meetingsData, playbookData, roiSummary] = await Promise.all([
         API.getStats(),
         API.getChanges({ limit: 6 }),
         API.getCompetitors(),
         API.getUserContext().catch(() => null), // never block dashboard on context fetch
         API.getUpcomingMeetings().catch(() => ({ meetings: [] })), // never block dashboard on calendar
         API.getRecentPlaybooks(5).catch(() => ({ playbooks: [] })),
+        API.getRoiSummary().catch(() => null), // never block dashboard on ROI
       ]);
       App.stats = stats;
       App.updateBadges();
-      el('page-root').innerHTML = Dashboard.html(stats, changesData.changes, competitors, ctxData, meetingsData, playbookData);
+      el('page-root').innerHTML = Dashboard.html(stats, changesData.changes, competitors, ctxData, meetingsData, playbookData, roiSummary);
       Dashboard.animateStats(stats);
       window.staggerIn?.('.feed-item', 80, 70);
       window.staggerIn?.('.competitor-mini', 120, 55);
@@ -206,7 +207,38 @@ const Dashboard = {
     `;
   },
 
-  html(stats, changes, competitors, ctxData, meetingsData, playbookData) {
+  // Phase 9 — small ROI widget. Hidden until the user has logged a deal, so it
+  // doesn't add noise during onboarding. Shows the headline revenue-at-risk
+  // figure when medium+ patterns exist, otherwise nudges toward more logging.
+  roiWidgetHtml(roiSummary) {
+    if (!roiSummary || !roiSummary.total_deals) return '';
+    const fmtBig = (n) => {
+      n = Number(n || 0);
+      if (n >= 1e6) return '$' + (n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1) + 'M';
+      if (n >= 1e3) return '$' + Math.round(n / 1e3) + 'K';
+      return '$' + n;
+    };
+    const hasFigure = roiSummary.strong_pattern_count > 0 && roiSummary.revenue_at_risk_usd > 0;
+    return `
+      <div class="card" style="margin-bottom:24px">
+        <div class="roi-widget">
+          <div>
+            <div class="hero-stat-label" style="margin-bottom:6px">Revenue at risk from competitors</div>
+            <div class="roi-widget-figure">${hasFigure ? fmtBig(roiSummary.revenue_at_risk_usd) : '—'}</div>
+          </div>
+          <div class="roi-widget-body">
+            <div class="text-muted text-sm">
+              ${hasFigure
+                ? `Across ${roiSummary.strong_pattern_count} medium or higher confidence pattern${roiSummary.strong_pattern_count === 1 ? '' : 's'} from ${roiSummary.total_deals} logged deals.`
+                : `${roiSummary.total_deals} deal${roiSummary.total_deals === 1 ? '' : 's'} logged. Keep logging losses tagged to competitors to surface revenue patterns.`}
+            </div>
+          </div>
+          <a href="#/deals?tab=roi" class="btn btn-ghost btn-sm" style="flex-shrink:0">Open ROI →</a>
+        </div>
+      </div>`;
+  },
+
+  html(stats, changes, competitors, ctxData, meetingsData, playbookData, roiSummary) {
     const score = stats.total_competitors > 0
       ? Math.min(100, Math.round((stats.total_changes / Math.max(1, stats.total_competitors)) * 12 + stats.active_competitors * 8))
       : 0;
@@ -277,6 +309,8 @@ const Dashboard = {
         </div>
         <div class="radar-next">09:00 daily</div>
       </div>
+
+      ${Dashboard.roiWidgetHtml(roiSummary)}
 
       ${Dashboard.upcomingMeetingsHtml(meetingsData, competitors)}
 

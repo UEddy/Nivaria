@@ -171,7 +171,9 @@ const App = {
 
     document.querySelectorAll('.nav-item').forEach(a => {
       const p = a.dataset.page;
-      a.classList.toggle('active', p === page || (p === 'dashboard' && page === ''));
+      a.classList.toggle('active', p === page
+        || (p === 'dashboard' && page === '')
+        || (p === 'deals' && page === 'roi')); // ROI route highlights the Deals nav item
     });
 
     const root = el('page-root');
@@ -209,6 +211,25 @@ const App = {
         root.innerHTML = Skeleton.cards(6);
         History.render().then(transition);
       }
+    } else if (page === 'deals') {
+      if (id) {
+        el('page-title').textContent = 'Deal';
+        el('page-sub').textContent = 'Outcome and competitor activity at close';
+        root.innerHTML = Skeleton.cards(3);
+        Deals.renderDetail(id).then(transition);
+      } else {
+        el('page-title').textContent = 'Deals & ROI';
+        el('page-sub').textContent = 'Log win/loss outcomes and see what they cost you';
+        root.innerHTML = Skeleton.cards(4);
+        Deals.render(routeQuery).then(transition);
+      }
+    } else if (page === 'roi') {
+      // ROI lives as a tab inside the Deals page; this route opens it directly.
+      el('page-title').textContent = 'Deals & ROI';
+      el('page-sub').textContent = 'Estimated revenue impact of competitor activity';
+      root.innerHTML = Skeleton.cards(4);
+      routeQuery.set('tab', 'roi');
+      Deals.render(routeQuery).then(transition);
     } else if (page === 'settings') {
       el('page-title').textContent = 'Settings';
       el('page-sub').textContent = 'Webhooks, notifications, and account';

@@ -3,8 +3,9 @@ const { getDb } = require('./db');
 const { fetchPageContent, generateDiff } = require('./scraper');
 const { analyzeChange, buildFallbackAnalysis, estimateCostUsd } = require('./analyzer');
 const { classifyChange } = require('./changeGate');
-const { sendAlerts } = require('./webhooks');
+const { sendAlerts, sendPatternAlert } = require('./webhooks');
 const { canUseWebhooks } = require('./payments');
+const { classifyChangeTypes, PATTERN_TYPES, TYPE_LABEL, runNightlyForAllUsers } = require('./correlationEngine');
 const { getCompetitorHistory, invalidateCompetitorHistory } = require('./historicalContext');
 const { getUserContext, formatContextForPrompt, hasMeaningfulContext } = require('./userContext');
 const { generatePlaybooksForChange } = require('./playbooks');
@@ -222,6 +223,30 @@ async function checkCompetitor(competitor, db) {
         } catch (alertErr) {
           console.error(`  ⚠️  Alert delivery failed for ${competitor.name}: ${alertErr.message}`);
         }
+
+        // Phase 9: forward-looking pattern alerts. If the user subscribed to
+        // "tell me when this competitor repeats this kind of move", and this
+        // change classifies as that move type, fire a terse heads-up. Best
+        // effort — never blocks the pipeline.
+        try {
+          const changeTypes = classifyChangeTypes({
+            pattern_tags: patternTagsJson,
+            analysis: JSON.stringify(analysis),
+            gate_category: gateCategory,
+          });
+          for (const t of changeTypes) {
+            const patternType = PATTERN_TYPES[t];
+            const sub = db.prepare(
+              'SELECT 1 FROM pattern_alerts WHERE user_id = ? AND competitor_id = ? AND pattern_type = ?'
+            ).get(competitor.user_id, competitor.id, patternType);
+            if (sub) {
+              console.log(`  🔔 Pattern alert match: ${competitor.name} ${patternType}`);
+              await sendPatternAlert(settings, competitor, analysis, changeRowId, TYPE_LABEL[t]);
+            }
+          }
+        } catch (patErr) {
+          console.error(`  ⚠️  Pattern alert check failed for ${competitor.name}: ${patErr.message}`);
+        }
       }
     }
 
@@ -305,6 +330,16 @@ function startScheduler() {
   } catch (e) {
     console.warn('Phase 7 scheduler hooks not loaded:', e.message);
   }
+
+  // Phase 9: nightly win/loss correlation recompute for every user with deals.
+  // Pure data analysis (no AI), runs at 2:30 AM server time when the change
+  // pipeline is idle. On-demand recompute also happens when a user opens the
+  // ROI dashboard, so this is a backstop that keeps the dashboard widget warm.
+  cron.schedule('30 2 * * *', () => {
+    try { runNightlyForAllUsers(); }
+    catch (err) { console.error('[correlations] nightly error:', err.message); }
+  });
+  console.log('⏰ Phase 9 nightly win/loss correlation scheduled (2:30 AM)');
 
   console.log('⏰ Scheduler started — daily checks at 9:00 AM');
 }

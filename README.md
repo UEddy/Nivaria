@@ -20,6 +20,8 @@ I demonstrated my ability to scope, develop, and release a true full-stack solut
 - Slack and Discord webhook alerts when changes are detected
 - Daily scheduled checks via cron, with per-competitor manual re-check
 - Pre-meeting briefings: connect Google Calendar and get a brief pushed to your webhook 30 min before any meeting that mentions a tracked competitor (by title or attendee domain)
+- Win/loss logging and an ROI dashboard: tag deal outcomes to competitors (in-app or via a Slack slash command) and Foresight correlates losses with competitor activity to estimate revenue at risk
+- Slack deal logging: `/foresight lost-deal Acme $40K vs BambooHR` logs a deal in one line, with request-signature verification and replay protection
 - Three-mode theme system (system, light, dark) with anti-flash inline detection
 
 ## Tech stack
@@ -88,6 +90,30 @@ Before launching publicly, the Google OAuth app must move from "Testing" → "In
 
 Verification is a separate launch task. Submit at OAuth consent screen → "Publish app" with a privacy policy URL, app domain, and brand verification artifacts. Sensitive scopes (Calendar API counts as sensitive) require a 4 to 8 week review.
 
+## Win/loss & ROI
+
+Sales reps log deal outcomes and Foresight quantifies what competitors cost the business. For every lost or stalled deal tagged to a competitor, the engine looks at that competitor's meaningful changes in the 30 days before the deal closed, classifies them (pricing / messaging / feature), and surfaces patterns like "8 of your 12 tracked deals against Acme closed within 30 days of a pricing change."
+
+- The math is pure data analysis, no AI: simple correlation and counting, which is the honest ceiling for the sample sizes these teams have. Confidence is a function of supporting-deal count (low 3 to 5, medium 6 to 14, high 15+), every finding says "correlates with" rather than "caused", and small samples are flagged.
+- Two logging paths, both optimized for speed: an inline form on the Deals page (no modal), and the Slack slash command below.
+- Correlations recompute nightly per user (2:30 AM) and on demand when the ROI dashboard is opened.
+
+### Slack deal logging setup
+
+Connect a Slack workspace so reps can log deals without leaving Slack.
+
+1. **Create a Slack app** at [api.slack.com/apps](https://api.slack.com/apps) ("From scratch").
+2. **Signing secret** (required): Basic Information -> App Credentials -> Signing Secret. Put it in `.env` as `SLACK_SIGNING_SECRET`. The slash command endpoint verifies every request's signature and rejects anything older than 5 minutes (replay protection).
+3. **Bot scope + OAuth**: OAuth & Permissions -> Bot Token Scopes -> add `commands`. Add `http://localhost:3000/api/slack/oauth/callback` (adjust host for production) under Redirect URLs. Copy the Client ID and Client Secret into `.env` as `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET` / `SLACK_REDIRECT_URI`. This powers the "Add to Slack" button in Settings, which links the installing Slack user to their Foresight account.
+4. **Slash command**: Slash Commands -> Create New Command:
+   - Command: `/foresight`
+   - Request URL: `https://YOUR_HOST/api/slack/commands`
+   - Usage hint: `lost-deal Acme $40K vs BambooHR`
+5. **Interactivity** (for the competitor-picker buttons when a name doesn't match): Interactivity & Shortcuts -> on -> Request URL `https://YOUR_HOST/api/slack/interactions`.
+6. In Foresight, open Settings and click **Add to Slack**, then try `/foresight lost-deal Acme $40K vs BambooHR` in any channel.
+
+Command syntax: `/foresight <outcome> <deal name> [$value] [vs competitor]`, where outcome is `lost-deal`, `won-deal`, or `stalled`. The value parser accepts `$40K`, `40000`, `$40,000`, and `1.5M`. Responses are ephemeral, so a deal's value is only ever shown to the person who logged it.
+
 ## Roadmap
 
 ### Next 7 days
@@ -98,8 +124,7 @@ Verification is a separate launch task. Submit at OAuth consent screen → "Publ
 
 ### Next 30 days
 
-- Slack slash commands for on-demand competitor lookups
-- Win/loss tagging tied to competitor activity, surfacing patterns over time
+- CRM integration (HubSpot, Salesforce) to auto-import deal outcomes instead of manual + Slack logging
 - Vertical-specific brief templates (fintech, devtools, healthcare)
 - Microsoft 365 Calendar provider (Phase 7 has a Google-only implementation; the abstraction is provider-agnostic)
 

@@ -2659,3 +2659,152 @@ tbody tr:hover td { background: var(--bg-hover); }
   .settings-page-header { flex-direction: column; align-items: flex-start; gap: 10px; }
   .set-row-2 { grid-template-columns: 1fr; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Phase 9 — Deals & ROI
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Tabs */
+.deals-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 22px; }
+.deals-tab {
+  padding: 10px 16px; background: none; border: none; cursor: pointer;
+  font-size: 13.5px; font-weight: 600; color: var(--txt-3);
+  border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s, border-color .15s;
+}
+.deals-tab:hover { color: var(--txt-2); }
+.deals-tab.active { color: var(--txt); border-bottom-color: var(--accent); }
+
+/* Inline log form */
+.log-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+.log-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.log-form { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+.log-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.log-field { display: flex; flex-direction: column; gap: 6px; }
+.log-field--grow { flex: 1 1 200px; min-width: 160px; }
+.log-field--competitor { flex: 1 1 180px; min-width: 150px; }
+.log-field--value { width: 120px; }
+.log-field--date { width: 160px; }
+.log-field--save { margin-left: auto; }
+.log-field--notes { margin-top: 12px; }
+.log-field .opt { color: var(--txt-3); font-weight: 400; }
+#deal-notes.expanded { min-height: 64px; }
+
+/* Outcome toggle */
+.outcome-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-xs); overflow: hidden; }
+.outcome-btn {
+  padding: 9px 14px; background: var(--bg); border: none; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--txt-3); transition: background .14s, color .14s;
+  border-right: 1px solid var(--border);
+}
+.outcome-btn:last-child { border-right: none; }
+.outcome-btn:hover { color: var(--txt); background: var(--bg-hover); }
+.outcome-btn.active--won     { background: var(--green-dim); color: var(--green-2); }
+.outcome-btn.active--lost    { background: var(--red-dim);   color: var(--red-2); }
+.outcome-btn.active--stalled { background: var(--yellow-dim);color: var(--yellow-2); }
+
+/* Deal list */
+.deal-table { display: flex; flex-direction: column; }
+.deal-row {
+  display: flex; align-items: center; gap: 14px; padding: 12px 6px;
+  border-bottom: 1px solid var(--border); cursor: pointer; transition: background .12s;
+}
+.deal-row:last-child { border-bottom: none; }
+.deal-row:hover { background: var(--bg-hover); }
+.deal-row-outcome { width: 76px; flex-shrink: 0; }
+.deal-row-main { flex: 1; min-width: 0; }
+.deal-row-name { font-weight: 600; font-size: 13.5px; color: var(--txt); }
+.deal-row-meta { font-size: 12px; color: var(--txt-3); display: flex; gap: 6px; align-items: center; margin-top: 2px; }
+.deal-src { color: var(--accent-2); }
+.deal-row-value { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--txt-2); white-space: nowrap; }
+.deal-row-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+/* Outcome pills */
+.deal-pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: .2px; }
+.deal-pill--won     { background: var(--green-dim);  color: var(--green-2); }
+.deal-pill--lost    { background: var(--red-dim);    color: var(--red-2); }
+.deal-pill--stalled { background: var(--yellow-dim); color: var(--yellow-2); }
+
+/* Deal detail */
+.deal-detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.deal-detail-name { font-size: 20px; font-weight: 800; color: var(--txt); letter-spacing: -.3px; }
+.deal-detail-sub { margin-top: 6px; color: var(--txt-2); font-size: 13px; }
+.deal-detail-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.deal-detail-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; }
+.deal-stat { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; }
+.deal-stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--txt-3); font-weight: 600; }
+.deal-stat-val { font-size: 16px; font-weight: 700; color: var(--txt); margin-top: 4px; }
+.deal-detail-notes { margin-top: 16px; }
+.deal-detail-notes p { color: var(--txt-2); line-height: 1.6; margin-top: 6px; }
+
+/* Activity timeline */
+.activity-timeline { display: flex; flex-direction: column; gap: 8px; }
+.activity-item { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; transition: background .12s, border-color .12s; }
+.activity-item:hover { background: var(--bg-hover); border-color: var(--border-accent); }
+.activity-pip { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.activity-pip.high { background: var(--red); box-shadow: 0 0 0 3px var(--red-dim); }
+.activity-pip.medium { background: var(--yellow); box-shadow: 0 0 0 3px var(--yellow-dim); }
+.activity-pip.low { background: var(--green); box-shadow: 0 0 0 3px var(--green-dim); }
+.activity-body { flex: 1; min-width: 0; }
+.activity-headline { font-weight: 600; font-size: 13.5px; color: var(--txt); }
+.activity-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--txt-3); flex-wrap: wrap; }
+
+/* ROI empty / progress states */
+.roi-primer, .roi-progress { text-align: center; max-width: 560px; margin: 30px auto; padding: 30px; }
+.roi-primer-icon { width: 64px; height: 64px; border-radius: 18px; background: rgba(99,102,241,0.12); color: var(--accent-2); display: flex; align-items: center; justify-content: center; margin: 0 auto 18px; }
+.roi-primer-title, .roi-progress-title { font-size: 20px; font-weight: 800; color: var(--txt); letter-spacing: -.3px; }
+.roi-primer-desc, .roi-progress-desc { color: var(--txt-2); line-height: 1.65; margin: 12px 0 22px; }
+.roi-progress-ring { width: 84px; height: 84px; border-radius: 50%; border: 3px solid var(--border-accent); display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 800; color: var(--accent-2); margin: 0 auto 16px; }
+.roi-banner {
+  background: var(--yellow-dim); border: 1px solid rgba(245,158,11,0.3); color: var(--txt-2);
+  border-radius: var(--radius-sm); padding: 12px 16px; font-size: 13px; line-height: 1.5; margin: 16px auto; max-width: 640px;
+}
+
+/* ROI headline */
+.roi-headline {
+  background: linear-gradient(135deg, rgba(99,102,241,0.10), rgba(99,102,241,0.02));
+  border: 1px solid var(--border-accent); border-radius: var(--radius); padding: 26px 28px; margin-bottom: 22px;
+}
+.roi-headline-label { font-size: 12.5px; text-transform: uppercase; letter-spacing: .6px; color: var(--txt-3); font-weight: 700; }
+.roi-headline-value { font-size: 48px; font-weight: 800; color: var(--txt); letter-spacing: -1.5px; line-height: 1.1; margin: 6px 0; font-variant-numeric: tabular-nums; }
+.roi-headline-sub { color: var(--txt-2); font-size: 13.5px; }
+.roi-headline-note { color: var(--txt-3); font-size: 12px; margin-top: 10px; font-style: italic; }
+
+/* Pattern cards */
+.pattern-list { display: flex; flex-direction: column; gap: 16px; }
+.pattern-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+.pattern-card--low { opacity: 0.72; }
+.pattern-card--low:hover { opacity: 1; }
+.pattern-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pattern-impact { text-align: right; }
+.pattern-impact-label { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--txt-3); font-weight: 600; }
+.pattern-impact-val { font-size: 18px; font-weight: 800; color: var(--txt); font-variant-numeric: tabular-nums; }
+.pattern-desc { color: var(--txt); line-height: 1.6; font-size: 14px; margin: 14px 0; }
+.pattern-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.support-chev { transition: transform .18s; }
+.pattern-support { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.support-group-label { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--txt-3); font-weight: 700; margin-bottom: 8px; }
+.support-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 13px; border-bottom: 1px dashed var(--border); }
+.support-row:last-child { border-bottom: none; }
+.support-row--change { cursor: pointer; }
+.support-row--change:hover { color: var(--accent-2); }
+.support-name { flex: 1; min-width: 0; color: var(--txt-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.support-meta { color: var(--txt-3); font-size: 12px; white-space: nowrap; }
+.support-val { color: var(--txt-2); font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+
+/* Confidence pills */
+.conf-pill { display: inline-block; padding: 4px 11px; border-radius: 20px; font-size: 11.5px; font-weight: 700; letter-spacing: .2px; border: 1px solid transparent; }
+.conf-pill--high   { background: var(--green-dim);  color: var(--green-2);  border-color: rgba(16,185,129,0.25); }
+.conf-pill--medium { background: var(--yellow-dim); color: var(--yellow-2); border-color: rgba(245,158,11,0.25); }
+.conf-pill--low    { background: var(--bg-hover);   color: var(--txt-3);    border-color: var(--border); }
+
+/* ROI widget on the main dashboard */
+.roi-widget { display: flex; align-items: center; gap: 18px; }
+.roi-widget-figure { font-size: 30px; font-weight: 800; color: var(--txt); letter-spacing: -.8px; font-variant-numeric: tabular-nums; }
+.roi-widget-body { flex: 1; }
+
+@media (max-width: 720px) {
+  .log-field--save { margin-left: 0; width: 100%; }
+  .log-field--save .btn { width: 100%; }
+  .deal-detail-grid { grid-template-columns: 1fr; }
+  .roi-headline-value { font-size: 38px; }
+}

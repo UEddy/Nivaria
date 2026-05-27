@@ -1,15 +1,17 @@
 const Settings = {
   async render(routeQuery) {
     try {
-      const [{ settings, user }, ctxData, voiceData, calData] = await Promise.all([
+      const [{ settings, user }, ctxData, voiceData, calData, slackData] = await Promise.all([
         API.getSettings(),
         API.getUserContext().catch(() => null), // never block settings on context fetch
         API.getVoiceProfile().catch(() => null), // never block settings on voice profile fetch
         API.getCalendarConnections().catch(() => ({ encryption_configured: false, connections: [] })),
+        API.getSlackConnection().catch(() => ({ oauth_configured: false, signing_configured: false, connected: false })),
       ]);
-      el('page-root').innerHTML = Settings.html(settings || {}, user, ctxData, voiceData, calData);
+      el('page-root').innerHTML = Settings.html(settings || {}, user, ctxData, voiceData, calData, slackData);
       Settings._wireDirty();
       Settings.handleCalendarReturnParams(routeQuery);
+      Settings.handleSlackReturnParams(routeQuery);
     } catch (e) {
       el('page-root').innerHTML = `
         <div class="empty-state">
@@ -20,7 +22,7 @@ const Settings = {
     }
   },
 
-  html(s, user, ctxData, voiceData, calData) {
+  html(s, user, ctxData, voiceData, calData, slackData) {
     const tier = user?.tier || 'free';
     const isProPlus = tier === 'pro' || tier === 'team';
     const tierLabel = { free: 'Free', pro: 'Pro', team: 'Team' }[tier] || tier;
@@ -51,6 +53,8 @@ const Settings = {
           ${Settings.voiceProfileHtml(voiceData)}
 
           ${Settings.calendarHtml(s, calData)}
+
+          ${Settings.slackHtml(slackData)}
 
           ${Settings.notificationsHtml(s, isProPlus, user?.email)}
 
@@ -382,6 +386,101 @@ const Settings = {
         </div>
       </div>
     `;
+  },
+
+  // ── Slack integration (Phase 9) ─────────────────────────────────────────────
+
+  slackHtml(slackData) {
+    const d = slackData || {};
+    const slackIcon = (size) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5.04 15.16a2.52 2.52 0 0 1-2.52 2.52A2.52 2.52 0 0 1 0 15.16a2.52 2.52 0 0 1 2.52-2.52h2.52v2.52zm1.27 0a2.52 2.52 0 0 1 2.52-2.52 2.52 2.52 0 0 1 2.52 2.52v6.32A2.52 2.52 0 0 1 8.83 24a2.52 2.52 0 0 1-2.52-2.52v-6.32zM8.83 5.04a2.52 2.52 0 0 1-2.52-2.52A2.52 2.52 0 0 1 8.83 0a2.52 2.52 0 0 1 2.52 2.52v2.52H8.83zm0 1.27a2.52 2.52 0 0 1 2.52 2.52 2.52 2.52 0 0 1-2.52 2.52H2.52A2.52 2.52 0 0 1 0 8.83a2.52 2.52 0 0 1 2.52-2.52h6.32zM18.96 8.83a2.52 2.52 0 0 1 2.52-2.52A2.52 2.52 0 0 1 24 8.83a2.52 2.52 0 0 1-2.52 2.52h-2.52V8.83zm-1.27 0a2.52 2.52 0 0 1-2.52 2.52 2.52 2.52 0 0 1-2.52-2.52V2.52A2.52 2.52 0 0 1 15.17 0a2.52 2.52 0 0 1 2.52 2.52v6.32zM15.17 18.96a2.52 2.52 0 0 1 2.52 2.52A2.52 2.52 0 0 1 15.17 24a2.52 2.52 0 0 1-2.52-2.52v-2.52h2.52zm0-1.27a2.52 2.52 0 0 1-2.52-2.52 2.52 2.52 0 0 1 2.52-2.52h6.31A2.52 2.52 0 0 1 24 15.17a2.52 2.52 0 0 1-2.52 2.52h-6.31z"/></svg>`;
+
+    let body;
+    if (!d.oauth_configured) {
+      body = `
+        <div class="set-empty">
+          <div class="set-empty__icon">${slackIcon(24)}</div>
+          <div class="set-empty__title">Slack is not configured on this server</div>
+          <div class="set-empty__desc">Set SLACK_CLIENT_ID, SLACK_CLIENT_SECRET, SLACK_SIGNING_SECRET, and SLACK_REDIRECT_URI in .env to enable the "Add to Slack" install. See the README "Slack setup" section.</div>
+          <button class="btn btn-secondary btn-sm" disabled>Add to Slack <span class="tier-badge" style="margin-left:6px">Setup needed</span></button>
+        </div>`;
+    } else if (d.connected) {
+      body = `
+        <div class="set-integration-block">
+          <div class="set-integration">
+            <div class="set-integration__icon">${slackIcon(18)}</div>
+            <div class="set-integration__text">
+              <div class="set-integration__name">Slack workspace</div>
+              <div class="set-integration__meta">Connected${d.workspace ? ` to ${esc(d.workspace)}` : ''}. Log deals with <code class="code-inline">/foresight lost-deal Acme $40K vs BambooHR</code></div>
+            </div>
+            <div class="set-integration__action">
+              <span class="set-pill set-pill--active">Active</span>
+              <button class="set-linkbtn set-linkbtn--danger" onclick="Settings.confirmDisconnectSlack()">Disconnect</button>
+            </div>
+          </div>
+          ${!d.signing_configured ? `<div class="text-sm" style="color:var(--yellow)">SLACK_SIGNING_SECRET is not set. Slash commands will be rejected until it is configured.</div>` : ''}
+        </div>`;
+    } else {
+      body = `
+        <div class="set-empty">
+          <div class="set-empty__icon">${slackIcon(24)}</div>
+          <div class="set-empty__title">Log deals straight from Slack</div>
+          <div class="set-empty__desc">Connect your workspace, then type <code class="code-inline">/foresight lost-deal Acme $40K vs BambooHR</code> in any channel to log a deal in one line.</div>
+          <a class="btn btn-primary btn-sm" href="/api/slack/oauth/start">Add to Slack</a>
+          ${!d.signing_configured ? `<div class="text-sm" style="color:var(--yellow);margin-top:8px">Note: SLACK_SIGNING_SECRET is not set yet, so slash commands will be rejected until it is.</div>` : ''}
+        </div>`;
+    }
+
+    return `
+      <div class="set-card">
+        <div class="set-card__head">
+          <div class="set-card__title">Slack deal logging</div>
+          <div class="set-card__desc">Log win/loss outcomes from Slack with a one-line slash command. Deal values stay private to you (responses are only ever visible to the person who runs the command).</div>
+        </div>
+        <div class="set-card__body">${body}</div>
+      </div>`;
+  },
+
+  confirmDisconnectSlack() {
+    openModal(`
+      <div class="modal-header">
+        <div class="modal-title">Disconnect Slack</div>
+        <button class="modal-close" onclick="closeModal()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div class="modal-body"><p style="color:var(--txt-2);line-height:1.7">Disconnect Slack? The <code class="code-inline">/foresight</code> slash command will stop logging deals until you reconnect.</p></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-danger" onclick="Settings._doDisconnectSlack()">Disconnect</button>
+      </div>
+    `);
+  },
+
+  async _doDisconnectSlack() {
+    try {
+      await API.disconnectSlack();
+      closeModal();
+      toast('Slack disconnected.', 'success');
+      Settings.render();
+    } catch (e) { toast(e.message, 'error'); }
+  },
+
+  handleSlackReturnParams(routeQuery) {
+    let params = routeQuery instanceof URLSearchParams ? routeQuery : null;
+    if (!params) {
+      const hash = window.location.hash || '';
+      const qIdx = hash.indexOf('?');
+      if (qIdx === -1) return;
+      params = new URLSearchParams(hash.slice(qIdx + 1));
+    }
+    if (params.has('slack_connected')) {
+      toast('Slack connected. Try /foresight lost-deal in any channel.', 'success');
+    } else if (params.has('slack_error')) {
+      toast(`Slack connect failed: ${params.get('slack_error')}`, 'error');
+    } else {
+      return;
+    }
+    const hash = window.location.hash || '';
+    const qIdx = hash.indexOf('?');
+    if (qIdx !== -1) history.replaceState(null, '', hash.slice(0, qIdx));
   },
 
   promptDisconnect(provider, btn) {

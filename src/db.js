@@ -278,6 +278,91 @@ const SCHEMA = `
     ON generated_playbooks(change_id, user_id);
   CREATE INDEX IF NOT EXISTS idx_playbooks_user_recent
     ON generated_playbooks(user_id, generated_at DESC);
+
+  -- Phase 9: logged deal outcomes (the raw signal the ROI dashboard correlates
+  -- against competitor activity). competitor_id is nullable: it's required for
+  -- 'lost'/'stalled' (validated in the route + Slack handler, not by the DB,
+  -- so legacy/edge rows never break inserts) and irrelevant for 'won'.
+  -- deal_value_usd is sensitive financial data: masked in logs, only ever
+  -- returned to the owning user. close_date defaults to today, editable.
+  CREATE TABLE IF NOT EXISTS deals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    deal_name TEXT NOT NULL,
+    outcome TEXT NOT NULL CHECK(outcome IN ('won','lost','stalled')),
+    competitor_id INTEGER,
+    deal_value_usd INTEGER,
+    close_date DATE NOT NULL DEFAULT (date('now')),
+    notes TEXT,
+    source TEXT NOT NULL DEFAULT 'manual_form' CHECK(source IN ('manual_form','slack_command','api')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (competitor_id) REFERENCES competitors(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_deals_user_outcome_date ON deals(user_id, outcome, close_date);
+  CREATE INDEX IF NOT EXISTS idx_deals_user_competitor   ON deals(user_id, competitor_id);
+
+  -- Phase 9: computed correlation patterns, regenerated nightly (or on-demand
+  -- when the ROI dashboard is opened and the cache is stale). Pure data
+  -- analysis, no AI. supporting_deal_ids / supporting_change_ids are JSON
+  -- arrays. estimated_impact_usd is the summed value of supporting deals that
+  -- recorded a value (nullable when none did).
+  CREATE TABLE IF NOT EXISTS correlations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    competitor_id INTEGER,
+    pattern_type TEXT NOT NULL,
+    pattern_description TEXT NOT NULL,
+    confidence TEXT NOT NULL CHECK(confidence IN ('low','medium','high')),
+    supporting_deal_ids TEXT,
+    supporting_change_ids TEXT,
+    estimated_impact_usd INTEGER,
+    generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (competitor_id) REFERENCES competitors(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_correlations_user_conf ON correlations(user_id, confidence DESC);
+
+  -- Phase 9: forward-looking "alert me when this competitor repeats this kind
+  -- of move" subscriptions, created from a pattern card on the ROI dashboard.
+  -- The scheduler fires a webhook when a future meaningful change for the
+  -- competitor matches the subscribed pattern_type.
+  CREATE TABLE IF NOT EXISTS pattern_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    competitor_id INTEGER NOT NULL,
+    pattern_type TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (competitor_id) REFERENCES competitors(id),
+    UNIQUE(user_id, competitor_id, pattern_type)
+  );
+
+  -- Phase 9: Slack workspace installs from the "Add to Slack" OAuth flow. One
+  -- row per (user, team). bot_token_enc is AES-256-GCM encrypted at rest by
+  -- src/calendarTokens.js (the same generic token vault used for calendar
+  -- tokens). slack_user_id is the installing Slack user, used to resolve an
+  -- incoming slash command back to this Foresight account.
+  CREATE TABLE IF NOT EXISTS slack_installations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    slack_team_id TEXT NOT NULL,
+    slack_team_name TEXT,
+    slack_user_id TEXT NOT NULL,
+    bot_token_enc TEXT,
+    bot_user_id TEXT,
+    scope TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','revoked')),
+    installed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    UNIQUE(slack_team_id, slack_user_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_slack_install_lookup ON slack_installations(slack_team_id, slack_user_id);
+  CREATE INDEX IF NOT EXISTS idx_slack_install_user   ON slack_installations(user_id);
 `;
 
 async function initDb() {
@@ -383,9 +468,138 @@ async function initDb() {
     console.log('✅ Demo credentials: demo@foresight.com / Demo1234!');
   }
 
+  // Phase 9: seed a populated win/loss dataset for the demo user so the ROI
+  // dashboard renders a real, medium-confidence pattern on first run. Idempotent
+  // — only seeds when the demo user has zero deals.
+  try {
+    const demoDeals = db.prepare('SELECT COUNT(*) AS n FROM deals WHERE user_id = 1').get().n;
+    if (demoDeals === 0 && db.prepare('SELECT id FROM users WHERE id = 1').get()) {
+      seedPhase9DemoData();
+    }
+  } catch (e) {
+    console.warn('Phase 9 demo seed skipped (non-fatal):', e.message);
+  }
+
   saveDb();
   console.log('✅ Database initialized');
   return db;
+}
+
+// Phase 9 — seed a believable win/loss history for the demo user (id 1) tied to
+// the already-seeded competitors (Acme=1, NovaTech=2, Horizon=3). Produces:
+//   • two backdated Acme changes (a pricing change ~28d ago, a plan
+//     restructure ~14d ago) so each Acme loss has a pricing move inside its
+//     30-day pre-close window — the engine then surfaces a real pattern;
+//   • ~10 lost deals against Acme spread across the last 27 days;
+//   • a couple of stalled deals against NovaTech (which has a feature launch);
+//   • several won deals (no competitor) for a realistic win rate.
+function seedPhase9DemoData() {
+  const now = new Date();
+  const dateOffset = (days) => {
+    const d = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+    return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  };
+  const tsOffset = (days) => {
+    const d = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+    return d.toISOString().replace('T', ' ').slice(0, 19);
+  };
+
+  // Backdated Acme changes that create the 30-day correlation windows. These are
+  // "meaningful" pricing-type changes, tagged so the engine classifies them.
+  const acmePricing = JSON.stringify({
+    is_meaningful: true,
+    changed_what: 'Acme Corp cut Pro plan pricing and added a cheaper Starter tier',
+    threat_level: 'high',
+    headline: 'Acme Corp restructured pricing with an aggressive Pro discount',
+    summary: 'Acme reduced Pro pricing and introduced a low-cost entry tier.',
+    recommended_response: 'Brief the sales team on competitive pricing rebuttals.',
+    talking_points: ['Our Pro tier includes SSO and audit logs at no extra cost'],
+    key_changes: [{ category: 'pricing', description: 'Pro plan repriced', impact: 'Direct pressure on our core tier' }],
+    opportunity: '',
+  });
+  const acmePlan = JSON.stringify({
+    is_meaningful: true,
+    changed_what: 'Acme Corp removed seat limits from the Pro plan',
+    threat_level: 'high',
+    headline: 'Acme Corp removed Pro seat caps',
+    summary: 'Acme dropped the per-seat ceiling on Pro.',
+    recommended_response: 'Emphasize total cost of ownership in active deals.',
+    talking_points: ['Unlimited seats often hides usage-based overage costs'],
+    key_changes: [{ category: 'pricing', description: 'Seat limit removed', impact: 'Removes a common objection' }],
+    opportunity: '',
+  });
+  const novaFeature = JSON.stringify({
+    is_meaningful: true,
+    changed_what: 'NovaTech launched an AI writing assistant in beta',
+    threat_level: 'medium',
+    headline: 'NovaTech launched an AI writing assistant',
+    summary: 'NovaTech entered our core feature territory with a beta launch.',
+    recommended_response: 'Accelerate differentiation messaging.',
+    talking_points: ['18 months of production AI maturity vs a fresh beta'],
+    key_changes: [{ category: 'features', description: 'AI assistant launched', impact: 'Feature-parity attempt' }],
+    opportunity: '',
+  });
+
+  const insertChange = db.prepare(`
+    INSERT INTO changes (competitor_id, diff_summary, analysis, threat_level, recommended_response,
+      talking_points, headline, analysis_status, is_meaningful, gate_category, pattern_tags, detected_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'ok', 1, ?, ?, ?)
+  `);
+  const acmePricingChangeId = insertChange.run(
+    1, JSON.stringify({ added: ['$34'], removed: ['$49'] }), acmePricing, 'high',
+    'Brief the sales team on competitive pricing rebuttals.',
+    JSON.stringify(['Our Pro tier includes SSO and audit logs at no extra cost']),
+    'Acme Corp restructured pricing with an aggressive Pro discount',
+    'pricing_pattern', JSON.stringify(['pricing_change']), tsOffset(28),
+  ).lastInsertRowid;
+  const acmePlanChangeId = insertChange.run(
+    1, JSON.stringify({ added: ['unlimited seats'], removed: ['per seat'] }), acmePlan, 'high',
+    'Emphasize total cost of ownership in active deals.',
+    JSON.stringify(['Unlimited seats often hides usage-based overage costs']),
+    'Acme Corp removed Pro seat caps',
+    'headings_changed', JSON.stringify(['plan_restructure']), tsOffset(14),
+  ).lastInsertRowid;
+  insertChange.run(
+    2, JSON.stringify({ added: ['AI', 'beta'], removed: [] }), novaFeature, 'medium',
+    'Accelerate differentiation messaging.',
+    JSON.stringify(['18 months of production AI maturity vs a fresh beta']),
+    'NovaTech launched an AI writing assistant',
+    'content_change', JSON.stringify(['feature_launch']), tsOffset(20),
+  );
+
+  const insertDeal = db.prepare(`
+    INSERT INTO deals (user_id, deal_name, outcome, competitor_id, deal_value_usd, close_date, notes, source, created_at, updated_at)
+    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const mk = (name, outcome, competitorId, value, daysAgo, notes, source) =>
+    insertDeal.run(name, outcome, competitorId, value, dateOffset(daysAgo), notes || null, source || 'manual_form', tsOffset(daysAgo), tsOffset(daysAgo));
+
+  // 10 losses against Acme inside the pricing-change windows.
+  mk('Northwind Traders', 'lost', 1, 42000, 2,  'Went with Acme on price', 'manual_form');
+  mk('Globex Logistics',  'lost', 1, 38000, 4,  'Lost on Pro pricing', 'slack_command');
+  mk('Initech Platform',  'lost', 1, 55000, 6,  'Acme undercut us late in the cycle', 'manual_form');
+  mk('Soylent Foods',     'lost', 1, 27000, 9,  null, 'manual_form');
+  mk('Umbrella Health',   'lost', 1, 61000, 11, 'Budget pressure, Acme cheaper', 'manual_form');
+  mk('Vandelay Imports',  'lost', 1, null,  13, 'No value recorded', 'slack_command');
+  mk('Stark Solutions',   'lost', 1, 48000, 17, 'Acme removed seat caps, killed our objection', 'manual_form');
+  mk('Wayne Manufacturing','lost',1, 33000, 20, null, 'manual_form');
+  mk('Hooli Cloud',       'lost', 1, 72000, 24, 'Lost to Acme pricing again', 'manual_form');
+  mk('Pied Piper Data',   'lost', 1, 29000, 27, null, 'slack_command');
+
+  // 2 stalled against NovaTech (feature launch window) + 1 lost vs Horizon.
+  mk('Cyberdyne Systems', 'stalled', 2, 36000, 8,  'Stalled after NovaTech AI demo', 'manual_form');
+  mk('Tyrell Corp',       'stalled', 2, 45000, 15, 'Evaluating NovaTech beta', 'manual_form');
+  mk('Oscorp Labs',       'lost',    3, 31000, 18, 'Chose Horizon on enterprise references', 'manual_form');
+
+  // 5 wins (no competitor) for a believable win rate.
+  mk('Contoso Corp',   'won', null, 25000, 3,  'Closed clean', 'manual_form');
+  mk('Fabrikam Inc',   'won', null, 40000, 7,  null, 'slack_command');
+  mk('Adventure Works','won', null, 52000, 12, 'Beat Acme on support SLA', 'manual_form');
+  mk('Litware Group',  'won', null, 18000, 16, null, 'manual_form');
+  mk('Proseware',      'won', null, 33000, 22, 'Renewal expansion', 'manual_form');
+
+  saveDb();
+  console.log(`✅ Phase 9 demo data seeded: 18 deals, backdated changes #${acmePricingChangeId}/#${acmePlanChangeId} for correlation`);
 }
 
 function seedDemoData() {

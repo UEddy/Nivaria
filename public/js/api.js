@@ -34,7 +34,7 @@ const API = (() => {
     get:    (path)        => request('GET',    path),
     post:   (path, body)  => request('POST',   path, body),
     put:    (path, body)  => request('PUT',    path, body),
-    delete: (path)        => request('DELETE', path),
+    delete: (path, body)  => request('DELETE', path, body),
 
     // Auth
     getMe:   ()     => API.get('/auth/me'),
@@ -78,6 +78,25 @@ const API = (() => {
     generatePlaybooks:      (changeId)        => API.post(`/playbooks/changes/${changeId}/generate`),
     regeneratePlaybook:     (playbookId)      => API.post(`/playbooks/${playbookId}/regenerate`),
     getRecentPlaybooks:     (limit = 5)       => API.get(`/playbooks/recent?limit=${limit}`),
+
+    // Win/loss deals + ROI dashboard (Phase 9)
+    getDeals:        (params = {}) => {
+      const qs = new URLSearchParams(params).toString();
+      return API.get(`/deals${qs ? '?' + qs : ''}`);
+    },
+    getDeal:         (id)          => API.get(`/deals/${id}`),
+    createDeal:      (data)        => API.post('/deals', data),
+    updateDeal:      (id, data)    => API.put(`/deals/${id}`, data),
+    deleteDeal:      (id)          => API.delete(`/deals/${id}`),
+    getDealNames:    (q = '')      => API.get(`/deals/autocomplete?q=${encodeURIComponent(q)}`),
+    getRoi:          ()            => API.get('/roi'),
+    getRoiSummary:   ()            => API.get('/roi/summary'),
+    createPatternAlert: (competitorId, patternType) => API.post('/roi/alerts', { competitor_id: competitorId, pattern_type: patternType }),
+    removePatternAlert: (competitorId, patternType) => API.delete('/roi/alerts', { competitor_id: competitorId, pattern_type: patternType }),
+
+    // Slack integration (Phase 9)
+    getSlackConnection: () => API.get('/slack/connection'),
+    disconnectSlack:    () => API.post('/slack/oauth/disconnect'),
 
     // Calendar / pre-meeting briefings (Phase 7)
     getCalendarConnections:    ()           => API.get('/calendar/connections'),

@@ -19,6 +19,9 @@ const userContextRouter = require('./routes/userContext');
 const voiceProfileRouter = require('./routes/voiceProfile');
 const playbooksRouter    = require('./routes/playbooks');
 const calendarRouter    = require('./routes/calendar');
+const dealsRouter        = require('./routes/deals');
+const roiRouter          = require('./routes/roi');
+const slackRouter        = require('./routes/slack');
 
 // ── DB-backed session store ────────────────────────────────────────────────────
 
@@ -190,6 +193,16 @@ app.use('/api/settings',     limits.api, requireAuth, csrfProtect, settingsRoute
 app.use('/api/user/context',       limits.api, requireAuth, csrfProtect, userContextRouter);
 app.use('/api/user/voice-profile', limits.api, requireAuth, csrfProtect, voiceProfileRouter);
 app.use('/api/playbooks',          limits.api, requireAuth, csrfProtect, playbooksRouter);
+
+// Phase 9 — win/loss deals + ROI dashboard. Standard protected mounting.
+app.use('/api/deals', limits.api, requireAuth, csrfProtect, dealsRouter);
+app.use('/api/roi',   limits.api, requireAuth, csrfProtect, roiRouter);
+
+// Phase 9 — Slack. The router does its own auth internally: the slash command
+// + interactions endpoints are authenticated by Slack's request signature (not
+// a session) and need the raw body, so they cannot use requireAuth+csrfProtect.
+// The OAuth start/callback/disconnect routes enforce session auth themselves.
+app.use('/api/slack', limits.slack, slackRouter);
 
 // Phase 7 — calendar router does its own auth + CSRF internally because OAuth
 // callback + the navigational /connect redirect cannot use the standard

@@ -44,8 +44,10 @@ const Onboarding = {
   _draw() {
     if (Onboarding._step === 1) {
       el('page-root').innerHTML = Onboarding.htmlStep1(Onboarding._context);
-    } else {
+    } else if (Onboarding._step === 2) {
       el('page-root').innerHTML = Onboarding.htmlStep2(Onboarding._voice);
+    } else {
+      el('page-root').innerHTML = Onboarding.htmlStep3();
     }
   },
 
@@ -59,7 +61,9 @@ const Onboarding = {
             <span class="onboarding-step onboarding-step--active">1</span>
             <span class="onboarding-step-bar"></span>
             <span class="onboarding-step">2</span>
-            <span class="onboarding-step-label">Step 1 of 2 · Business context</span>
+            <span class="onboarding-step-bar"></span>
+            <span class="onboarding-step">3</span>
+            <span class="onboarding-step-label">Step 1 of 3 · Business context</span>
           </div>
 
           <div class="onboarding-header">
@@ -178,7 +182,9 @@ const Onboarding = {
             <span class="onboarding-step onboarding-step--done">✓</span>
             <span class="onboarding-step-bar onboarding-step-bar--done"></span>
             <span class="onboarding-step onboarding-step--active">2</span>
-            <span class="onboarding-step-label">Step 2 of 2 · Voice profile (optional)</span>
+            <span class="onboarding-step-bar"></span>
+            <span class="onboarding-step">3</span>
+            <span class="onboarding-step-label">Step 2 of 3 · Voice profile (optional)</span>
           </div>
 
           <div class="onboarding-header">
@@ -307,7 +313,8 @@ const Onboarding = {
     try {
       await API.saveVoiceProfile(payload);
       toast('Voice profile saved. Your outreach will sound like you.', 'success');
-      navigate('/');
+      Onboarding._step = 3;
+      Onboarding._draw();
     } catch (e) {
       btn.disabled = false;
       btn.textContent = 'Save and finish';
@@ -316,7 +323,45 @@ const Onboarding = {
   },
 
   skipStep2() {
-    toast('Skipped. You can add a voice profile any time from Settings.', 'info');
+    Onboarding._step = 3;
+    Onboarding._draw();
+  },
+
+  // ── Step 3: win/loss + ROI (optional) ────────────────────────────────────
+  htmlStep3() {
+    return `
+      <div class="onboarding-wrap">
+        <div class="onboarding-card">
+          <div class="onboarding-step-indicator">
+            <span class="onboarding-step onboarding-step--done">✓</span>
+            <span class="onboarding-step-bar onboarding-step-bar--done"></span>
+            <span class="onboarding-step onboarding-step--done">✓</span>
+            <span class="onboarding-step-bar onboarding-step-bar--done"></span>
+            <span class="onboarding-step onboarding-step--active">3</span>
+            <span class="onboarding-step-label">Step 3 of 3 · Track win/loss (optional)</span>
+          </div>
+
+          <div class="onboarding-header">
+            <div class="onboarding-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <div>
+              <h2 class="onboarding-title">Measure what competitors cost you</h2>
+              <p class="onboarding-sub">Log your win/loss outcomes and tag the competitor on each loss. Foresight lines those losses up against what each competitor changed in the 30 days before the deal closed, then turns it into estimated revenue at risk. Logging a deal takes about ten seconds, in-app or via a Slack command.</p>
+            </div>
+          </div>
+
+          <div class="onboarding-actions">
+            <button type="button" class="btn btn-ghost" onclick="Onboarding.finishOnboarding()">Skip for now</button>
+            <button type="button" class="btn btn-primary" onclick="navigate('/deals')">Set up Deals</button>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  finishOnboarding() {
+    toast('You are all set. Log a deal any time from Deals & ROI.', 'success');
     navigate('/');
   },
 
