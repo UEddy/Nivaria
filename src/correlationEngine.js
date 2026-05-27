@@ -21,22 +21,41 @@ const { getDb } = require('./db');
 // A single change can map to several types (a repricing that also relaunches a
 // plan is both pricing and messaging). We union all signals: pattern_tags first
 // (the AI's structured vocabulary), then the pre-AI gate category, then the
-// analysis key_changes categories as a fallback for older rows.
+// analysis key_changes categories as a fallback for older rows that predate
+// pattern_tags.
+//
+// Two rules keep the buckets honest:
+//   1. The `feature` bucket means a feature *launch*. It is set ONLY by an
+//      explicit launch tag — never by a bare "features" key_change category,
+//      which cannot tell a launch from a removal or an incidental line item
+//      inside a pricing change. (A 30%-price-cut whose analysis happened to list
+//      a "features" key_change was being mislabeled a feature launch.)
+//   2. Feature *removals* / deprecations live in their own `removed` bucket so
+//      they are never reported as launches.
 
-const PRICING_TAGS   = new Set(['pricing_change', 'plan_restructure']);
-const FEATURE_TAGS   = new Set(['feature_launch', 'feature_removal']);
-const MESSAGING_TAGS = new Set(['positioning_shift', 'messaging_refresh', 'enterprise_push', 'smb_push', 'comparison_page']);
+const PATTERN_KINDS = ['pricing', 'messaging', 'feature', 'removed'];
+
+const PRICING_TAGS   = new Set(['pricing_change', 'plan_restructure', 'tier_change']);
+const FEATURE_TAGS   = new Set(['feature_launch', 'new_feature', 'capability_added', 'product_launch']);
+const MESSAGING_TAGS = new Set([
+  'messaging_shift', 'positioning_pivot', 'copy_change', 'headings_changed',
+  // pre-existing vocabulary, kept so already-tagged rows still classify:
+  'positioning_shift', 'messaging_refresh', 'enterprise_push', 'smb_push', 'comparison_page',
+]);
+const REMOVED_TAGS   = new Set(['removed_feature', 'feature_removed', 'feature_removal', 'deprecation']);
 
 const PATTERN_TYPES = {
   pricing:   'pricing_change_correlated_with_losses',
   messaging: 'messaging_shift_correlated_with_losses',
   feature:   'feature_launch_correlated_with_losses',
+  removed:   'feature_removal_correlated_with_losses',
 };
 
 const TYPE_LABEL = {
   pricing:   'pricing change',
   messaging: 'messaging or positioning shift',
   feature:   'feature launch',
+  removed:   'feature removal or deprecation',
 };
 
 function classifyChangeTypes(row) {
@@ -45,22 +64,32 @@ function classifyChangeTypes(row) {
   let tags = [];
   try { tags = row.pattern_tags ? JSON.parse(row.pattern_tags) : []; } catch { tags = []; }
   if (!Array.isArray(tags)) tags = [];
-  for (const t of tags) {
-    if (PRICING_TAGS.has(t))   types.add('pricing');
+  for (const raw of tags) {
+    const t = String(raw || '').toLowerCase();
+    if (PRICING_TAGS.has(t) || t === 'pricing' || t.startsWith('pricing_')) types.add('pricing');
     if (FEATURE_TAGS.has(t))   types.add('feature');
     if (MESSAGING_TAGS.has(t)) types.add('messaging');
+    if (REMOVED_TAGS.has(t))   types.add('removed');
   }
 
+  // Pre-AI gate category. Only the unambiguous pricing signal is mapped here;
+  // 'headings_changed' as a raw gate signal is a detection mechanism (the page
+  // headings moved), not a semantic classification, so it is left to the
+  // pattern_tags / key_changes signals rather than forced into messaging.
   if (row.gate_category === 'pricing_pattern') types.add('pricing');
 
+  // Fallback for legacy rows without pattern_tags: classify from the analysis
+  // key_changes categories. Pricing and messaging categories are reasonably
+  // unambiguous; a bare "features" category is deliberately NOT mapped to the
+  // feature-launch bucket (see rule 1 above) — launch requires an explicit tag.
   let analysis = null;
   try { analysis = row.analysis ? JSON.parse(row.analysis) : null; } catch { analysis = null; }
   const kcs = analysis && Array.isArray(analysis.key_changes) ? analysis.key_changes : [];
   for (const kc of kcs) {
     const cat = String(kc?.category || '').toLowerCase();
-    if (cat === 'pricing')                       types.add('pricing');
-    else if (cat === 'features' || cat === 'feature') types.add('feature');
-    else if (cat === 'messaging' || cat === 'positioning') types.add('messaging');
+    if (cat === 'pricing' || cat === 'plans' || cat === 'plan' || cat === 'tier') types.add('pricing');
+    else if (cat === 'messaging' || cat === 'positioning' || cat === 'copy')      types.add('messaging');
+    // 'features'/'feature' intentionally unmapped here — see rule 1.
   }
 
   return types;
@@ -157,11 +186,11 @@ function computeCorrelationsForUser(userId, { persist = true } = {}) {
   const groups = new Map(); // key `${competitorId}:${type}`
   for (const deal of lostStalledTagged) {
     const windowChanges = changesInWindow(db, userId, deal.competitor_id, deal.close_date, 30);
-    const typedFor = { pricing: [], messaging: [], feature: [] };
+    const typedFor = Object.fromEntries(PATTERN_KINDS.map(k => [k, []]));
     for (const ch of windowChanges) {
       for (const t of classifyChangeTypes(ch)) typedFor[t].push(ch);
     }
-    for (const type of ['pricing', 'messaging', 'feature']) {
+    for (const type of PATTERN_KINDS) {
       const typed = typedFor[type];
       if (typed.length === 0) continue;
       const key = `${deal.competitor_id}:${type}`;
