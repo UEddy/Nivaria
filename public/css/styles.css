@@ -2861,11 +2861,14 @@ html       { overflow-x: hidden; }
 }
 .sidebar-scrim.visible { opacity: 1; pointer-events: auto; }
 
-/* ── Universal touch-target floor at <768px ───────────────────────────────────
+/* ── Universal touch-target floor at <1024px ──────────────────────────────────
    Apple HIG / WCAG 2.5.5 minimum is 44x44px. The desktop design uses smaller
-   buttons by intent (compact density); on touch we promote them to the floor.
+   buttons by intent (compact density); below the desktop boundary (1024px) we
+   promote them to the touch floor. Tablet (768-1023px) is treated as touch:
+   the competitors card stack runs through this range, and a desktop-density
+   row of 35px buttons inside a touch-friendly card defeats the purpose.
    Per-element overrides live with their components. */
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .btn,
   .btn-sm,
   .btn-lg,
@@ -2956,7 +2959,10 @@ html       { overflow-x: hidden; }
 
 .competitors-card-view { display: none; }
 
-@media (max-width: 767px) {
+/* Card stack runs through tablet too — horizontal-scroll-inside-a-table is a
+   poor touch experience, and the table's density only earns its keep on a
+   real desktop with a mouse. Desktop table activates at 1024px+. */
+@media (max-width: 1023px) {
   .competitors-table-view { display: none; }
   .competitors-card-view  { display: flex; flex-direction: column; gap: 12px; }
 }

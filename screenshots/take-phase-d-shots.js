@@ -55,17 +55,26 @@ function pageAudit() {
 
 (async () => {
   const browser = await chromium.launch();
+
+  // Single login, share the cookie storage across every viewport context so we
+  // don't hammer the login rate limiter (10 / 15min / IP).
+  const seedCtx = await browser.newContext();
+  const login = await seedCtx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@competitor-shadow.com', password: 'Demo1234!' } });
+  if (!login.ok()) throw new Error(`login seed: ${login.status()}`);
+  const storageState = await seedCtx.storageState();
+  await seedCtx.close();
+
   const widths = [
     { w: 375, h: 812, label: '375 (iPhone SE / 14)',     fname: '375', isMobile: true  },
     { w: 414, h: 896, label: '414 (iPhone Pro Max)',     fname: '414', isMobile: true  },
-    { w: 768, h: 1024, label: '768 (tablet portrait)',   fname: '768', isMobile: false },
+    { w: 768, h: 1024, label: '768 (tablet portrait)',   fname: '768', isMobile: true  },
+    { w: 820, h: 1180, label: '820 (iPad)',              fname: '820', isMobile: true  },
+    { w: 1024, h: 768, label: '1024 (small desktop)',    fname: '1024', isMobile: false },
     { w: 1440, h: 900, label: '1440 (standard desktop)', fname: '1440', isMobile: false },
   ];
   const results = {};
   for (const v of widths) {
-    const ctx = await browser.newContext({ viewport: { width: v.w, height: v.h }, deviceScaleFactor: 2, hasTouch: v.isMobile, isMobile: v.isMobile });
-    const login = await ctx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@competitor-shadow.com', password: 'Demo1234!' } });
-    if (!login.ok()) throw new Error(`login@${v.w}: ${login.status()}`);
+    const ctx = await browser.newContext({ viewport: { width: v.w, height: v.h }, deviceScaleFactor: 2, hasTouch: v.isMobile, isMobile: v.isMobile, storageState });
     const p = await ctx.newPage();
     await p.goto(`${BASE}/app#/competitors`, { waitUntil: 'networkidle' });
     await p.waitForSelector('.competitors-table-view, .competitors-card-view', { timeout: 8000 }).catch(() => {});
