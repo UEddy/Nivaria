@@ -95,6 +95,113 @@ function animateCounter(element, target, duration = 900) {
   requestAnimationFrame(tick);
 }
 
+// ─── Mobile drawer (Phase B) ─────────────────────────────────────────────────
+// Builds on the existing #sidebar + #menu-toggle markup. Layers on every close
+// path the audit found missing: tap toggle, tap scrim, X button, Escape key,
+// swipe-left gesture, route change (hashchange), and resize past the tablet
+// breakpoint. Owns the ARIA state (aria-expanded on toggle, aria-modal on the
+// open drawer, aria-hidden on the closed sidebar so screen readers don't
+// announce a phantom landmark), and remembers/restores focus around open/close.
+// At 768px+ the sidebar is permanent and every Drawer method silently no-ops.
+const Drawer = {
+  _lastTrigger: null,
+
+  isMobile() { return window.matchMedia('(max-width: 767px)').matches; },
+  isOpen()   { return document.getElementById('sidebar')?.classList.contains('open'); },
+
+  open() {
+    if (!Drawer.isMobile()) return;
+    const sb = document.getElementById('sidebar');
+    const sc = document.getElementById('sidebar-scrim');
+    const tb = document.getElementById('menu-toggle');
+    if (!sb) return;
+    Drawer._lastTrigger = document.activeElement || tb;
+    sb.classList.add('open');
+    sb.setAttribute('aria-modal', 'true');
+    sb.removeAttribute('aria-hidden');
+    sc?.classList.add('visible');
+    tb?.setAttribute('aria-expanded', 'true');
+    tb?.setAttribute('aria-label', 'Close menu');
+    document.body.classList.add('drawer-open');
+    // Move focus to the first nav item for keyboard / screen-reader users.
+    requestAnimationFrame(() => sb.querySelector('.nav-item')?.focus());
+  },
+
+  close() {
+    const sb = document.getElementById('sidebar');
+    const sc = document.getElementById('sidebar-scrim');
+    const tb = document.getElementById('menu-toggle');
+    if (!sb) return;
+    sb.classList.remove('open');
+    sb.removeAttribute('aria-modal');
+    if (Drawer.isMobile()) sb.setAttribute('aria-hidden', 'true');
+    sc?.classList.remove('visible');
+    tb?.setAttribute('aria-expanded', 'false');
+    tb?.setAttribute('aria-label', 'Open menu');
+    document.body.classList.remove('drawer-open');
+    if (Drawer._lastTrigger && document.contains(Drawer._lastTrigger)) {
+      Drawer._lastTrigger.focus();
+    }
+    Drawer._lastTrigger = null;
+  },
+
+  toggle() { Drawer.isOpen() ? Drawer.close() : Drawer.open(); },
+
+  init() {
+    const sb = document.getElementById('sidebar');
+    const sc = document.getElementById('sidebar-scrim');
+    const tb = document.getElementById('menu-toggle');
+    const xb = document.getElementById('sidebar-close');
+    if (!sb || !tb) return;
+
+    if (Drawer.isMobile()) sb.setAttribute('aria-hidden', 'true');
+    tb.setAttribute('aria-expanded', 'false');
+
+    tb.addEventListener('click', (e) => { e.stopPropagation(); Drawer.toggle(); });
+    xb?.addEventListener('click', Drawer.close);
+    sc?.addEventListener('click', Drawer.close);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && Drawer.isOpen()) Drawer.close();
+    });
+
+    // Auto-close on any route navigation — nav-items are real anchors so hash
+    // changes fire here, and so does navigate() elsewhere in the app.
+    window.addEventListener('hashchange', () => { if (Drawer.isOpen()) Drawer.close(); });
+
+    // Reset every state when crossing the drawer breakpoint in either direction.
+    const mql = window.matchMedia('(max-width: 767px)');
+    const onBreakpointChange = (e) => {
+      sb.classList.remove('open');
+      sc?.classList.remove('visible');
+      tb.setAttribute('aria-expanded', 'false');
+      tb.setAttribute('aria-label', 'Open menu');
+      document.body.classList.remove('drawer-open');
+      if (e.matches) sb.setAttribute('aria-hidden', 'true');
+      else { sb.removeAttribute('aria-hidden'); sb.removeAttribute('aria-modal'); }
+    };
+    mql.addEventListener('change', onBreakpointChange);
+
+    // Swipe-left to close. Only tracks touches that begin inside the sidebar so
+    // we never hijack page scrolling. dx must dominate dy to avoid stealing a
+    // vertical scroll near the edge.
+    let tx = 0, ty = 0, tracking = false;
+    sb.addEventListener('touchstart', (e) => {
+      if (!Drawer.isOpen()) return;
+      tx = e.touches[0].clientX; ty = e.touches[0].clientY; tracking = true;
+    }, { passive: true });
+    sb.addEventListener('touchmove', (e) => {
+      if (!tracking) return;
+      const dx = e.touches[0].clientX - tx;
+      const dy = e.touches[0].clientY - ty;
+      if (dx < -60 && Math.abs(dx) > Math.abs(dy) * 1.5) { tracking = false; Drawer.close(); }
+    }, { passive: true });
+    sb.addEventListener('touchend',    () => { tracking = false; });
+    sb.addEventListener('touchcancel', () => { tracking = false; });
+  },
+};
+window.Drawer = Drawer;
+
 // ─── App — router, state, utilities ───────────────────────────────────────────
 
 const App = {
@@ -405,4 +512,4 @@ const Pricing = {
 };
 window.Pricing = Pricing;
 
-document.addEventListener('DOMContentLoaded', () => App.init());
+document.addEventListener('DOMContentLoaded', () => { Drawer.init(); App.init(); });

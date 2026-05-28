@@ -2808,3 +2808,142 @@ tbody tr:hover td { background: var(--bg-hover); }
   .deal-detail-grid { grid-template-columns: 1fr; }
   .roi-headline-value { font-size: 38px; }
 }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   PHASE B — Mobile pass: navigation drawer + cross-cutting rules.
+
+   Standardized breakpoints used from here on:
+     • mobile   : 0-639px   (single column, drawer nav)
+     • lg-mobile: 640-767px (large phones / small tablets — still drawer)
+     • tablet+  : 768px+    (sidebar permanent, current desktop behavior)
+
+   The legacy ad-hoc breakpoints above (480 / 720 / 900 / 1100) remain in place
+   because removing them risks regressing intermediate widths. Phase J will
+   consolidate after end-to-end cross-breakpoint verification.
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+/* Containment — keep decorative orbs and any escaping element from inflating
+   the layout viewport on mobile emulation. body already has overflow-x:hidden;
+   adding it to html closes a gap where documentElement.scrollWidth could still
+   grow on certain mobile-emulation profiles. `overflow-x: clip` on the shell
+   is a stricter variant than `hidden` that does NOT create a scroll container,
+   so it preserves `position: sticky` inside (the topbar relies on this). */
+html       { overflow-x: hidden; }
+.app-shell { overflow-x: clip; }
+
+/* ── Sidebar close (X) — drawer mode only ─────────────────────────────────── */
+.sidebar-close {
+  display: none; /* hidden on desktop where the sidebar is permanent */
+  margin-left: auto;
+  width: 40px; height: 40px;
+  align-items: center; justify-content: center;
+  background: transparent; border: none;
+  color: var(--txt-3);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+.sidebar-close:hover  { background: var(--bg-hover); color: var(--txt); }
+.sidebar-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── Sidebar scrim — drawer mode only ─────────────────────────────────────── */
+.sidebar-scrim {
+  display: none; /* desktop: never in flow */
+  position: fixed;
+  inset: 0;
+  z-index: 95; /* under sidebar (100), over content + sticky topbar (50) */
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;          /* don't swallow taps when invisible */
+  transition: opacity 0.24s ease;
+}
+.sidebar-scrim.visible { opacity: 1; pointer-events: auto; }
+
+/* ── Universal touch-target floor at <768px ───────────────────────────────────
+   Apple HIG / WCAG 2.5.5 minimum is 44x44px. The desktop design uses smaller
+   buttons by intent (compact density); on touch we promote them to the floor.
+   Per-element overrides live with their components. */
+@media (max-width: 767px) {
+  .btn,
+  .btn-sm,
+  .btn-lg,
+  .nav-item,
+  .menu-toggle,
+  .sidebar-close,
+  .modal-close,
+  .filter-btn,
+  .deals-tab,
+  .outcome-btn,
+  .theme-btn,
+  .back-btn,
+  .link-btn,
+  .eye-toggle,
+  .set-linkbtn { min-height: 44px; }
+
+  /* Icon-only buttons also need a min-width so the hit area is square. */
+  .menu-toggle,
+  .sidebar-close,
+  .modal-close,
+  .eye-toggle { min-width: 44px; }
+
+  /* Buttons that sit in tight row layouts need their visual paddings re-fit so
+     they don't look like they ate the row. The .btn-sm pattern keeps its
+     visual size from in-row context but the hit area is the parent button. */
+  .btn-sm { padding-block: 10px; }
+}
+
+/* ── Mobile drawer (replaces the 720px block above for the sidebar) ─────────
+   The legacy block at line 1260 keeps shrinking --sidebar-w to 0 at <=720px;
+   we extend that behavior up to 767px and layer the drawer interaction on top. */
+@media (max-width: 767px) {
+  :root { --sidebar-w: 0px; }
+
+  .sidebar {
+    transform: translateX(-100%); /* fully off-canvas, regardless of width */
+    width: min(86vw, 320px);      /* slightly wider than the legacy 260 for breathing room */
+    z-index: 100;
+    box-shadow: 8px 0 32px rgba(0,0,0,0.4);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 12px 0 48px rgba(0,0,0,0.65);
+  }
+
+  .main-wrapper  { margin-left: 0; }
+  .menu-toggle   { display: flex; }
+  .sidebar-close { display: flex; }
+  .sidebar-scrim { display: block; }
+
+  /* Nav items already h:40-41; promoted to 44 by the touch-target rule above.
+     Add a touch of vertical padding so the icon + label don't crowd the edges. */
+  .nav-item { padding-block: 12px; }
+
+  /* Drawer-open prevents body scroll so the scrim feels modal. */
+  body.drawer-open { overflow: hidden; }
+}
+
+/* ── Topbar compaction on mobile ──────────────────────────────────────────── */
+@media (max-width: 639px) {
+  .topbar         { padding: 0 14px; gap: 8px; }
+  .topbar-right   { gap: 6px; }
+  .live-clock-wrap { display: none; } /* decorative — system clock is right there */
+  .theme-toggle    { display: none; } /* system preference already drives theme */
+  .status-indicator { display: none; } /* purely decorative on this surface */
+  .page-title     { font-size: 16px; }
+  .page-sub       { font-size: 11.5px; }
+  .page-content   { padding: 16px 14px 32px; }
+}
+
+/* ── Decorative orbs — quiet on mobile ────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* The orbs are sized in vmax (70vmax etc) which on a 375x812 viewport blooms
+     to ~568px wide. They are visually clipped by .bg-canvas overflow:hidden,
+     but they still chew animation budget on phones. Shrink + dim them. */
+  .bg-orb-1 { width: 50vmax; height: 50vmax; opacity: 0.55; }
+  .bg-orb-2 { width: 40vmax; height: 40vmax; opacity: 0.55; }
+  .bg-orb-3 { width: 32vmax; height: 32vmax; opacity: 0.45; }
+  /* The floating geo-shapes are also pure decoration — hide on small phones. */
+  .geo-shapes { display: none; }
+}
