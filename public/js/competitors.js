@@ -40,87 +40,98 @@ const Competitors = {
       `;
     }
 
+    // Render both layouts and let CSS switch at 768px:
+    //   .competitors-table-view → desktop (preserves the existing table exactly)
+    //   .competitors-card-view  → mobile <768px (designed card stack)
+    // Negligible DOM cost for typical 5-10 competitors; keeps a single render()
+    // source of truth and lets each layout be designed semantically.
     return `
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Competitor</th>
-              <th>URL</th>
-              <th>Status</th>
-              <th>Last Checked</th>
-              <th>Changes</th>
-              <th>Last Alert</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${competitors.map(c => `
+      <div class="competitors-table-view">
+        <div class="table-wrap">
+          <table>
+            <thead>
               <tr>
-                <td>
-                  <div class="comp-name-cell">
-                    ${avatarHtml(c.name, 32)}
-                    <div>
-                      <div class="td-primary">
-                        <a href="#/competitors/${c.id}" style="color:inherit;text-decoration:none">${esc(c.name)}</a>
-                        ${c.css_selector ? `<span class="scoped-badge" title="Monitoring scoped to: ${esc(c.css_selector)}">
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
-                          scoped
-                        </span>` : ''}
-                      </div>
-                      ${c.description ? `<div class="td-sub">${esc(c.description.substring(0, 55))}${c.description.length > 55 ? '…' : ''}</div>` : ''}
-                    </div>
-                  </div>
-                </td>
-                <td>
-                  <a href="${esc(c.url)}" target="_blank" class="comp-url-link" title="${esc(c.url)}">
-                    ${esc(c.url.replace(/^https?:\/\//, '').substring(0, 42))}${c.url.length > 48 ? '…' : ''}
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                  </a>
-                </td>
-                <td>${Competitors.statusPill(c)}</td>
-                <td class="text-muted text-sm">${c.last_checked ? timeAgo(c.last_checked) : '-'}</td>
-                <td>
-                  ${c.change_count > 0
-                    ? `<a href="#/history?competitor_id=${c.id}" class="change-count-link">${c.change_count}</a>`
-                    : `<span class="text-muted">0</span>`
-                  }
-                </td>
-                <td>
-                  ${c.last_threat ? `
-                    <div style="display:flex;flex-direction:column;gap:4px">
-                      ${threatBadge(c.last_threat)}
-                      <span class="text-sm" style="color:var(--txt-3)">${timeAgo(c.last_change_at)}</span>
-                    </div>
-                  ` : '<span class="text-muted">-</span>'}
-                </td>
-                <td>
-                  <div class="td-actions">
-                    <button class="btn btn-secondary btn-sm" onclick="Competitors.check(${c.id}, this)" title="Check now">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                      Check
-                    </button>
-                    <button class="btn btn-ghost btn-sm" onclick="Competitors.showEditModal(${c.id})" title="Edit">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    </button>
-                    <button class="btn btn-ghost btn-sm" onclick="Competitors.toggle(${c.id}, this)" title="${c.active ? 'Pause' : 'Resume'}">
-                      ${c.active
-                        ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`
-                        : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>`
-                      }
-                    </button>
-                    <button class="btn btn-danger btn-sm" onclick="Competitors.remove(${c.id}, '${esc(c.name)}')" title="Delete">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-                    </button>
-                  </div>
-                </td>
+                <th>Competitor</th>
+                <th>URL</th>
+                <th>Status</th>
+                <th>Last Checked</th>
+                <th>Changes</th>
+                <th>Last Alert</th>
+                <th>Actions</th>
               </tr>
-            `).join('')}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              ${competitors.map(c => `
+                <tr>
+                  <td>
+                    <div class="comp-name-cell">
+                      ${avatarHtml(c.name, 32)}
+                      <div>
+                        <div class="td-primary">
+                          <a href="#/competitors/${c.id}" style="color:inherit;text-decoration:none">${esc(c.name)}</a>
+                          ${c.css_selector ? `<span class="scoped-badge" title="Monitoring scoped to: ${esc(c.css_selector)}">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+                            scoped
+                          </span>` : ''}
+                        </div>
+                        ${c.description ? `<div class="td-sub">${esc(c.description.substring(0, 55))}${c.description.length > 55 ? '…' : ''}</div>` : ''}
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <a href="${esc(c.url)}" target="_blank" class="comp-url-link" title="${esc(c.url)}">
+                      ${esc(c.url.replace(/^https?:\/\//, '').substring(0, 42))}${c.url.length > 48 ? '…' : ''}
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </a>
+                  </td>
+                  <td>${Competitors.statusPill(c)}</td>
+                  <td class="text-muted text-sm">${c.last_checked ? timeAgo(c.last_checked) : '-'}</td>
+                  <td>
+                    ${c.change_count > 0
+                      ? `<a href="#/history?competitor_id=${c.id}" class="change-count-link">${c.change_count}</a>`
+                      : `<span class="text-muted">0</span>`
+                    }
+                  </td>
+                  <td>
+                    ${c.last_threat ? `
+                      <div style="display:flex;flex-direction:column;gap:4px">
+                        ${threatBadge(c.last_threat)}
+                        <span class="text-sm" style="color:var(--txt-3)">${timeAgo(c.last_change_at)}</span>
+                      </div>
+                    ` : '<span class="text-muted">-</span>'}
+                  </td>
+                  <td>
+                    <div class="td-actions">
+                      <button class="btn btn-secondary btn-sm" onclick="Competitors.check(${c.id}, this)" title="Check now">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                        Check
+                      </button>
+                      <button class="btn btn-ghost btn-sm" onclick="Competitors.showEditModal(${c.id})" title="Edit">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </button>
+                      <button class="btn btn-ghost btn-sm" onclick="Competitors.toggle(${c.id}, this)" title="${c.active ? 'Pause' : 'Resume'}">
+                        ${c.active
+                          ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`
+                          : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>`
+                        }
+                      </button>
+                      <button class="btn btn-danger btn-sm" onclick="Competitors.remove(${c.id}, '${esc(c.name)}')" title="Delete">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <p class="text-muted text-sm mt-16">
+      <div class="competitors-card-view">
+        ${competitors.map(c => Competitors.cardHtml(c)).join('')}
+      </div>
+
+      <p class="text-muted text-sm mt-16 comp-footnote">
         ${App.user?.tier === 'free'
           ? `Free plan: 1 competitor. <a href="#/pricing" style="color:var(--accent-2)">Upgrade to Pro for 10</a> or <a href="#/pricing" style="color:var(--accent-2)">Team for unlimited</a>.`
           : App.user?.tier === 'pro'
@@ -129,6 +140,122 @@ const Competitors = {
         }
       </p>
     `;
+  },
+
+  // Mobile card for a single competitor. Same data as the table row, designed
+  // for thumb-tap and at-a-glance scanning rather than column comparison.
+  //   • Name (large, links to detail) + URL (small, truncated, external link)
+  //   • Status pill on its own row
+  //   • Labeled metadata rows: Last checked, Changes, Last alert (if any)
+  //   • Primary "Check now" button (full-width, ≥44px)
+  //   • 3-dot menu for less-common actions (Edit / Pause-Resume / Delete) —
+  //     inline disclosure, no popover or modal so it sidesteps the Phase G
+  //     bottom-sheet refactor cleanly.
+  cardHtml(c) {
+    const urlNoProto = c.url.replace(/^https?:\/\//, '');
+    const urlShort   = urlNoProto.length > 38 ? urlNoProto.substring(0, 38) + '…' : urlNoProto;
+    const lastChecked = c.last_checked ? timeAgo(c.last_checked) : '—';
+    const lastChangeAt = c.last_change_at ? timeAgo(c.last_change_at) : '';
+    return `
+      <article class="comp-card" data-comp-id="${c.id}">
+        <div class="comp-card-head">
+          ${avatarHtml(c.name, 38)}
+          <div class="comp-card-title">
+            <a href="#/competitors/${c.id}" class="comp-card-name">
+              ${esc(c.name)}
+              ${c.css_selector ? `<span class="scoped-badge" title="Monitoring scoped to: ${esc(c.css_selector)}">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+                scoped
+              </span>` : ''}
+            </a>
+            <a href="${esc(c.url)}" target="_blank" rel="noopener" class="comp-card-url" title="${esc(c.url)}">
+              <span class="comp-card-url-text">${esc(urlShort)}</span>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+          </div>
+          <button class="comp-card-kebab" type="button"
+                  aria-label="More actions for ${esc(c.name)}"
+                  aria-expanded="false"
+                  onclick="Competitors.toggleCardMenu(${c.id}, this)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="comp-card-status-row">${Competitors.statusPill(c)}</div>
+
+        ${c.description ? `<p class="comp-card-desc">${esc(c.description)}</p>` : ''}
+
+        <dl class="comp-card-meta">
+          <div class="comp-meta-row">
+            <dt class="comp-meta-label">Last checked</dt>
+            <dd class="comp-meta-val">${lastChecked}</dd>
+          </div>
+          <div class="comp-meta-row">
+            <dt class="comp-meta-label">Changes</dt>
+            <dd class="comp-meta-val">
+              ${c.change_count > 0
+                ? `<a href="#/history?competitor_id=${c.id}" class="comp-meta-link">${c.change_count} detected</a>`
+                : `<span class="text-muted">0</span>`}
+            </dd>
+          </div>
+          ${c.last_threat ? `
+            <div class="comp-meta-row">
+              <dt class="comp-meta-label">Last alert</dt>
+              <dd class="comp-meta-val">${threatBadge(c.last_threat)}${lastChangeAt ? `<span class="text-muted" style="margin-left:8px;font-size:12px">${lastChangeAt}</span>` : ''}</dd>
+            </div>` : ''}
+        </dl>
+
+        <div class="comp-card-actions">
+          <button class="btn btn-primary comp-card-check" onclick="Competitors.check(${c.id}, this)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Check now
+          </button>
+        </div>
+
+        <div class="comp-card-menu" id="comp-card-menu-${c.id}" hidden>
+          <button class="comp-card-menu-item" onclick="Competitors.closeCardMenu(${c.id});Competitors.showEditModal(${c.id})">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Edit details
+          </button>
+          <button class="comp-card-menu-item" onclick="Competitors.closeCardMenu(${c.id});Competitors.toggle(${c.id}, this)">
+            ${c.active
+              ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause monitoring`
+              : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg> Resume monitoring`}
+          </button>
+          <button class="comp-card-menu-item comp-card-menu-item--danger" onclick="Competitors.closeCardMenu(${c.id});Competitors.remove(${c.id}, '${esc(c.name)}')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            Delete competitor
+          </button>
+        </div>
+      </article>
+    `;
+  },
+
+  // Inline 3-dot menu disclosure. No popover positioning, no scrim — the menu
+  // expands inside the card. Mutually exclusive: opening one closes any other
+  // open menu so the card stack stays scannable.
+  toggleCardMenu(id, btn) {
+    const menu = el(`comp-card-menu-${id}`);
+    if (!menu) return;
+    const willOpen = menu.hasAttribute('hidden');
+    document.querySelectorAll('.comp-card-menu').forEach(m => {
+      m.setAttribute('hidden', '');
+      const parent = m.closest('.comp-card');
+      parent?.querySelector('.comp-card-kebab')?.setAttribute('aria-expanded', 'false');
+    });
+    if (willOpen) {
+      menu.removeAttribute('hidden');
+      btn.setAttribute('aria-expanded', 'true');
+    }
+  },
+
+  closeCardMenu(id) {
+    const menu = el(`comp-card-menu-${id}`);
+    if (!menu) return;
+    menu.setAttribute('hidden', '');
+    menu.closest('.comp-card')?.querySelector('.comp-card-kebab')?.setAttribute('aria-expanded', 'false');
   },
 
   statusPill(c) {

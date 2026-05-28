@@ -2947,3 +2947,190 @@ html       { overflow-x: hidden; }
   /* The floating geo-shapes are also pure decoration — hide on small phones. */
   .geo-shapes { display: none; }
 }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   PHASE D — Mobile Competitors: table → card stack at <768px.
+   Both layouts render in the DOM; this block flips which one is visible. The
+   desktop .table-wrap above 768px is untouched.
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.competitors-card-view { display: none; }
+
+@media (max-width: 767px) {
+  .competitors-table-view { display: none; }
+  .competitors-card-view  { display: flex; flex-direction: column; gap: 12px; }
+}
+
+.comp-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+}
+[data-theme="light"] .comp-card { background: #fff; }
+
+.comp-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.comp-card-title {
+  flex: 1;
+  min-width: 0; /* lets ellipsis work in the URL line */
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.comp-card-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--txt);
+  letter-spacing: -0.2px;
+  text-decoration: none;
+  line-height: 1.25;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.comp-card-name:hover { color: var(--accent-2); }
+
+.comp-card-url {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--accent-2);
+  text-decoration: none;
+  max-width: 100%;
+  min-height: 32px; /* breathing room for the tap without floor-promoting the link */
+}
+.comp-card-url:hover { color: var(--accent); text-decoration: underline; }
+.comp-card-url-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: calc(100% - 18px);
+}
+
+.comp-card-kebab {
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-xs);
+  color: var(--txt-3);
+  cursor: pointer;
+  margin-right: -8px;        /* visual alignment, tap area stays 44 */
+  margin-top: -6px;
+  flex-shrink: 0;
+  transition: background 0.14s, color 0.14s;
+}
+.comp-card-kebab:hover { background: var(--bg-hover); color: var(--txt); }
+.comp-card-kebab[aria-expanded="true"] { background: var(--bg-hover); color: var(--txt); }
+.comp-card-kebab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.comp-card-status-row { display: flex; }
+
+.comp-card-desc {
+  color: var(--txt-2);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.comp-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  margin: 0;
+}
+[data-theme="light"] .comp-card-meta { background: var(--bg-elevated); }
+
+.comp-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+}
+.comp-meta-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--txt-3);
+  font-weight: 600;
+  margin: 0;
+}
+.comp-meta-val {
+  font-size: 13px;
+  color: var(--txt);
+  font-weight: 500;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+}
+.comp-meta-link {
+  color: var(--accent-2);
+  text-decoration: none;
+  font-weight: 600;
+}
+.comp-meta-link:hover { text-decoration: underline; }
+
+.comp-card-actions { display: flex; }
+.comp-card-check {
+  width: 100%;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Inline kebab menu — disclosure inside the card, no popover/modal. */
+.comp-card-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-top: 4px;
+}
+[data-theme="light"] .comp-card-menu { background: var(--bg-elevated); }
+.comp-card-menu[hidden] { display: none; }
+
+.comp-card-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px;
+  min-height: 44px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-xs);
+  color: var(--txt-2);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+.comp-card-menu-item:hover { background: var(--bg-hover); color: var(--txt); }
+.comp-card-menu-item--danger { color: var(--red-2); }
+.comp-card-menu-item--danger:hover { background: var(--red-dim); color: var(--red-2); }
+.comp-card-menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.comp-card-menu-item svg { flex-shrink: 0; opacity: 0.75; }
+
+/* The plan footnote sits below both layouts; keep it the same on mobile. */
+@media (max-width: 767px) {
+  .comp-footnote { margin-top: 18px; padding: 0 2px; }
+}
+
