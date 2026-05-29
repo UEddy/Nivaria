@@ -416,6 +416,9 @@ function openModal(contentHtml, wide = false) {
   el('modal-content').innerHTML = contentHtml;
   const box = el('modal-box');
   box.style.maxWidth = wide ? '760px' : '540px';
+  // Clear any leftover swipe transform from the previous open.
+  box.style.transform = '';
+  box.style.transition = '';
   el('modal-overlay').classList.add('open');
 }
 
@@ -423,9 +426,98 @@ function closeModal(e) {
   if (!e || e.target === el('modal-overlay')) {
     el('modal-overlay').classList.remove('open');
     el('modal-content').innerHTML = '';
+    // Reset any in-flight swipe transform.
+    const box = el('modal-box');
+    if (box) { box.style.transform = ''; box.style.transition = ''; }
   }
 }
 window.closeModal = closeModal;
+
+// ── Phase G: modal dismiss wiring ──────────────────────────────────────────
+// Escape key closes the modal (any viewport). Swipe-down dismiss on the modal
+// box at <=639px: drag tracks finger, releases past 25% of sheet height (or a
+// fast-flick velocity) into close; otherwise springs back to origin.
+(function () {
+  const SHEET_BP = 639;
+  let dragStartY = 0, dragStartT = 0, dragDy = 0, dragging = false, dragBox = null;
+
+  // Escape key — works on any viewport, restores the X-button-only dismiss for
+  // physical-keyboard users on a mobile-sized window.
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const overlay = document.getElementById('modal-overlay');
+      if (overlay && overlay.classList.contains('open')) closeModal();
+    }
+  });
+
+  function inSheetMode() { return window.innerWidth <= SHEET_BP; }
+
+  function onTouchStart(e) {
+    if (!inSheetMode()) return;
+    const box = e.currentTarget;
+    // Don't intercept drags that originate inside scrolled content — let the
+    // user keep scrolling the body. Only the top of the sheet (header /
+    // top-of-scroll) triggers dismiss.
+    if (box.scrollTop > 1) return;
+    dragBox = box;
+    dragStartY = e.touches[0].clientY;
+    dragStartT = performance.now();
+    dragDy = 0;
+    dragging = true;
+    box.style.transition = 'none';
+  }
+
+  function onTouchMove(e) {
+    if (!dragging) return;
+    const dy = e.touches[0].clientY - dragStartY;
+    if (dy < 0) {
+      // Upward swipe — abandon and let the body scroll resume.
+      dragging = false;
+      if (dragBox) { dragBox.style.transition = ''; dragBox.style.transform = ''; }
+      return;
+    }
+    dragDy = dy;
+    dragBox.style.transform = `translateY(${dy}px)`;
+    // Soften the scrim as the sheet drops — visual cue that release dismisses.
+    const overlay = document.getElementById('modal-overlay');
+    if (overlay) {
+      const k = Math.max(0, 1 - dy / dragBox.offsetHeight);
+      overlay.style.background = `rgba(0,0,0,${0.65 * k})`;
+    }
+  }
+
+  function onTouchEnd() {
+    if (!dragging) return;
+    dragging = false;
+    const box = dragBox;
+    const overlay = document.getElementById('modal-overlay');
+    if (overlay) overlay.style.background = '';
+    if (!box) return;
+    const dt = performance.now() - dragStartT;
+    const velocity = dragDy / Math.max(dt, 1); // px per ms
+    const distanceThreshold = box.offsetHeight * 0.25;
+    const flick = velocity > 0.6 && dragDy > 40;
+    box.style.transition = 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)';
+    if (dragDy > distanceThreshold || flick) {
+      // Close: animate fully off-screen first so the dismissal feels physical,
+      // then call closeModal which resets state.
+      box.style.transform = `translateY(${box.offsetHeight}px)`;
+      setTimeout(() => closeModal(), 200);
+    } else {
+      box.style.transform = '';
+    }
+  }
+
+  // Wire once on DOM ready (modal-box is in the static shell).
+  document.addEventListener('DOMContentLoaded', () => {
+    const box = document.getElementById('modal-box');
+    if (!box) return;
+    box.addEventListener('touchstart', onTouchStart, { passive: true });
+    box.addEventListener('touchmove',  onTouchMove,  { passive: true });
+    box.addEventListener('touchend',   onTouchEnd);
+    box.addEventListener('touchcancel', onTouchEnd);
+  });
+})();
 
 function toast(msg, type = 'info') {
   const icons = { success: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`, error: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`, info: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>` };
@@ -433,7 +525,10 @@ function toast(msg, type = 'info') {
   t.className = `toast toast-${type}`;
   t.innerHTML = `<span class="toast-icon">${icons[type] || icons.info}</span><span>${esc(msg)}</span>`;
   el('toast-container').appendChild(t);
-  setTimeout(() => t.remove(), 4100);
+  // Errors stay longer than info / success because they often contain
+  // text the user actually needs to read before dismissing the toast.
+  const duration = type === 'error' ? 8000 : type === 'info' ? 5000 : 4100;
+  setTimeout(() => t.remove(), duration);
 }
 
 function navigate(path) {

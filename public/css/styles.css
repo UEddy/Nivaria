@@ -3514,3 +3514,110 @@ html       { overflow-x: hidden; }
   .deal-row-value { font-size: 14px; }
 }
 
+/* ═════════════════════════════════════════════════════════════════════════════
+   PHASE G — Mobile modals as bottom sheets + top-anchored toasts.
+
+   Breakpoint choice: bottom-sheet activates at <=639px. Tablet (640+) keeps
+   the centered modal — small tablets have enough screen real estate for a
+   floating dialog to feel right, and a 90vh bottom sheet on a 768x1024 tablet
+   would feel cramped on the sides while wasting the wide content area.
+
+   Modal markup is unchanged. The bottom-sheet behavior is purely CSS + a
+   small JS swipe-down + Escape handler added to app.js.
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 639px) {
+
+  /* Overlay anchors the sheet to the bottom edge. The previous align-items:
+     center put the modal mid-screen. Padding goes to zero so the sheet bleeds
+     edge-to-edge horizontally. */
+  .modal-overlay {
+    align-items: flex-end;
+    justify-content: stretch;
+    padding: 0;
+  }
+
+  /* The sheet itself. Full width, capped at 90vh so a hint of the page behind
+     stays visible at the top (orienting the user that this is a modal layer,
+     not a page navigation). Slide-up animation replaces the scale-in. */
+  .modal {
+    width: 100%;
+    max-width: none;
+    max-height: 90vh;
+    margin: 0;
+    border-radius: 18px 18px 0 0;
+    /* Override Phase F's calc(100vw - 24px). */
+    animation: sheetUp 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+    /* Drag handle hint — used by the JS swipe-down handler. */
+    touch-action: pan-y;
+    will-change: transform;
+  }
+
+  @keyframes sheetUp {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+
+  /* Modal header sticks to the top of the scroll area so the drag handle is
+     always reachable, even after the user scrolls the body. The pseudo-element
+     paints the rounded grab bar (36×4) centered above the title. */
+  .modal-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--bg-card);
+    padding: 28px 18px 12px;
+    border-top-left-radius: 18px;
+    border-top-right-radius: 18px;
+  }
+  .modal-header::before {
+    content: '';
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border-2, var(--border));
+    opacity: 0.7;
+  }
+  .modal-title { font-size: 17px; }
+
+  /* The close (×) button is still useful as a non-gesture dismiss for users
+     who don't think to swipe — keep it visible, expand its target. */
+  .modal-close { width: 44px; height: 44px; }
+
+  /* Body and footer use Phase F's mobile padding already. Make sure the
+     scroll container is the modal itself, not the body. */
+  .modal-body { padding: 4px 18px 18px; }
+
+  /* Footer pins to the bottom of the sheet's scroll area. Phase F already set
+     position: sticky + safe-area inset — preserve that here. */
+}
+
+/* ── Top-anchored toasts on mobile ────────────────────────────────────────
+   The current desktop toast lives bottom-right. On phones the soft keyboard
+   covers anything anchored to the bottom — flip to the top instead. Stack
+   downward as new toasts arrive. */
+@media (max-width: 639px) {
+  .toast-container {
+    bottom: auto;
+    top: calc(8px + env(safe-area-inset-top, 0px));
+    left: 14px;
+    right: 14px;
+    align-items: stretch;
+  }
+  .toast {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+    /* Override Phase E's toastIn (slides up from bottom) with a top-down
+       slide so the animation matches the anchor. */
+    animation: toastInTop 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes toastInTop {
+    from { opacity: 0; transform: translateY(-10px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0)     scale(1); }
+  }
+}
