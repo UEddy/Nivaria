@@ -51,6 +51,17 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
+# Phase/audit report artifacts (regenerable, not deliverables)
+*-report.json
+*-findings.json
+change*-before.json
+change*-after.json
+# Keep this one — it's an intentional one-off migration record
+!migration-report-dash-strip.json
+
+# Large baseline audit screenshot set (regenerable from take-mobile-audit.js)
+screenshots/mobile-audit/
+
 # Certificates / keys
 *.pem
 *.key
