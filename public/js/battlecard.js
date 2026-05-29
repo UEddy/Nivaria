@@ -276,8 +276,10 @@ const BattleCard = {
         `Source: Foresight | ${c.competitor_url}`,
       ].join('\n');
 
-      await navigator.clipboard.writeText(text);
-      toast('Brief copied to clipboard', 'success');
+      const result = await shareOrCopy({ title: `Brief: ${c.competitor_name}`, text });
+      if (result === 'share')     toast('Brief shared', 'success');
+      else if (result === 'clipboard') toast('Brief copied to clipboard', 'success');
+      // 'cancelled' — user dismissed the share sheet; no toast needed.
     } catch (e) {
       toast('Could not copy: ' + e.message, 'error');
     }
@@ -452,11 +454,15 @@ const BattleCard = {
       text = body?.dataset.original || body?.textContent || '';
     }
     try {
-      await navigator.clipboard.writeText(text);
+      const result = await shareOrCopy({ text });
       const original = btn.innerHTML;
-      btn.innerHTML = '<span style="color:var(--green)">✓ Copied</span>';
+      // Inline button feedback runs regardless of method — confirms the action
+      // even when no toast appears (e.g. share-sheet was active).
+      btn.innerHTML = result === 'share' ? '<span style="color:var(--green)">✓ Shared</span>'
+                                         : '<span style="color:var(--green)">✓ Copied</span>';
       setTimeout(() => { btn.innerHTML = original; }, 1600);
-      toast('Message copied to clipboard', 'success');
+      if (result === 'share')     toast('Message shared', 'success');
+      else if (result === 'clipboard') toast('Message copied to clipboard', 'success');
     } catch (e) {
       toast('Could not copy: ' + e.message, 'error');
     }
@@ -528,9 +534,10 @@ const BattleCard = {
     const pts = Array.from(document.querySelectorAll('.talking-point')).map(li => li.textContent.trim());
     if (pts.length === 0) return toast('No talking points to copy', 'error');
     try {
-      await navigator.clipboard.writeText(pts.join('\n'));
-      btn.textContent = '✓ Copied!';
-      toast('Talking points copied', 'success');
+      const result = await shareOrCopy({ title: 'Talking points', text: pts.join('\n') });
+      btn.textContent = result === 'share' ? '✓ Shared!' : '✓ Copied!';
+      if (result === 'share')     toast('Talking points shared', 'success');
+      else if (result === 'clipboard') toast('Talking points copied', 'success');
       setTimeout(() => { btn.textContent = 'Copy All'; }, 2000);
     } catch (e) {
       toast('Could not copy', 'error');

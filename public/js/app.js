@@ -519,6 +519,43 @@ window.closeModal = closeModal;
   });
 })();
 
+// ── Phase H: native share with clipboard fallback ─────────────────────────
+// Tries navigator.share first (iOS Safari, Chrome Android, modern Edge), which
+// surfaces the native OS share sheet — instantly available to email, Slack,
+// SMS, Notes, etc. Falls back to navigator.clipboard.writeText on platforms
+// without share support (most desktop browsers as of 2026) so the existing
+// flow keeps working everywhere.
+//
+// Returns: 'share' | 'clipboard' | 'cancelled' so callers can show appropriate
+// feedback ("shared" vs "copied to clipboard" vs no message).
+async function shareOrCopy({ title, text, url } = {}) {
+  const payload = url ? `${text || title || ''}\n\n${url}`.trim() : (text || title || '');
+
+  if (navigator.share) {
+    const args = {};
+    if (title) args.title = title;
+    if (text)  args.text  = text;
+    if (url)   args.url   = url;
+    // canShare exists on Chrome Android + iOS Safari 16+; on older Safari just
+    // try share() and catch.
+    const canShare = !navigator.canShare || navigator.canShare(args);
+    if (canShare) {
+      try {
+        await navigator.share(args);
+        return 'share';
+      } catch (e) {
+        if (e.name === 'AbortError') return 'cancelled';
+        // Fall through to clipboard on any other error (e.g. permission denied
+        // when called outside a user gesture, network share failed, etc.)
+      }
+    }
+  }
+
+  await navigator.clipboard.writeText(payload);
+  return 'clipboard';
+}
+window.shareOrCopy = shareOrCopy;
+
 function toast(msg, type = 'info') {
   const icons = { success: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`, error: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`, info: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>` };
   const t = document.createElement('div');
