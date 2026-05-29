@@ -123,7 +123,7 @@ const Deals = {
 
             <div class="log-field log-field--value">
               <label class="form-label" for="deal-value">Value <span class="opt">(optional)</span></label>
-              <input class="form-input" id="deal-value" type="number" min="0" step="1000" placeholder="40000" tabindex="3" />
+              <input class="form-input" id="deal-value" type="number" inputmode="numeric" min="0" step="1000" placeholder="40000" tabindex="3" />
             </div>
 
             <div class="log-field log-field--date">
@@ -322,7 +322,7 @@ const Deals = {
         <div class="set-row-2">
           <div class="form-group">
             <label class="form-label">Value (optional)</label>
-            <input class="form-input" id="edit-value" type="number" min="0" step="1000" value="${d.deal_value_usd ?? ''}" />
+            <input class="form-input" id="edit-value" type="number" inputmode="numeric" min="0" step="1000" value="${d.deal_value_usd ?? ''}" />
           </div>
           <div class="form-group">
             <label class="form-label">Close date</label>

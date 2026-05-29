@@ -2884,6 +2884,8 @@ html       { overflow-x: hidden; }
   .link-btn,
   .eye-toggle,
   .outreach-tab,
+  .form-input,
+  .form-select,
   .set-linkbtn { min-height: 44px; }
 
   /* Icon-only buttons also need a min-width so the hit area is square. */
@@ -3330,5 +3332,185 @@ html       { overflow-x: hidden; }
   .activity-item { padding: 14px; }
   .activity-headline { line-height: 1.4; }
   .activity-meta { row-gap: 6px; }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   PHASE F — Mobile forms.
+   Inputs, selects, textareas, and form rows across onboarding, settings,
+   add-competitor modal, and log-deal form. Inherits Phase B's 44px touch
+   floor; preserves the Settings redesign's visual hierarchy on desktop.
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+/* ── iOS auto-zoom prevention ──────────────────────────────────────────────
+   Mobile Safari zooms the viewport whenever an input/select/textarea with
+   font-size < 16px receives focus. The base size is 13.5px (compact desktop
+   density) — promote to 16px on phone widths. Desktop keeps 13.5–15px per the
+   Settings redesign. Also lift the input/select touch target to the Phase B
+   floor since the universal floor rule doesn't currently include form fields. */
+@media (max-width: 767px) {
+  .form-input,
+  .form-select,
+  .form-textarea {
+    font-size: 16px;
+    padding: 12px 14px;
+    min-height: 44px;
+  }
+  .form-textarea { min-height: 96px; padding: 14px; }
+
+  /* Slightly larger labels and hints — easier reading at arm's length. */
+  .form-label { font-size: 14px; }
+  .form-hint  { font-size: 12.5px; line-height: 1.45; }
+
+  /* Generic two-column grid stacks. The legacy .form-row { 1fr 1fr } sits at
+     line 841; this overrides for phone widths. */
+  .form-row { grid-template-columns: 1fr; gap: 14px; }
+
+  /* form-actions ends up right-aligned with two buttons inline by default —
+     stack full-width on phone so neither button is a thin tap target. */
+  .form-actions { flex-direction: column-reverse; align-items: stretch; gap: 10px; }
+  .form-actions .btn { width: 100%; justify-content: center; }
+}
+
+/* ── Onboarding (phone) ────────────────────────────────────────────────────
+   The legacy <=640px rule stacks form-row.two-col and tightens card padding.
+   Extend through 767 and add sticky actions, looser field rhythm. */
+@media (max-width: 767px) {
+  .onboarding-wrap { padding: 4px 0 24px; }
+  .onboarding-card { padding: 20px 16px; border-radius: var(--radius); }
+
+  .onboarding-header { gap: 14px; padding-bottom: 18px; margin-bottom: 18px; }
+  .onboarding-icon { width: 40px; height: 40px; border-radius: 10px; }
+  .onboarding-title { font-size: 20px; letter-spacing: -0.3px; }
+  .onboarding-sub   { font-size: 13.5px; line-height: 1.55; }
+
+  .onboarding-form { gap: 22px; }
+  .form-row.two-col { grid-template-columns: 1fr; gap: 14px; }
+
+  /* Step indicator: wrap the label to its own line if the step bar pushes it
+     past the edge, so it stays readable. */
+  .onboarding-step-indicator { flex-wrap: wrap; row-gap: 6px; margin-bottom: 16px; }
+  .onboarding-step-label { width: 100%; margin-left: 0; }
+
+  /* Voice radios stack one-per-row on phone — three side-by-side at 375 squeezes
+     each into ~95px which truncates the helper text. */
+  .voice-radio-group:not(.voice-radio-group--stack) { flex-direction: column; }
+  .voice-radio { min-width: 0; min-height: 44px; padding: 14px 14px; }
+
+  /* Sticky save row: keep "Save and continue" reachable while filling a long
+     form (especially step 2 with 7 fields). Pull out to card edge with negative
+     margin so the gradient backdrop spans the card width, then sit flush at the
+     viewport bottom. Safe-area inset honors the iOS home indicator. */
+  .onboarding-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 10px;
+    margin: 16px -16px 0;
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border);
+    position: sticky;
+    bottom: 0;
+    background: linear-gradient(to top, var(--bg-card) 70%, color-mix(in srgb, var(--bg-card) 80%, transparent));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    z-index: 2;
+  }
+  .onboarding-actions .btn { width: 100%; justify-content: center; }
+}
+
+/* ── Settings (phone) ──────────────────────────────────────────────────────
+   Preserve the redesign: 16px card titles, 13px descriptions, accent focus
+   states. Adjust spacing, stack the page header, full-width save buttons. */
+@media (max-width: 767px) {
+  .settings-page { max-width: none; padding: 0; }
+  .settings-page-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .settings-page-title    { font-size: 22px; }
+  .settings-page-subtitle { font-size: 13.5px; }
+  .settings-identity { font-size: 12px; flex-wrap: wrap; row-gap: 4px; }
+  .settings-page-divider { margin-bottom: 24px; }
+
+  .settings-stack { gap: 24px; }
+
+  .set-card { padding: 18px 16px; border-radius: 14px; }
+  .set-card__head { margin-bottom: 16px; }
+  .set-card__title { font-size: 15.5px; }
+  .set-card__desc  { font-size: 13px; max-width: none; }
+  .set-card__body  { gap: 14px; }
+
+  /* Two-up settings rows stack. */
+  .set-row-2 { grid-template-columns: 1fr; gap: 14px; }
+
+  /* Card footer: stack the save button + any feedback message, both full
+     width. The set-feedback ("Saved", "Connecting…") was using margin-right:
+     auto on desktop to anchor it left — neutralize on phone. */
+  .set-card__footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .set-card__footer .btn { width: 100%; justify-content: center; }
+  .set-card__footer .set-feedback { margin-right: 0; text-align: center; }
+}
+
+/* ── Modal (phone) ─────────────────────────────────────────────────────────
+   Phase G will convert the modal shell to a bottom-sheet. For now: tighten
+   padding so the form fields breathe, stack the footer buttons, make the
+   primary action full-width. The modal already maxes at 94vw, which sets the
+   form column at 352px on a 375 viewport — adequate. */
+@media (max-width: 767px) {
+  .modal { width: calc(100vw - 24px); max-width: none; max-height: calc(100vh - 64px); border-radius: 16px; }
+  .modal-header { padding: 18px 18px 0; }
+  .modal-title  { font-size: 17px; }
+  .modal-body   { padding: 18px 18px; gap: 16px; }
+
+  .modal-footer {
+    padding: 14px 18px calc(14px + env(safe-area-inset-bottom, 0px));
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 10px;
+    border-top: 1px solid var(--border);
+    background: linear-gradient(to top, var(--bg-card) 70%, color-mix(in srgb, var(--bg-card) 80%, transparent));
+    position: sticky;
+    bottom: 0;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .modal-footer .btn { width: 100%; justify-content: center; }
+}
+
+/* ── Log-deal form (phone) ────────────────────────────────────────────────
+   The desktop log-row is a flex row with per-field widths (Deal name grows,
+   Competitor grows, Value 120, Date 160, Save margin-left:auto). At <=767px
+   stack everything full-width so each field has the full content column.
+   The existing <=720px rule already normalizes the Save field — extend to
+   full mobile scope and stack the rest. */
+@media (max-width: 767px) {
+  .log-card { padding: 18px 16px; }
+  .log-card-head { flex-direction: column; align-items: stretch; gap: 12px; }
+  .log-card-head .btn { width: 100%; justify-content: center; }
+
+  .log-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+  .log-field { width: auto; min-width: 0; }
+  .log-field--grow,
+  .log-field--competitor,
+  .log-field--value,
+  .log-field--date,
+  .log-field--save { flex: 1 1 auto; width: auto; min-width: 0; margin-left: 0; }
+  .log-field--save .btn { width: 100%; justify-content: center; }
+
+  /* Outcome segmented buttons: keep the three-up row, but let them grow to
+     fill the row width so each is a thumb-sized target. */
+  .outcome-toggle { width: 100%; }
+  .outcome-toggle .outcome-btn { flex: 1 1 0; min-width: 0; }
+
+  /* Deal list rows: the desktop layout (outcome pill | main | value | actions)
+     uses absolute widths that get awkward at 375 — let the value drop below
+     the main column and tag the actions to the same row as the outcome pill. */
+  .deal-row { flex-wrap: wrap; row-gap: 6px; padding: 14px 12px; }
+  .deal-row-main { flex-basis: 0; min-width: 60%; }
+  .deal-row-value { font-size: 14px; }
 }
 

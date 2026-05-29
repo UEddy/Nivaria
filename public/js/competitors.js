@@ -306,7 +306,7 @@ const Competitors = {
         </div>
         <div class="form-group">
           <label class="form-label">Page URL to Monitor <span style="color:var(--red)">*</span></label>
-          <input class="form-input" id="comp-url" placeholder="https://acmecorp.com/pricing" type="url" />
+          <input class="form-input" id="comp-url" placeholder="https://acmecorp.com/pricing" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" />
           <span class="form-hint">Monitor a specific page. Pricing, features, or homepage works best.</span>
         </div>
         <div class="form-group">
@@ -440,7 +440,7 @@ const Competitors = {
         </div>
         <div class="form-group">
           <label class="form-label">Page URL to Monitor <span style="color:var(--red)">*</span></label>
-          <input class="form-input" id="edit-comp-url" value="${esc(c.url)}" type="url" />
+          <input class="form-input" id="edit-comp-url" value="${esc(c.url)}" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" />
           <span class="form-hint">Changing the URL will reset the baseline so the next check captures the new page.</span>
         </div>
         <div class="form-group">

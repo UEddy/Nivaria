@@ -557,7 +557,7 @@ const Settings = {
               <div class="set-integration__action">${statusPill(!!slackUrl)}</div>
             </div>
             <div class="webhook-row">
-              <input class="form-input" id="slack-url" type="url" placeholder="https://hooks.slack.com/services/…"
+              <input class="form-input" id="slack-url" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://hooks.slack.com/services/…"
                 value="${esc(slackUrl)}" ${disabledAttr} />
               <button class="btn btn-secondary btn-sm" onclick="Settings.testWebhook('slack')" ${disabledAttr}>Test</button>
             </div>
@@ -575,7 +575,7 @@ const Settings = {
               <div class="set-integration__action">${statusPill(!!discordUrl)}</div>
             </div>
             <div class="webhook-row">
-              <input class="form-input" id="discord-url" type="url" placeholder="https://discord.com/api/webhooks/…"
+              <input class="form-input" id="discord-url" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://discord.com/api/webhooks/…"
                 value="${esc(discordUrl)}" ${disabledAttr} />
               <button class="btn btn-secondary btn-sm" onclick="Settings.testWebhook('discord')" ${disabledAttr}>Test</button>
             </div>
