@@ -53,9 +53,10 @@ Desktop.ini
 
 # Phase/audit report artifacts (regenerable, not deliverables)
 *-report.json
+*-report-*.json
 *-findings.json
-change*-before.json
-change*-after.json
+*-before.json
+*-after.json
 # Keep this one — it's an intentional one-off migration record
 !migration-report-dash-strip.json
 

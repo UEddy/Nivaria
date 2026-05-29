@@ -2883,6 +2883,7 @@ html       { overflow-x: hidden; }
   .back-btn,
   .link-btn,
   .eye-toggle,
+  .outreach-tab,
   .set-linkbtn { min-height: 44px; }
 
   /* Icon-only buttons also need a min-width so the hit area is square. */
@@ -3138,5 +3139,196 @@ html       { overflow-x: hidden; }
 /* The plan footnote sits below both layouts; keep it the same on mobile. */
 @media (max-width: 767px) {
   .comp-footnote { margin-top: 18px; padding: 0 2px; }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   PHASE E — Mobile detail / reading pages.
+   Brief detail is the page users land on from a Slack pre-meeting briefing on
+   their phone — the most reading-time-heavy surface. Inherits Phase B's
+   cross-cutting rules (44px touch floor, drawer nav, off-black bg). Pure CSS.
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Toast: bottom-centered + full-bleed on phones ────────────────────────────
+   The desktop toast lives in the bottom-right corner with min-width 260px. On a
+   375px phone that crashes into content and feels like a stray tooltip. Move it
+   to a bottom-anchored full-width band so the copy confirmation reads
+   immediately, and respect the iOS home-indicator safe area. */
+@media (max-width: 639px) {
+  .toast-container {
+    left: 14px; right: 14px; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    align-items: stretch;
+  }
+  .toast {
+    min-width: 0; max-width: none; width: 100%;
+    padding: 14px 16px; font-size: 14px;
+    justify-content: flex-start;
+  }
+}
+
+/* ── Brief detail — phone (<=767px) ───────────────────────────────────────── */
+@media (max-width: 767px) {
+
+  /* Header card: tighten the chrome to give content more room and let the
+     threat block fall to its own row so the name doesn't get squeezed. */
+  .bc-header {
+    padding: 18px 16px;
+    flex-wrap: wrap;
+    gap: 14px;
+    border-radius: var(--radius);
+  }
+  .bc-left { gap: 12px; }
+  .bc-comp-name { font-size: 19px; letter-spacing: -0.4px; line-height: 1.2; margin-bottom: 4px; }
+  .bc-comp-url  { font-size: 12.5px; word-break: break-all; }
+
+  /* Threat block as a horizontal pill spanning full width — label + date side
+     by side, not a tall stacked card. */
+  .bc-threat {
+    width: 100%;
+    min-width: 0;
+    padding: 12px 14px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    text-align: left;
+  }
+  .bc-threat-label { margin-bottom: 0; }
+
+  /* Headline + action row */
+  .bc-headline { font-size: 17px; line-height: 1.4; letter-spacing: -0.2px; }
+  .bc-headline-actions { flex-wrap: wrap; gap: 8px; }
+
+  /* Section cards: tighten padding so prose has more measure. The body bumps
+     to 14.5px / 1.65 for comfortable reading line-length (~60-65 chars at
+     375px page width). */
+  .bc-section { padding: 16px 16px; border-radius: var(--radius); }
+  .bc-section-label { font-size: 11.5px; }
+  .bc-section-body { font-size: 14.5px; line-height: 1.65; }
+
+  /* The 2-col grid stacks. (Desktop is 1fr 1fr at all widths today; mobile
+     stacking is the only sensible choice on a phone.) */
+  .bc-grid { grid-template-columns: 1fr; gap: 12px; }
+
+  /* "Analyzed for:" badge wraps gracefully if the company name is long. */
+  .bc-analyzed-for { flex-wrap: wrap; }
+
+  /* Outreach section label: the "AI-drafted messages..." sub gets pushed by
+     margin-left:auto on desktop. On mobile it slams into the label — drop it
+     to its own line. */
+  .bc-outreach .bc-section-label { flex-wrap: wrap; row-gap: 4px; }
+  .bc-outreach .bc-section-sub { margin-left: 0; flex-basis: 100%; }
+
+  /* Recent-changes-list row: date + threat badge + headline + tags. Let the
+     headline take a full line below the meta so it reads naturally. */
+  .recent-change-item { flex-wrap: wrap; gap: 8px; padding: 12px; }
+  .recent-change-headline { flex-basis: 100%; order: 3; line-height: 1.4; }
+  .recent-change-tags { flex-basis: 100%; order: 4; }
+
+  /* Footer: 2-3 buttons that need real thumb targets. Stack and full-width
+     them so each is unambiguous. The desktop margin-left:auto on the last
+     button is removed because the stack reads top-to-bottom. */
+  .bc-footer { flex-direction: column; align-items: stretch; gap: 8px; padding-top: 8px; }
+  .bc-footer > * { margin-left: 0 !important; width: 100%; }
+  .bc-footer .btn { width: 100%; justify-content: center; }
+
+  /* ── Outreach playbook tabs ───────────────────────────────────────────────
+     Three fixed-width tabs (148/173/160 px) total ~481px and forced the third
+     tab off-canvas at 375. Switch to horizontal scroll with snap, hide the
+     scrollbar (the active-tab underline + partially-visible next tab already
+     signal "more"), and extend to the section's padding edges so leading and
+     trailing tabs sit flush. */
+  .outreach-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    margin-inline: -16px;        /* extends to the bc-section edge */
+    padding-inline: 16px;
+    scroll-snap-type: x mandatory;
+    scroll-padding-left: 16px;
+  }
+  .outreach-tabs::-webkit-scrollbar { display: none; }
+  .outreach-tab {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+    padding: 10px 16px;          /* the 44px floor handles min-height */
+  }
+
+  /* Subject row: stack label above box so neither gets squeezed. */
+  .outreach-subject-row { flex-direction: column; align-items: stretch; gap: 6px; }
+  .outreach-subject-box { padding: 10px 12px; }
+  .outreach-subject-value { white-space: normal; word-break: break-word; overflow: visible; text-overflow: clip; }
+
+  /* Body + edit textarea. 16px font-size on the textarea prevents iOS Safari
+     from zooming the viewport when the keyboard appears (zoom triggers below
+     16px). Give the textarea a comfortable min height for thumb editing. */
+  .outreach-body { padding: 14px; font-size: 14.5px; line-height: 1.65; }
+  .outreach-edit-area { min-height: 220px; font-size: 16px; padding: 14px; }
+
+  /* Actions row: keep buttons inline (already btn-sm at 44px floor), drop the
+     "Regenerated 1×" meta to its own line so it doesn't get pushed off-screen
+     by margin-left:auto. */
+  .outreach-actions { gap: 8px 6px; }
+  .outreach-meta { margin-left: 0; flex-basis: 100%; }
+}
+
+/* Tablet (768-1023px): sidebar is permanent so bc-section keeps its desktop
+   padding (18px 20px), but the outreach playbook row (~481px wide) still
+   exceeds the brief content column. Inherit the same horizontal-scroll
+   behavior as phone, with margins matching the desktop section padding. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .outreach-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    margin-inline: -20px;
+    padding-inline: 20px;
+    scroll-snap-type: x mandatory;
+    scroll-padding-left: 20px;
+  }
+  .outreach-tabs::-webkit-scrollbar { display: none; }
+  .outreach-tab { scroll-snap-align: start; flex-shrink: 0; }
+}
+
+/* ── Competitor detail — phone (<=767px) ──────────────────────────────────── */
+@media (max-width: 767px) {
+
+  /* Header: avatar + name + url + optional description. Let the text block
+     fall to a new row if the avatar+name is tight. */
+  .cd-header { flex-wrap: wrap; gap: 12px; }
+  .cd-name { font-size: 19px; letter-spacing: -0.3px; }
+  .cd-url  { font-size: 12.5px; word-break: break-all; }
+  .cd-desc { font-size: 13px; line-height: 1.55; }
+
+  /* Pattern callouts: stack vertically. The horizontal layout (3 across)
+     stuffs them past the right edge on phones. */
+  .cd-callouts { flex-direction: column; gap: 8px; }
+  .cd-callout  { padding: 12px; }
+
+  /* Timeline title header line: the right-aligned count crashes into the
+     title on narrow widths. Allow wrap + push the count below if needed. */
+  .cd-timeline-title { flex-wrap: wrap; row-gap: 4px; }
+
+  /* Feed row: date + threat badge + headline. Make the headline a new line
+     under the meta so it stays readable. */
+  .cd-feed-row { flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+  .cd-feed-headline { flex-basis: 100%; order: 4; line-height: 1.4; }
+  .cd-feed-item { padding-block: 12px; }
+}
+
+/* ── Deal detail — phone (<=767px) ────────────────────────────────────────── */
+@media (max-width: 767px) {
+
+  /* Header: name + sub on top, Edit/Delete actions on their own row at full
+     width. Each action shares the row equally so both are clear thumb targets.
+     (The existing 720px rule already stacks .deal-detail-grid to 1fr.) */
+  .deal-detail-head { flex-direction: column; align-items: stretch; gap: 14px; }
+  .deal-detail-name { font-size: 19px; letter-spacing: -0.2px; }
+  .deal-detail-actions { width: 100%; gap: 10px; }
+  .deal-detail-actions .btn { flex: 1 1 0; justify-content: center; }
+
+  /* Activity timeline rows: looser padding + wrap on the meta line so 3+
+     pattern tags don't push the row sideways. */
+  .activity-item { padding: 14px; }
+  .activity-headline { line-height: 1.4; }
+  .activity-meta { row-gap: 6px; }
 }
 
