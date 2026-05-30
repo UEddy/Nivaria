@@ -18,7 +18,11 @@
 
   --txt:          #F1F5F9;
   --txt-2:        #94A3B8;
-  --txt-3:        #4B5563;
+  /* --txt-3 was #4B5563 (≈2.6:1 on the off-black surfaces — fails WCAG AA).
+     Lifted to #768494 (≈4.8:1 on #0A0A0A / 4.6:1 on the lightest elevated
+     surface) so muted helper text, captions, and uppercase labels clear the
+     4.5:1 body-text minimum while staying visibly secondary to --txt-2. */
+  --txt-3:        #768494;
   --txt-inv:      #0F172A;
 
   --accent:       #6366F1;
@@ -3620,4 +3624,97 @@ html       { overflow-x: hidden; }
     from { opacity: 0; transform: translateY(-10px) scale(0.97); }
     to   { opacity: 1; transform: translateY(0)     scale(1); }
   }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   PHASE I — Accessibility & touch verification.
+
+   A corrective pass over the work from phases A-H. Three things land here that
+   were not yet systematic:
+     1. Visible keyboard focus on every interactive element (not just :hover).
+     2. The residual touch-target floors the universal <1024px rule didn't cover
+        (theme switcher hit-area, the sidebar-footer controls inside the drawer).
+     3. 8px adjacency on the two horizontal action pairs still sitting at <8px.
+
+   Contrast is fixed at the token level (--txt-3, see :root). Focus-trap and
+   focus-restore for the drawer + modal live in app.js. ARIA roles/labels live
+   in the markup (index.html) and the modal/toast builders.
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Visible focus for keyboard users (all viewports) ─────────────────────────
+   Components with bespoke focus rings keep them (form fields via :focus box-
+   shadow; set-switch, set-linkbtn, sidebar-close, comp-card-kebab, comp-card-
+   menu-item via their own higher-specificity :focus-visible rules). This is the
+   safety net for everything that previously fell back to the inconsistent UA
+   default outline: buttons, links, tabs, segmented controls, the menu toggle,
+   the modal close, theme buttons. --accent (#6366F1) clears 3:1 against the
+   off-black surfaces, satisfying WCAG 2.4.11 non-text contrast for the ring. */
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+[role="switch"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Segmented controls clip their children (the group has overflow:hidden so the
+   shared dividers read as one control). An outward outline would be cropped —
+   inset it so the focused segment still shows a full ring. */
+.outcome-toggle .outcome-btn:focus-visible,
+.theme-toggle   .theme-btn:focus-visible {
+  outline-offset: -2px;
+}
+
+/* ── Residual touch-target floors ─────────────────────────────────────────────
+   The universal floor (<=1023px, earlier in this file) handles min-height on the
+   shared control classes. These are the elements it missed. */
+@media (max-width: 1023px) {
+  /* Theme switcher buttons are icon-only and stay visible on tablet (they're
+     only display:none at <=639px). The floor gave them min-height:44 — add the
+     matching min-width so the hit area is a full 44x44 square. */
+  .theme-btn { min-width: 44px; }
+}
+
+@media (max-width: 1023px) {
+  /* The sidebar footer is a thumb target on every touch width: the off-canvas
+     drawer on phones (<=767px) and the permanent-but-touch sidebar on tablet
+     (768-1023px). The sign-out button was a 30px icon target and "Manage
+     account" an ~11px text link — both below the floor. Promote them through
+     the touch range; desktop (>=1024px) keeps its compact footer (mouse, not
+     thumb). min-width/min-height win over the inline width/height via the box
+     model (used size = max(min, declared)), so no !important is needed. */
+  .sidebar-signout     { min-width: 44px; min-height: 44px; }
+  .sidebar-manage-link { min-height: 44px; padding-block: 8px; }
+
+  /* Icon-only .btn-sm buttons (deal-row Edit / Delete) got the floor's
+     min-height:44 but were still 38px wide — square up the hit area. */
+  .deal-row-actions .btn { min-width: 44px; }
+
+  /* The change-feed chevron is the keyboard-accessible link to a brief (the row
+     onclick isn't reachable by keyboard). It was a 32x22 icon — give it a full
+     44px hit area. The icon stays 14px, centred; negative inline margin keeps
+     it from widening the row's right gutter. */
+  .feed-link {
+    min-width: 44px; min-height: 44px;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin: -11px -11px -11px 0;
+  }
+}
+
+/* ── 8px adjacency on horizontal action pairs ─────────────────────────────────
+   Segmented controls (.outcome-toggle, .theme-toggle) intentionally keep a 0px
+   shared-border gap — they read as one control and each segment is a full
+   ≥44px target, so there is no mis-tap ambiguity. Vertically-stacked full-width
+   rows (drawer nav items, the comp-card kebab menu) likewise stay contiguous:
+   each is a full-width ≥44px target with no competing adjacent target on the
+   horizontal axis. These two horizontal icon-button pairs are the cases where a
+   sub-8px gutter between two distinct targets created real mis-tap risk. */
+@media (max-width: 1023px) {
+  /* Deal-row Edit + Delete were 4px apart; both promote to 44px on touch. */
+  .deal-row-actions { gap: 8px; }
+}
+@media (max-width: 767px) {
+  /* Outreach Copy / Edit / Regenerate row used a 6px column gap. */
+  .outreach-actions { column-gap: 8px; }
 }

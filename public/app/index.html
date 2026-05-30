@@ -126,9 +126,10 @@
           <div class="user-meta">
             <div class="user-name" id="user-name">Demo User</div>
             <div class="user-email" id="user-email">demo@foresight.com</div>
-            <a href="#/settings" style="font-size:11px;color:var(--accent);text-decoration:none;opacity:0.85;margin-top:1px;display:inline-block;line-height:1.3" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.85'">Manage account</a>
+            <a href="#/settings" class="sidebar-manage-link" style="font-size:11px;color:var(--accent);text-decoration:none;opacity:0.85;margin-top:1px;display:inline-block;line-height:1.3" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.85'">Manage account</a>
           </div>
           <button
+            class="sidebar-signout"
             onclick="App.logout()"
             title="Sign out"
             style="margin-left:auto;flex-shrink:0;width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:var(--txt-3);transition:background 0.14s,color 0.14s;cursor:pointer;border:none;background:none"
@@ -169,7 +170,7 @@
 
           <!-- Theme toggle -->
           <div class="theme-toggle" id="theme-toggle" role="group" aria-label="Color theme">
-            <button class="theme-btn" data-val="light" title="Light mode">
+            <button class="theme-btn" data-val="light" title="Light mode" aria-label="Light mode" aria-pressed="false">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="5"/>
                 <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
@@ -178,12 +179,12 @@
                 <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
               </svg>
             </button>
-            <button class="theme-btn" data-val="system" title="System preference">
+            <button class="theme-btn" data-val="system" title="System preference" aria-label="System preference" aria-pressed="false">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
               </svg>
             </button>
-            <button class="theme-btn" data-val="dark" title="Dark mode">
+            <button class="theme-btn" data-val="dark" title="Dark mode" aria-label="Dark mode" aria-pressed="false">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
               </svg>
@@ -205,10 +206,10 @@
     </div>
   </div>
 
-  <div class="toast-container" id="toast-container"></div>
+  <div class="toast-container" id="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
 
   <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
-    <div class="modal" id="modal-box">
+    <div class="modal" id="modal-box" role="dialog" aria-modal="true">
       <div id="modal-content"></div>
     </div>
   </div>

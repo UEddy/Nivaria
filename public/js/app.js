@@ -54,7 +54,9 @@ const Theme = {
   wireBtns() {
     const saved = localStorage.getItem(Theme.key) || 'dark';
     document.querySelectorAll('.theme-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.val === saved);
+      const on = btn.dataset.val === saved;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
   },
 };
@@ -93,6 +95,39 @@ function animateCounter(element, target, duration = 900) {
     else element.textContent = isFloat ? target.toFixed(0) : target;
   }
   requestAnimationFrame(tick);
+}
+
+// ─── Focus management helpers (Phase I) ──────────────────────────────────────
+// Shared by the drawer and the modal. A "focus trap" keeps Tab / Shift+Tab
+// cycling inside an open overlay so keyboard and external-keyboard-on-tablet
+// users can't tab out to the page behind it. Callers restore focus to the
+// triggering element themselves on close.
+const FOCUSABLE_SEL =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
+  'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function focusableWithin(container) {
+  if (!container) return [];
+  // Visible only — a display:none / off-canvas element can't take focus, and a
+  // hidden first item would otherwise swallow the initial focus() call.
+  return Array.from(container.querySelectorAll(FOCUSABLE_SEL))
+    .filter(elm => elm.offsetWidth > 0 || elm.offsetHeight > 0 || elm === document.activeElement);
+}
+
+// Call from a keydown handler when the overlay is open. Wraps focus at both ends
+// and pulls focus back inside if it has somehow escaped the container.
+function trapTab(e, container) {
+  if (e.key !== 'Tab' || !container) return;
+  const items = focusableWithin(container);
+  if (!items.length) return;
+  const first = items[0];
+  const last  = items[items.length - 1];
+  const active = document.activeElement;
+  if (e.shiftKey) {
+    if (active === first || !container.contains(active)) { e.preventDefault(); last.focus(); }
+  } else {
+    if (active === last || !container.contains(active)) { e.preventDefault(); first.focus(); }
+  }
 }
 
 // ─── Mobile drawer (Phase B) ─────────────────────────────────────────────────
@@ -162,7 +197,9 @@ const Drawer = {
     sc?.addEventListener('click', Drawer.close);
 
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && Drawer.isOpen()) Drawer.close();
+      if (!Drawer.isOpen()) return;
+      if (e.key === 'Escape') Drawer.close();
+      else if (e.key === 'Tab') trapTab(e, sb); // cycle within the open drawer
     });
 
     // Auto-close on any route navigation — nav-items are real anchors so hash
@@ -412,14 +449,32 @@ function threatBadge(level) {
   return `<span class="badge badge-${level}">${level.toUpperCase()}</span>`;
 }
 
+// Element focus was on before the modal opened — restored on close so keyboard
+// users land back where they were (Phase I).
+let _modalLastTrigger = null;
+
 function openModal(contentHtml, wide = false) {
+  _modalLastTrigger = document.activeElement;
   el('modal-content').innerHTML = contentHtml;
   const box = el('modal-box');
   box.style.maxWidth = wide ? '760px' : '540px';
   // Clear any leftover swipe transform from the previous open.
   box.style.transform = '';
   box.style.transition = '';
+  // ARIA: name the dialog from its injected title, and label the icon-only
+  // close (×) button. Every modal builder ships a .modal-title + .modal-close.
+  const title = box.querySelector('.modal-title');
+  if (title) box.setAttribute('aria-label', title.textContent.trim());
+  else box.removeAttribute('aria-label');
+  box.querySelector('.modal-close')?.setAttribute('aria-label', 'Close');
   el('modal-overlay').classList.add('open');
+  // Move focus into the dialog: the first real field if there is one, otherwise
+  // the close button. Skip the close button as the default so a form opens with
+  // the cursor in its first input.
+  requestAnimationFrame(() => {
+    const items = focusableWithin(box);
+    (items.find(x => !x.classList.contains('modal-close')) || items[0])?.focus();
+  });
 }
 
 function closeModal(e) {
@@ -428,7 +483,10 @@ function closeModal(e) {
     el('modal-content').innerHTML = '';
     // Reset any in-flight swipe transform.
     const box = el('modal-box');
-    if (box) { box.style.transform = ''; box.style.transition = ''; }
+    if (box) { box.style.transform = ''; box.style.transition = ''; box.removeAttribute('aria-label'); }
+    // Return focus to whatever opened the modal.
+    if (_modalLastTrigger && document.contains(_modalLastTrigger)) _modalLastTrigger.focus();
+    _modalLastTrigger = null;
   }
 }
 window.closeModal = closeModal;
@@ -441,13 +499,14 @@ window.closeModal = closeModal;
   const SHEET_BP = 639;
   let dragStartY = 0, dragStartT = 0, dragDy = 0, dragging = false, dragBox = null;
 
-  // Escape key — works on any viewport, restores the X-button-only dismiss for
-  // physical-keyboard users on a mobile-sized window.
+  // Escape closes (any viewport — restores the X-button-only dismiss for
+  // physical-keyboard users on a mobile-sized window); Tab is trapped inside the
+  // open dialog so focus can't wander to the page behind it (Phase I).
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      const overlay = document.getElementById('modal-overlay');
-      if (overlay && overlay.classList.contains('open')) closeModal();
-    }
+    const overlay = document.getElementById('modal-overlay');
+    if (!overlay || !overlay.classList.contains('open')) return;
+    if (e.key === 'Escape') closeModal();
+    else if (e.key === 'Tab') trapTab(e, document.getElementById('modal-box'));
   });
 
   function inSheetMode() { return window.innerWidth <= SHEET_BP; }

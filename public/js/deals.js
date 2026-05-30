@@ -49,10 +49,10 @@ const Deals = {
   _drawShell() {
     el('page-root').innerHTML = `
       <div class="deals-tabs" role="tablist">
-        <button class="deals-tab ${Deals._tab === 'log' ? 'active' : ''}" role="tab" onclick="Deals.switchTab('log')">Log &amp; deals</button>
-        <button class="deals-tab ${Deals._tab === 'roi' ? 'active' : ''}" role="tab" onclick="Deals.switchTab('roi')">ROI dashboard</button>
+        <button class="deals-tab ${Deals._tab === 'log' ? 'active' : ''}" role="tab" aria-selected="${Deals._tab === 'log'}" aria-controls="deals-tab-content" onclick="Deals.switchTab('log')">Log &amp; deals</button>
+        <button class="deals-tab ${Deals._tab === 'roi' ? 'active' : ''}" role="tab" aria-selected="${Deals._tab === 'roi'}" aria-controls="deals-tab-content" onclick="Deals.switchTab('roi')">ROI dashboard</button>
       </div>
-      <div id="deals-tab-content"><div class="loading-state"><div class="spinner"></div><span>Loading...</span></div></div>
+      <div id="deals-tab-content" role="tabpanel"><div class="loading-state"><div class="spinner"></div><span>Loading...</span></div></div>
     `;
   },
 
@@ -61,7 +61,11 @@ const Deals = {
     Deals._tab = tab;
     // Keep the URL honest without triggering a full re-route.
     history.replaceState(null, '', tab === 'roi' ? '#/deals?tab=roi' : '#/deals');
-    document.querySelectorAll('.deals-tab').forEach((b, i) => b.classList.toggle('active', (i === 0) === (tab === 'log')));
+    document.querySelectorAll('.deals-tab').forEach((b, i) => {
+      const on = (i === 0) === (tab === 'log');
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
     if (tab === 'roi') Deals.loadRoi(); else Deals.loadLog();
   },
 
@@ -194,10 +198,10 @@ const Deals = {
             </div>
             <div class="deal-row-value">${d.deal_value_usd != null ? Deals.fmtMoney(d.deal_value_usd) : '<span class="text-muted">no value</span>'}</div>
             <div class="deal-row-actions" onclick="event.stopPropagation()">
-              <button class="btn btn-ghost btn-sm" title="Edit" onclick="Deals.showEdit(${d.id})">
+              <button class="btn btn-ghost btn-sm" title="Edit" aria-label="Edit deal ${esc(d.deal_name)}" onclick="Deals.showEdit(${d.id})">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               </button>
-              <button class="btn btn-danger btn-sm" title="Delete" onclick="Deals.remove(${d.id}, '${esc(d.deal_name).replace(/'/g, "\\'")}')">
+              <button class="btn btn-danger btn-sm" title="Delete" aria-label="Delete deal ${esc(d.deal_name)}" onclick="Deals.remove(${d.id}, '${esc(d.deal_name).replace(/'/g, "\\'")}')">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
               </button>
             </div>
