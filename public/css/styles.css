@@ -1261,15 +1261,18 @@ tbody tr:hover td { background: var(--bg-hover); }
   .form-row { grid-template-columns: 1fr; }
 }
 
+/* Phase J consolidation: this block used to also carry the off-canvas drawer
+   (--sidebar-w, .sidebar transform/width, .sidebar.open, .main-wrapper,
+   .menu-toggle). Phase B re-implemented the drawer in the `max-width: 767px`
+   block below, which supersedes every one of those declarations for the whole
+   <=767px range (same specificity, later in source). They were dead code and
+   are removed. The `.hero-stats-grid` rule here duplicated the 2-column layout
+   already set by the max-width:1100px block, so it's gone too. What remains is
+   the only output unique to the 640-720px band: the tightened page padding and
+   the smaller hero value. */
 @media (max-width: 720px) {
-  :root { --sidebar-w: 0px; }
-  .sidebar { transform: translateX(-260px); width: 260px; }
-  .sidebar.open { transform: translateX(0); box-shadow: 8px 0 48px rgba(0,0,0,0.6); }
-  .main-wrapper { margin-left: 0; }
-  .menu-toggle { display: flex; }
   .page-content { padding: 16px 16px 32px; }
   .topbar { padding: 0 16px; }
-  .hero-stats-grid { grid-template-columns: 1fr 1fr; }
   .hero-value { font-size: 32px; }
 }
 
@@ -3154,22 +3157,10 @@ html       { overflow-x: hidden; }
    cross-cutting rules (44px touch floor, drawer nav, off-black bg). Pure CSS.
    ═════════════════════════════════════════════════════════════════════════════ */
 
-/* ── Toast: bottom-centered + full-bleed on phones ────────────────────────────
-   The desktop toast lives in the bottom-right corner with min-width 260px. On a
-   375px phone that crashes into content and feels like a stray tooltip. Move it
-   to a bottom-anchored full-width band so the copy confirmation reads
-   immediately, and respect the iOS home-indicator safe area. */
-@media (max-width: 639px) {
-  .toast-container {
-    left: 14px; right: 14px; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-    align-items: stretch;
-  }
-  .toast {
-    min-width: 0; max-width: none; width: 100%;
-    padding: 14px 16px; font-size: 14px;
-    justify-content: flex-start;
-  }
-}
+/* (Phase J: the mobile toast container previously had a bottom-anchored rule
+   here from Phase E. Phase G re-anchored it to the top — the bottom rule was
+   fully overridden and is removed. The toast *sizing* it defined now lives in
+   the single consolidated toast block at the end of the Phase G section.) */
 
 /* ── Brief detail — phone (<=767px) ───────────────────────────────────────── */
 @media (max-width: 767px) {
@@ -3600,10 +3591,12 @@ html       { overflow-x: hidden; }
      position: sticky + safe-area inset — preserve that here. */
 }
 
-/* ── Top-anchored toasts on mobile ────────────────────────────────────────
-   The current desktop toast lives bottom-right. On phones the soft keyboard
-   covers anything anchored to the bottom — flip to the top instead. Stack
-   downward as new toasts arrive. */
+/* ── Mobile toasts (consolidated, Phase J) ────────────────────────────────────
+   Single source of truth for the phone toast. Top-anchored full-width band: the
+   soft keyboard covers anything pinned to the bottom, so it sits at the top and
+   stacks downward, honouring the iOS status-bar safe area. The sizing rules
+   (full-bleed, comfortable padding, left-aligned icon+text) were merged here
+   from the former Phase E block above. */
 @media (max-width: 639px) {
   .toast-container {
     bottom: auto;
@@ -3616,8 +3609,10 @@ html       { overflow-x: hidden; }
     min-width: 0;
     max-width: none;
     width: 100%;
-    /* Override Phase E's toastIn (slides up from bottom) with a top-down
-       slide so the animation matches the anchor. */
+    padding: 14px 16px;
+    font-size: 14px;
+    justify-content: flex-start;
+    /* Top-down slide so the animation matches the top anchor. */
     animation: toastInTop 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   @keyframes toastInTop {

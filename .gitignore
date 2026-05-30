@@ -57,6 +57,8 @@ Desktop.ini
 *-findings.json
 *-before.json
 *-after.json
+*-coverage.json
+*-perf.json
 # Keep this one — it's an intentional one-off migration record
 !migration-report-dash-strip.json
 
