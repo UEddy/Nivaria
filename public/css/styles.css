@@ -3420,7 +3420,13 @@ html       { overflow-x: hidden; }
   .settings-page-header { flex-direction: column; align-items: flex-start; gap: 8px; }
   .settings-page-title    { font-size: 22px; }
   .settings-page-subtitle { font-size: 13.5px; }
-  .settings-identity { font-size: 12px; flex-wrap: wrap; row-gap: 4px; }
+
+  /* Identity row (email + plan badge): already wraps; also let a long email
+     break instead of forcing the row past the viewport. The container's
+     inherited white-space:nowrap was keeping the address on one unbreakable
+     line — reset it and allow mid-string breaks for the address only. */
+  .settings-identity { font-size: 12px; flex-wrap: wrap; row-gap: 4px; white-space: normal; min-width: 0; }
+  .settings-identity > span { min-width: 0; overflow-wrap: anywhere; }
   .settings-page-divider { margin-bottom: 24px; }
 
   .settings-stack { gap: 24px; }
@@ -3434,6 +3440,31 @@ html       { overflow-x: hidden; }
   /* Two-up settings rows stack. */
   .set-row-2 { grid-template-columns: 1fr; gap: 14px; }
 
+  /* ── Root cause of the horizontal overflow ───────────────────────────────
+     The integration "meta" line used white-space:nowrap + ellipsis. On a
+     375px phone that single unbreakable line (e.g. "Receive alerts in a Slack
+     channel via incoming webhook") both truncated mid-sentence AND propagated
+     its full width up the shared flex chain (.set-integration → .set-card →
+     .main-wrapper), stretching the layout to ~583px where app-shell's
+     overflow-x:clip cut it off at the screen edge. Let it wrap on phone:
+     readable, and its min-content collapses to the longest word. */
+  .set-integration__meta {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+
+  /* The API-key row pairs a value box with two fixed buttons (Show / Copy).
+     At 375px the three side-by-side exceed the card; allow the buttons to wrap
+     under the value rather than forcing the row wider than the viewport. */
+  .api-key-row { flex-wrap: wrap; }
+  .api-key-value { min-width: 0; flex-basis: 100%; }
+
+  /* Webhook URL + Test button: same treatment so a long URL value can't push
+     the row past the edge. */
+  .webhook-row .form-input { min-width: 0; }
+
   /* Card footer: stack the save button + any feedback message, both full
      width. The set-feedback ("Saved", "Connecting…") was using margin-right:
      auto on desktop to anchor it left — neutralize on phone. */
@@ -3444,6 +3475,13 @@ html       { overflow-x: hidden; }
   }
   .set-card__footer .btn { width: 100%; justify-content: center; }
   .set-card__footer .set-feedback { margin-right: 0; text-align: center; }
+
+  /* Defensive catch-all — applied only after the content fixes above, not as a
+     substitute for them. With the real overflow sources resolved nothing is
+     actually clipped here; this just guarantees the Settings subtree can never
+     contribute an oversized min-content to the shared .main-wrapper flex chain
+     (a global min-width:auto pattern we intentionally don't touch from here). */
+  .settings-page { overflow-x: hidden; }
 }
 
 /* ── Modal (phone) ─────────────────────────────────────────────────────────
