@@ -133,3 +133,43 @@ Additionally:
 - Set `HSTS` preload via your DNS provider or CDN
 - Rotate `SESSION_SECRET` periodically (this will force all users to re-authenticate)
 - Enable database backups for `data/competitor-shadow.db`
+
+---
+
+## Database integrity — workspace model (Phase 10)
+
+Phase 10 introduced a workspace-based data model: every user owns exactly one
+personal workspace, and all workspace-scoped tables carry a `workspace_id`
+foreign key. SQLite cannot retroactively add a hard `NOT NULL` constraint to an
+already-populated table without a full table rebuild, so the "every row has a
+workspace" invariant is upheld at the application layer instead:
+
+1. The migration backfills `workspace_id` on every existing row from its owner.
+2. The migration runs inside a transaction and **rolls back entirely** if any
+   row is left with a NULL `workspace_id`.
+3. All application-layer inserts set `workspace_id` explicitly.
+
+### Pre-deploy check (required)
+
+Before **every deploy**, run the integrity gate and confirm it exits `0`:
+
+```bash
+node scripts/verify-workspace-integrity.js
+```
+
+It scans all workspace-scoped tables (`competitors`, `generated_playbooks`,
+`deals`, `tracked_meetings`, `calendar_connections`, `slack_installations`,
+`correlations`, `pattern_alerts`) for missing `workspace_id` columns or rows
+with a NULL `workspace_id`. A non-zero exit means orphaned rows exist — **do not
+deploy** until resolved. (`changes` is intentionally excluded: it is
+workspace-scoped only transitively via `competitor_id → competitors.workspace_id`,
+and all queries that read `changes` must join through that path — never return
+`changes` across workspaces.)
+
+### DEV-only Pro seed
+
+`src/db.js` contains a `seedDevProWorkspace()` helper that promotes the
+developer's own workspace to Pro for local testing. It is guarded by
+`NODE_ENV !== 'production'` and only ever promotes a workspace that is still
+`free` with no real subscription linked, so it can never overwrite a genuine
+Lemon Squeezy subscription. It must remain a no-op in production.

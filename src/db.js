@@ -363,6 +363,96 @@ const SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS idx_slack_install_lookup ON slack_installations(slack_team_id, slack_user_id);
   CREATE INDEX IF NOT EXISTS idx_slack_install_user   ON slack_installations(user_id);
+
+  -- ── Phase 10: workspace-based billing model ─────────────────────────────────
+  -- A workspace is the unit that owns data and carries a subscription. For
+  -- Phase 10 every user owns exactly one personal workspace (user_id ↔
+  -- workspace_id is 1:1). Phase 10.5 turns this into real multi-member teams;
+  -- this schema is forward-compatible so that work is purely additive.
+  -- subscription_* fields are driven SOLELY by Lemon Squeezy webhooks — the
+  -- app never writes tier/status directly except via the verified webhook.
+  CREATE TABLE IF NOT EXISTS workspaces (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    owner_user_id INTEGER NOT NULL,
+    subscription_id TEXT,
+    subscription_status TEXT CHECK(subscription_status IN ('active','past_due','cancelled','expired','paused') OR subscription_status IS NULL),
+    subscription_tier TEXT NOT NULL DEFAULT 'free' CHECK(subscription_tier IN ('free','pro','team','business')),
+    subscription_current_period_end DATETIME,
+    subscription_cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+    lemon_squeezy_customer_id TEXT,
+    lemon_squeezy_subscription_variant_id TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_workspaces_owner ON workspaces(owner_user_id);
+  CREATE INDEX IF NOT EXISTS idx_workspaces_subscription ON workspaces(subscription_id);
+
+  -- Membership join table. Phase 10: exactly one role='owner' row per workspace.
+  -- Phase 10.5 adds 'admin'/'member' rows via the invite flow.
+  CREATE TABLE IF NOT EXISTS workspace_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    role TEXT NOT NULL DEFAULT 'owner' CHECK(role IN ('owner','admin','member')),
+    joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    invited_by_user_id INTEGER,
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id),
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (invited_by_user_id) REFERENCES users(id),
+    UNIQUE(workspace_id, user_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(user_id);
+  CREATE INDEX IF NOT EXISTS idx_workspace_members_ws   ON workspace_members(workspace_id);
+
+  -- Waitlist captures for the not-yet-active Team and Business tiers.
+  CREATE TABLE IF NOT EXISTS waitlist_signups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    tier TEXT NOT NULL CHECK(tier IN ('team','business')),
+    team_size_estimate INTEGER,
+    use_case TEXT,
+    signed_up_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(email, tier)
+  );
+
+  -- Webhook audit + idempotency. lemon_squeezy_event_id UNIQUE is the DB-level
+  -- guarantee a replayed webhook can never be processed twice. Rows are RETAINED
+  -- (anonymized: workspace_id set NULL) even after account deletion, for
+  -- accounting/tax record-keeping.
+  CREATE TABLE IF NOT EXISTS payment_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_id INTEGER,
+    lemon_squeezy_event_id TEXT UNIQUE NOT NULL,
+    event_type TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    received_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    processed_at DATETIME,
+    status TEXT NOT NULL DEFAULT 'received' CHECK(status IN ('received','processed','failed','duplicate')),
+    error TEXT,
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_payment_events_ws ON payment_events(workspace_id);
+
+  -- Security-relevant event log. Append-only BY CONVENTION (the app never issues
+  -- UPDATE/DELETE against this table). IPs are stored as a SHA-256 hash, never
+  -- raw, for GDPR data-minimization; user agents truncated to 100 chars.
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_id INTEGER,
+    user_id INTEGER,
+    event_type TEXT NOT NULL,
+    event_data TEXT,
+    ip_hash TEXT,
+    user_agent_short TEXT,
+    occurred_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_audit_log_ws_time   ON audit_log(workspace_id, occurred_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_audit_log_user_time ON audit_log(user_id, occurred_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_audit_log_type      ON audit_log(event_type, occurred_at DESC);
 `;
 
 async function initDb() {
@@ -480,9 +570,169 @@ async function initDb() {
     console.warn('Phase 9 demo seed skipped (non-fatal):', e.message);
   }
 
+  // Phase 10: migrate to the workspace-based model (idempotent, transactional).
+  runPhase10WorkspaceMigration();
+  // DEV-ONLY: promote the developer's own workspace to Pro for build/testing.
+  // No-op when NODE_ENV==='production'.
+  seedDevProWorkspace();
+
   saveDb();
   console.log('✅ Database initialized');
   return db;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DEV-ONLY SEED — never runs in production (guarded by NODE_ENV).
+// Gives the developer's personal workspace a Pro subscription so the full app
+// is usable during the Phase 10 build without running a live Lemon Squeezy
+// checkout. The demo workspace is intentionally LEFT on 'free' so both tier
+// states exist for testing. Idempotent and safe: only promotes a workspace that
+// is still 'free' with NO real subscription linked, so a genuine Lemon Squeezy
+// subscription (set only via verified webhook) can never be clobbered by this.
+// ─────────────────────────────────────────────────────────────────────────────
+function seedDevProWorkspace() {
+  if (process.env.NODE_ENV === 'production') return;
+  const DEV_PRO_EMAIL = 'eddyhamezz@gmail.com';
+  const ws = db.prepare(`
+    SELECT w.id, w.subscription_tier, w.subscription_id
+    FROM workspaces w JOIN users u ON u.id = w.owner_user_id
+    WHERE u.email = ?`).get(DEV_PRO_EMAIL);
+  if (!ws) return;
+  // Don't overwrite a real Lemon Squeezy subscription or an already-seeded Pro.
+  if (ws.subscription_tier !== 'free' || ws.subscription_id) return;
+
+  const periodEnd = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+    .toISOString().replace('T', ' ').slice(0, 19); // ~1 year out
+  db.prepare(`
+    UPDATE workspaces
+    SET subscription_tier = 'pro',
+        subscription_status = 'active',
+        subscription_current_period_end = ?,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?`).run(periodEnd, ws.id);
+  saveDb();
+  console.log(`🧪 [DEV-ONLY] Seeded Pro on ${DEV_PRO_EMAIL}'s workspace #${ws.id} (period end ${periodEnd}). Never runs in production.`);
+}
+
+// ─── Phase 10: workspace migration ───────────────────────────────────────────
+// Gives every existing user a personal workspace they own, records the owner
+// membership, and backfills workspace_id onto every workspace-scoped data table
+// from the row's existing user_id. Idempotent — safe to run on every boot.
+//
+// SQLite cannot add a NOT NULL column to an already-populated table without a
+// full table rebuild, so workspace_id is added nullable and the NOT NULL
+// invariant is upheld three ways: (1) the backfill populates every existing
+// row, (2) a post-backfill integrity assertion rolls the whole migration back
+// if any row is left NULL, and (3) all application-layer inserts set it
+// explicitly. The create+backfill runs inside a single transaction.
+function runPhase10WorkspaceMigration() {
+  // The workspace-scoped data tables. NOTE: the real Slack table is
+  // `slack_installations` (an earlier spec draft called it `slack_workspaces`).
+  // `correlations` and `pattern_alerts` are included (checkpoint-1 decision #2):
+  // adding workspace_id now — backfilled from the owning user, same pattern as
+  // the rest — avoids a second migration in Phase 10.5. Every table here has a
+  // `user_id` column, so the owner→workspace mapping backfills all of them.
+  // `changes` is deliberately NOT here: it stays joined through
+  // competitor_id → competitors.workspace_id (no denormalized column).
+  const MIGRATED_TABLES = [
+    'competitors', 'generated_playbooks', 'deals',
+    'tracked_meetings', 'calendar_connections', 'slack_installations',
+    'correlations', 'pattern_alerts',
+  ];
+
+  // Nothing to do if there are no users yet (brand-new empty DB).
+  const userRows = sqlDb.exec('SELECT id, email, name FROM users')[0]?.values || [];
+  if (!userRows.length) return;
+
+  // One-time safety backup before the very first migration run on this DB file.
+  const alreadyMigrated = (sqlDb.exec('SELECT COUNT(*) FROM workspaces')[0]?.values[0][0] || 0) > 0;
+  if (!alreadyMigrated && dbPath && fs.existsSync(dbPath)) {
+    try {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const backup = `${dbPath}.pre-phase10-${stamp}.bak`;
+      fs.copyFileSync(dbPath, backup);
+      console.log(`🛟  Pre-migration backup written: ${path.basename(backup)}`);
+    } catch (e) {
+      console.warn('Pre-migration backup failed (continuing):', e.message);
+    }
+  }
+
+  // 1. Add nullable workspace_id columns + supporting indexes. ALTER auto-commits
+  //    in SQLite, so this is done outside the transaction.
+  for (const t of MIGRATED_TABLES) {
+    const cols = (sqlDb.exec(`PRAGMA table_info(${t})`)[0]?.values || []).map(v => v[1]);
+    if (!cols.includes('workspace_id')) {
+      sqlDb.run(`ALTER TABLE ${t} ADD COLUMN workspace_id INTEGER`);
+    }
+  }
+  // GDPR: account-deletion bookkeeping columns on users.
+  const userCols = (sqlDb.exec('PRAGMA table_info(users)')[0]?.values || []).map(v => v[1]);
+  if (!userCols.includes('deletion_requested_at')) sqlDb.run('ALTER TABLE users ADD COLUMN deletion_requested_at DATETIME');
+  if (!userCols.includes('deletion_scheduled_at')) sqlDb.run('ALTER TABLE users ADD COLUMN deletion_scheduled_at DATETIME');
+  if (!userCols.includes('deletion_cancel_token')) sqlDb.run('ALTER TABLE users ADD COLUMN deletion_cancel_token TEXT');
+
+  // 2. Transactional: create workspaces + owner memberships, then backfill.
+  sqlDb.exec('BEGIN');
+  try {
+    let workspacesCreated = 0;
+    let membersCreated = 0;
+
+    for (const [uid, email, name] of userRows) {
+      const ownerId = Number(uid);
+      let wsId;
+      const existing = sqlDb.exec(`SELECT id FROM workspaces WHERE owner_user_id = ${ownerId}`)[0]?.values || [];
+      if (existing.length) {
+        wsId = Number(existing[0][0]);
+      } else {
+        const base = (name && String(name).trim()) || String(email || '').split('@')[0] || 'My';
+        const wsName = `${base}'s workspace`;
+        sqlDb.run(
+          'INSERT INTO workspaces (name, owner_user_id, subscription_tier) VALUES (?, ?, ?)',
+          [wsName, ownerId, 'free'],
+        );
+        wsId = Number(sqlDb.exec('SELECT last_insert_rowid()')[0].values[0][0]);
+        workspacesCreated++;
+      }
+
+      // Owner membership (idempotent via UNIQUE(workspace_id, user_id)).
+      const hasMember = (sqlDb.exec(`SELECT 1 FROM workspace_members WHERE workspace_id = ${wsId} AND user_id = ${ownerId}`)[0]?.values || []).length;
+      if (!hasMember) {
+        sqlDb.run('INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, ?)', [wsId, ownerId, 'owner']);
+        membersCreated++;
+      }
+    }
+
+    // 3. Backfill workspace_id on every workspace-scoped table from the owner.
+    for (const t of MIGRATED_TABLES) {
+      sqlDb.run(
+        `UPDATE ${t} SET workspace_id = (SELECT id FROM workspaces WHERE owner_user_id = ${t}.user_id) WHERE workspace_id IS NULL`,
+      );
+    }
+
+    // 4. Integrity assertion — abort the whole migration if any row is orphaned.
+    for (const t of MIGRATED_TABLES) {
+      const nulls = Number(sqlDb.exec(`SELECT COUNT(*) FROM ${t} WHERE workspace_id IS NULL`)[0].values[0][0]);
+      if (nulls > 0) {
+        throw new Error(`integrity check failed: ${nulls} row(s) in "${t}" still have NULL workspace_id (orphaned user_id?)`);
+      }
+    }
+
+    sqlDb.exec('COMMIT');
+    if (workspacesCreated || membersCreated) {
+      console.log(`✅ Phase 10 migration: ${workspacesCreated} workspace(s) + ${membersCreated} owner membership(s) created; workspace_id backfilled across ${MIGRATED_TABLES.length} tables`);
+    }
+  } catch (e) {
+    sqlDb.exec('ROLLBACK');
+    console.error('❌ Phase 10 workspace migration FAILED — rolled back, no changes applied:', e.message);
+    throw e;
+  }
+
+  // Add workspace_id indexes after backfill (outside txn; cheap, idempotent).
+  for (const t of MIGRATED_TABLES) {
+    sqlDb.exec(`CREATE INDEX IF NOT EXISTS idx_${t}_workspace ON ${t}(workspace_id)`);
+  }
+
+  saveDb();
 }
 
 // Phase 9 — seed a believable win/loss history for the demo user (id 1) tied to
