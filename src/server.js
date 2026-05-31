@@ -253,17 +253,6 @@ app.use('/api/slack', limits.slack, slackRouter);
 // to the API CSRF token, and the redirect is a top-level GET).
 app.use('/api/calendar', limits.api, calendarRouter);
 
-// Stripe webhook (raw body, no CSRF needed — validated by Stripe signature)
-app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  try {
-    const { handleStripeWebhook } = require('./payments');
-    await handleStripeWebhook(req.body, req.headers['stripe-signature']);
-    res.json({ received: true });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', version: '1.0.0' }));
 
 // ── Auth pages ─────────────────────────────────────────────────────────────────

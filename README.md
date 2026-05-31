@@ -57,7 +57,7 @@ I demonstrated my ability to scope, develop, and release a true full-stack solut
    ```bash
    cp .env.example .env
    ```
-   At minimum, set `ANTHROPIC_API_KEY` and `RESEND_API_KEY` in the new `.env`. Stripe variables are optional.
+   At minimum, set `ANTHROPIC_API_KEY` and `RESEND_API_KEY` in the new `.env`. Lemon Squeezy variables (see "Plans & billing" below) are optional until you wire up payments.
 4. Start the server:
    ```bash
    npm start
@@ -141,7 +141,7 @@ Command syntax: `/foresight <outcome> <deal name> [$value] [vs competitor]`, whe
 
 ### Next 7 days
 
-- Live Stripe payment integration (currently stubbed in `src/payments.js`)
+- Go live on Lemon Squeezy payments (flip `LEMONSQUEEZY_TEST_MODE=false`) after end-to-end test-mode validation
 - Production security hardening: nonce-based CSP, Redis-backed rate limiter, shared session store
 - Deploy to a production environment behind HTTPS
 
