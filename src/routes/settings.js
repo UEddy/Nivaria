@@ -2,7 +2,8 @@ const express = require('express');
 const router  = express.Router();
 const axios   = require('axios');
 const { getDb }         = require('../db');
-const { canUseWebhooks} = require('../payments');
+const { canWorkspaceAccess, upgradeRequired } = require('../lib/tierLimits');
+const { logAudit }      = require('../lib/audit');
 
 // ── Validation helpers ─────────────────────────────────────────────────────────
 
@@ -73,13 +74,10 @@ router.put('/', (req, res) => {
   if (discord_webhook  && discord_webhook.length  > 500) return res.status(400).json({ error: 'Discord webhook URL too long' });
   if (notification_email && notification_email.length > 254) return res.status(400).json({ error: 'Email address too long' });
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
-
-  if ((slack_webhook || discord_webhook) && !canUseWebhooks(user)) {
-    return res.status(403).json({
-      error: 'Webhook notifications require the Pro plan or higher.',
-      upgrade_required: true,
-    });
+  // Phase 10: webhook notifications are gated by the workspace's effective tier.
+  if ((slack_webhook || discord_webhook) && !canWorkspaceAccess(req.workspaceId, 'webhooks')) {
+    logAudit({ workspaceId: req.workspaceId, userId: req.userId, eventType: 'gate_violation', eventData: { feature: 'webhooks' }, req });
+    return upgradeRequired(res, 'webhooks');
   }
 
   // Resolve briefing prefs against existing row so partial updates don't blow

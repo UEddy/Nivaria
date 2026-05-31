@@ -8,11 +8,13 @@
 const express = require('express');
 const router  = express.Router();
 const { getDb } = require('../db');
+const { requireFeature } = require('../lib/tierLimits');
 const { getRoiDashboard, getRevenueAtRiskCached, PATTERN_TYPES } = require('../correlationEngine');
 
 const VALID_PATTERN_TYPES = new Set(Object.values(PATTERN_TYPES));
 
-router.get('/', (req, res) => {
+// Win/loss correlation is a Pro feature — gate the recompute + alert subscribe.
+router.get('/', requireFeature('win_loss_correlation'), (req, res) => {
   try {
     res.json(getRoiDashboard(req.userId));
   } catch (e) {
@@ -28,7 +30,7 @@ router.get('/summary', (req, res) => {
 });
 
 // Subscribe to a forward-looking alert for a (competitor, pattern_type).
-router.post('/alerts', (req, res) => {
+router.post('/alerts', requireFeature('win_loss_correlation'), (req, res) => {
   const db = getDb();
   const competitorId = parseInt(req.body.competitor_id, 10);
   const patternType  = String(req.body.pattern_type || '');

@@ -360,6 +360,10 @@ router.post('/forgot/reset', async (req, res) => {
 });
 
 // ── Tier switch (demo) — CSRF-protected ───────────────────────────────────────
+// DEPRECATED (Phase 10): gating is now workspace-driven (workspaces.subscription_tier),
+// so writing users.tier here no longer affects feature access. This demo control
+// is superseded by the real billing UI (Phase 10 frontend) and is slated for
+// removal in a post-launch cleanup. Left in place for now = zero behavior change.
 
 router.put('/me/tier', csrfProtect, (req, res) => {
   if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });

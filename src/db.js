@@ -71,6 +71,10 @@ const SCHEMA = `
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
+    -- DEPRECATED (Phase 10): tier is now workspace-driven. The source of truth
+    -- for all gating is workspaces.subscription_tier (see src/lib/tierLimits.js).
+    -- Retained for backward-compatible reads only; no Phase 10+ code path writes
+    -- it. Scheduled for removal in a post-launch cleanup (Phase 13).
     tier TEXT DEFAULT 'free' CHECK(tier IN ('free', 'pro', 'team')),
     api_key TEXT UNIQUE NOT NULL,
     password_hash TEXT,
@@ -727,9 +731,23 @@ function runPhase10WorkspaceMigration() {
     throw e;
   }
 
-  // Add workspace_id indexes after backfill (outside txn; cheap, idempotent).
+  // Add workspace_id indexes + a safety trigger per table (outside txn; cheap,
+  // idempotent). The trigger auto-populates workspace_id from the owning user on
+  // any INSERT that leaves it NULL — so existing Phase 1-9 insert code keeps
+  // working unchanged while the "every row has a workspace" invariant holds at
+  // the DB layer (the closest we can get to NOT NULL without a table rebuild).
+  // In Phase 10.5, inserts that set workspace_id explicitly bypass the trigger
+  // (WHEN NEW.workspace_id IS NULL), so cross-workspace writes are unaffected.
   for (const t of MIGRATED_TABLES) {
     sqlDb.exec(`CREATE INDEX IF NOT EXISTS idx_${t}_workspace ON ${t}(workspace_id)`);
+    sqlDb.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_${t}_ws_backfill
+      AFTER INSERT ON ${t}
+      WHEN NEW.workspace_id IS NULL
+      BEGIN
+        UPDATE ${t} SET workspace_id = (SELECT id FROM workspaces WHERE owner_user_id = NEW.user_id)
+        WHERE id = NEW.id;
+      END;`);
   }
 
   saveDb();

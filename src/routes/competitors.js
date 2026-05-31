@@ -2,7 +2,8 @@ const express = require('express');
 const router  = express.Router();
 const { getDb, extractDomainFromUrl } = require('../db');
 const { checkCompetitor }  = require('../scheduler');
-const { canAddCompetitor } = require('../payments');
+const { canAddCompetitor, upgradeRequired } = require('../lib/tierLimits');
+const { logAudit } = require('../lib/audit');
 const { getCompetitorHistory, generatePatternCallouts } = require('../historicalContext');
 
 // ── Input validation ───────────────────────────────────────────────────────────
@@ -84,14 +85,11 @@ router.post('/', (req, res) => {
   const rm = validateRenderMode(req.body.render_mode);
   if (rm.error) return res.status(400).json({ error: rm.error });
 
-  const user  = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
-  const count = db.prepare('SELECT COUNT(*) AS n FROM competitors WHERE user_id = ?').get(req.userId).n;
-
-  if (!canAddCompetitor(user, count)) {
-    return res.status(403).json({
-      error: `Your ${user.tier} plan supports up to ${user.tier === 'free' ? 1 : 10} competitor(s). Upgrade to add more.`,
-      upgrade_required: true,
-    });
+  // Phase 10: competitor cap is enforced by the workspace's effective tier.
+  const count = db.prepare('SELECT COUNT(*) AS n FROM competitors WHERE workspace_id = ?').get(req.workspaceId).n;
+  if (!canAddCompetitor(req.workspaceId, count)) {
+    logAudit({ workspaceId: req.workspaceId, userId: req.userId, eventType: 'gate_violation', eventData: { feature: 'add_competitor', count }, req });
+    return upgradeRequired(res, 'add_competitor');
   }
 
   const domain = extractDomainFromUrl(url);

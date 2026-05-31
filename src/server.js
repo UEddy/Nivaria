@@ -22,6 +22,12 @@ const calendarRouter    = require('./routes/calendar');
 const dealsRouter        = require('./routes/deals');
 const roiRouter          = require('./routes/roi');
 const slackRouter        = require('./routes/slack');
+// Phase 10 — billing, waitlist, GDPR account routes + webhook handler.
+const billingRouter      = require('./routes/billing');
+const waitlistRouter     = require('./routes/waitlist');
+const accountRouter      = require('./routes/account');
+const { handleLemonSqueezyWebhook } = require('./lemonSqueezyWebhook');
+const { getUserCurrentWorkspace } = require('./lib/workspace');
 
 // ── DB-backed session store ────────────────────────────────────────────────────
 
@@ -102,6 +108,16 @@ app.use(helmet({
 // ── Core middleware ────────────────────────────────────────────────────────────
 
 app.use(cors({ origin: false }));
+
+// ── Lemon Squeezy webhook (RAW body — MUST precede express.json) ────────────────
+// The HMAC-SHA256 signature is verified against the exact raw bytes; parsing the
+// JSON first would alter the body and break verification. No CSRF/session auth —
+// authenticity is established solely by the signature.
+app.post('/api/webhooks/lemonsqueezy', express.raw({ type: '*/*', limit: '1mb' }), (req, res) => {
+  const { statusCode, body } = handleLemonSqueezyWebhook(req.body, req.headers['x-signature'], req);
+  res.status(statusCode).json(body);
+});
+
 app.use(express.json({ limit: '1mb' }));
 app.use(requestLogger);
 
@@ -143,6 +159,20 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // ── Auth middleware ────────────────────────────────────────────────────────────
 
+// Phase 10 — resolve the user's current workspace onto the request so every
+// protected route can scope/gate by workspace. Phase 10: always the user's own
+// personal workspace (role 'owner'). Phase 10.5: session-based active workspace.
+function attachWorkspace(req) {
+  try {
+    const ws = getUserCurrentWorkspace(req.userId);
+    req.workspaceId   = ws ? ws.id : null;
+    req.workspace     = ws || null;
+    req.workspaceRole = ws ? 'owner' : null;
+  } catch (_) {
+    req.workspaceId = null; req.workspace = null; req.workspaceRole = null;
+  }
+}
+
 function requireAuth(req, res, next) {
   const db = getDb();
 
@@ -153,6 +183,7 @@ function requireAuth(req, res, next) {
     if (!user) return res.status(401).json({ error: 'Invalid API key' });
     req.userId = user.id;
     req.user   = user;
+    attachWorkspace(req);
     return next();
   }
 
@@ -175,6 +206,7 @@ function requireAuth(req, res, next) {
 
     req.userId = user.id;
     req.user   = user;
+    attachWorkspace(req);
     return next();
   }
 
@@ -197,6 +229,17 @@ app.use('/api/playbooks',          limits.api, requireAuth, csrfProtect, playboo
 // Phase 9 — win/loss deals + ROI dashboard. Standard protected mounting.
 app.use('/api/deals', limits.api, requireAuth, csrfProtect, dealsRouter);
 app.use('/api/roi',   limits.api, requireAuth, csrfProtect, roiRouter);
+
+// Phase 10 — billing + GDPR account routes (protected). Per-endpoint rate
+// limits live inside the routers. The public email-link restore is registered
+// BEFORE the protected /api/account mount so the unauthenticated GET resolves
+// first (the in-app POST /delete/cancel still routes to the protected router).
+app.get('/api/account/delete/cancel', accountRouter.restoreByToken);
+app.use('/api/billing', limits.api, requireAuth, csrfProtect, billingRouter);
+app.use('/api/account', limits.api, requireAuth, csrfProtect, accountRouter);
+
+// Phase 10 — Team/Business waitlist (PUBLIC, IP rate-limited).
+app.use('/api/waitlist', limits.waitlist, waitlistRouter);
 
 // Phase 9 — Slack. The router does its own auth internally: the slash command
 // + interactions endpoints are authenticated by Slack's request signature (not

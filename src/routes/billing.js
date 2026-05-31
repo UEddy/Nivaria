@@ -1,0 +1,93 @@
+// Phase 10 — billing routes. All require authentication and are scoped to the
+// requesting user's current workspace (req.workspaceId, set in requireAuth).
+//
+// IMPORTANT: these routes NEVER write subscription tier/status directly. They
+// call Lemon Squeezy and let the verified webhook drive all local state, so the
+// DB can never drift from Lemon Squeezy's source of truth.
+
+const express = require('express');
+const router = express.Router();
+
+const { getDb } = require('../db');
+const ls = require('../lemonSqueezy');
+const { getWorkspaceTier } = require('../lib/tierLimits');
+const limits = require('../middleware/rateLimits');
+
+function workspace(req) {
+  return getDb().prepare('SELECT * FROM workspaces WHERE id = ?').get(req.workspaceId);
+}
+
+// POST /api/billing/checkout  { tier: 'pro' } → { checkoutUrl }
+router.post('/checkout', limits.billingCheckout, async (req, res) => {
+  const tier = String(req.body?.tier || '').toLowerCase();
+  if (tier !== 'pro') return res.status(400).json({ error: 'Only the Pro tier is available for checkout.' });
+  if (!ls.isConfigured()) return res.status(503).json({ error: 'Billing is not configured on this server.' });
+
+  const ws = workspace(req);
+  if (!ws) return res.status(404).json({ error: 'Workspace not found.' });
+  if (getWorkspaceTier(ws.id) === 'pro') {
+    return res.status(409).json({ error: 'This workspace is already on Pro.' });
+  }
+
+  try {
+    const checkoutUrl = await ls.createProCheckout({ workspaceId: ws.id, userEmail: req.user?.email });
+    if (!checkoutUrl) throw new Error('No checkout URL returned');
+    res.json({ checkoutUrl });
+  } catch (e) {
+    res.status(502).json({ error: 'Could not start checkout. Please try again.' });
+  }
+});
+
+// POST /api/billing/portal → { portalUrl }
+router.post('/portal', limits.billingPortal, async (req, res) => {
+  const ws = workspace(req);
+  if (!ws?.subscription_id) return res.status(400).json({ error: 'No active subscription to manage.' });
+  try {
+    const portalUrl = await ls.getCustomerPortalUrl(ws.subscription_id);
+    if (!portalUrl) throw new Error('No portal URL available');
+    res.json({ portalUrl });
+  } catch (e) {
+    res.status(502).json({ error: 'Could not open the billing portal. Please try again.' });
+  }
+});
+
+// GET /api/billing/subscription → current workspace subscription state.
+router.get('/subscription', (req, res) => {
+  const ws = workspace(req);
+  if (!ws) return res.status(404).json({ error: 'Workspace not found.' });
+  res.json({
+    tier: ws.subscription_tier,
+    effectiveTier: getWorkspaceTier(ws.id), // honours cancellation grace period
+    status: ws.subscription_status,
+    currentPeriodEnd: ws.subscription_current_period_end,
+    cancelAtPeriodEnd: !!ws.subscription_cancel_at_period_end,
+    hasSubscription: !!ws.subscription_id,
+  });
+});
+
+// POST /api/billing/cancel → schedule cancellation at period end (webhook-driven).
+router.post('/cancel', async (req, res) => {
+  const ws = workspace(req);
+  if (!ws?.subscription_id) return res.status(400).json({ error: 'No active subscription to cancel.' });
+  try {
+    await ls.cancelAtPeriodEnd(ws.subscription_id);
+    // Do NOT mutate local state here — the subscription_cancelled webhook does.
+    res.json({ ok: true, message: 'Cancellation scheduled. Your access continues until the end of the period.' });
+  } catch (e) {
+    res.status(502).json({ error: 'Could not cancel the subscription. Please try again.' });
+  }
+});
+
+// POST /api/billing/resume → undo a scheduled cancellation (webhook-driven).
+router.post('/resume', async (req, res) => {
+  const ws = workspace(req);
+  if (!ws?.subscription_id) return res.status(400).json({ error: 'No subscription to resume.' });
+  try {
+    await ls.resume(ws.subscription_id);
+    res.json({ ok: true, message: 'Subscription resumed.' });
+  } catch (e) {
+    res.status(502).json({ error: 'Could not resume the subscription. Please try again.' });
+  }
+});
+
+module.exports = router;

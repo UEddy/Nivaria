@@ -24,6 +24,7 @@
 const express = require('express');
 const router  = express.Router();
 const { getDb } = require('../db');
+const { requireFeature } = require('../lib/tierLimits');
 const {
   generatePlaybooksForChange,
   regenerateSinglePlaybook,
@@ -62,7 +63,7 @@ router.get('/changes/:changeId', (req, res) => {
   res.json({ change_id: changeId, playbooks });
 });
 
-router.post('/changes/:changeId/generate', async (req, res) => {
+router.post('/changes/:changeId/generate', requireFeature('playbooks'), async (req, res) => {
   const db = getDb();
   const changeId = parseInt(req.params.changeId, 10);
   if (!Number.isInteger(changeId)) return res.status(400).json({ error: 'Invalid change id' });
@@ -77,7 +78,7 @@ router.post('/changes/:changeId/generate', async (req, res) => {
   }
 });
 
-router.post('/:id/regenerate', async (req, res) => {
+router.post('/:id/regenerate', requireFeature('playbooks'), async (req, res) => {
   const db = getDb();
   const playbookId = parseInt(req.params.id, 10);
   if (!Number.isInteger(playbookId)) return res.status(400).json({ error: 'Invalid playbook id' });

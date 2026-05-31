@@ -26,6 +26,9 @@ const { encrypt, decrypt, isConfigured: tokensConfigured } = require('../calenda
 const { providerFor }    = require('../calendarOAuth');
 const { csrfProtect }    = require('../middleware/security');
 const { syncOneConnection } = require('../calendarSync');
+const { getUserCurrentWorkspace } = require('../lib/workspace');
+const { canWorkspaceAccess, upgradeRequired } = require('../lib/tierLimits');
+const { logAudit }       = require('../lib/audit');
 const rateLimit = require('express-rate-limit');
 
 // Diagnostic logging for the OAuth flow. Off by default; flip OAUTH_DEBUG=1
@@ -71,6 +74,12 @@ router.get('/connections', requireAuthSession, (req, res) => {
 // because this is a navigational GET.
 
 router.get('/google/connect', requireAuthSession, (req, res) => {
+  // Phase 10: calendar briefings are a Pro feature, gated by workspace tier.
+  const ws = getUserCurrentWorkspace(req.userId);
+  if (!ws || !canWorkspaceAccess(ws.id, 'calendar')) {
+    logAudit({ workspaceId: ws ? ws.id : null, userId: req.userId, eventType: 'gate_violation', eventData: { feature: 'calendar' }, req });
+    return upgradeRequired(res, 'calendar');
+  }
   if (!tokensConfigured()) {
     return res.status(500).json({
       error: 'CALENDAR_TOKEN_ENCRYPTION_KEY is not configured. Add it to .env before connecting a calendar.',

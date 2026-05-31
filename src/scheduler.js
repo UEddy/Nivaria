@@ -4,7 +4,7 @@ const { fetchPageContent, generateDiff } = require('./scraper');
 const { analyzeChange, buildFallbackAnalysis, estimateCostUsd } = require('./analyzer');
 const { classifyChange } = require('./changeGate');
 const { sendAlerts, sendPatternAlert } = require('./webhooks');
-const { canUseWebhooks } = require('./payments');
+const { canWorkspaceAccess } = require('./lib/tierLimits');
 const { classifyChangeTypes, PATTERN_TYPES, TYPE_LABEL, runNightlyForAllUsers } = require('./correlationEngine');
 const { getCompetitorHistory, invalidateCompetitorHistory } = require('./historicalContext');
 const { getUserContext, formatContextForPrompt, hasMeaningfulContext } = require('./userContext');
@@ -108,18 +108,28 @@ async function checkCompetitor(competitor, db) {
       // we degrade silently to a history-less prompt.
       let historyText = '';
       let historyMeta = { count: 0, cacheHit: false, included: false, skipReason: null };
-      try {
-        const hist = getCompetitorHistory(competitor.id, { userId: competitor.user_id });
-        historyText = hist.formatted;
-        historyMeta = {
-          count: hist.count,
-          cacheHit: hist.cacheHit,
-          included: hist.count > 0,
-          skipReason: hist.count === 0 ? 'no_prior_changes' : null,
-        };
-      } catch (histErr) {
-        historyMeta.skipReason = `history_fetch_failed: ${histErr.message}`;
-        console.warn(`  ⚠️  History fetch failed for ${competitor.name}: ${histErr.message}`);
+      // Phase 10: historical pattern context is a Pro feature. For a Free
+      // workspace we omit the "PRIOR CHANGES (last 90 days)" section ENTIRELY
+      // from the prompt (no stub, no placeholder) so the AI produces
+      // single-change analysis as if no history exists — historical_context
+      // stays empty in the brief. This is a real, defensible tier differentiator.
+      const historyAllowed = canWorkspaceAccess(competitor.workspace_id, 'historical_context');
+      if (!historyAllowed) {
+        historyMeta.skipReason = 'free_tier';
+      } else {
+        try {
+          const hist = getCompetitorHistory(competitor.id, { userId: competitor.user_id });
+          historyText = hist.formatted;
+          historyMeta = {
+            count: hist.count,
+            cacheHit: hist.cacheHit,
+            included: hist.count > 0,
+            skipReason: hist.count === 0 ? 'no_prior_changes' : null,
+          };
+        } catch (histErr) {
+          historyMeta.skipReason = `history_fetch_failed: ${histErr.message}`;
+          console.warn(`  ⚠️  History fetch failed for ${competitor.name}: ${histErr.message}`);
+        }
       }
       console.log(`  📜 History: ${historyMeta.included
         ? `${historyMeta.count} prior changes included${historyMeta.cacheHit ? ' (cached)' : ''}`
@@ -216,8 +226,7 @@ async function checkCompetitor(competitor, db) {
     // meaningful (gate + AI both agree it's worth a sales team's attention).
     if (analysisStatus === 'ok' && isMeaningful === 1) {
       const settings = db.prepare('SELECT * FROM settings WHERE user_id = ?').get(competitor.user_id);
-      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(competitor.user_id);
-      if (settings && user && canUseWebhooks(user)) {
+      if (settings && canWorkspaceAccess(competitor.workspace_id, 'webhooks')) {
         try {
           await sendAlerts(settings, competitor, analysis, changeRowId);
         } catch (alertErr) {
@@ -281,11 +290,15 @@ async function checkCompetitor(competitor, db) {
 
 async function runScheduledChecks() {
   const db = getDb();
-  const competitors = db.prepare(`
-    SELECT c.*, u.tier FROM competitors c
-    JOIN users u ON c.user_id = u.id
-    WHERE c.active = 1 AND u.tier IN ('pro', 'team')
+  // Phase 10: daily monitoring is a Pro feature, gated by the workspace's
+  // EFFECTIVE tier (honours cancellation grace periods). Free workspaces are
+  // excluded — the scheduler never runs for them.
+  const active = db.prepare(`
+    SELECT c.* FROM competitors c
+    JOIN workspaces w ON w.id = c.workspace_id
+    WHERE c.active = 1
   `).all();
+  const competitors = active.filter(c => canWorkspaceAccess(c.workspace_id, 'daily_monitoring'));
 
   if (competitors.length === 0) {
     console.log('⏰ Scheduled check: no eligible competitors');
