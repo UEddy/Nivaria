@@ -33,4 +33,32 @@ function getUserRole(userId, workspaceId) {
   return row ? row.role : null;
 }
 
-module.exports = { getUserCurrentWorkspace, getWorkspaceById, getUserRole };
+// Bootstrap a user's personal workspace + owner membership. Single source of
+// truth used by BOTH the startup migration (existing users) and registration
+// (new users), so a fresh signup is never left workspace-less.
+//
+// Idempotent: if the user already owns a personal workspace, returns its id
+// without creating a duplicate. Atomic via SAVEPOINT, which nests safely whether
+// or not the caller is already inside a transaction (the migration is; the
+// registration route is not).
+function createPersonalWorkspace(userId, name, email) {
+  const db = getDb();
+  const existing = db.prepare('SELECT id FROM workspaces WHERE owner_user_id = ? ORDER BY id ASC LIMIT 1').get(userId);
+  if (existing) return existing.id;
+
+  const base = (name && String(name).trim()) || String(email || '').split('@')[0] || 'My';
+  const wsName = `${base}'s workspace`;
+
+  return db.savepoint(() => {
+    const r = db.prepare('INSERT INTO workspaces (name, owner_user_id, subscription_tier) VALUES (?, ?, ?)')
+      .run(wsName, userId, 'free');
+    const wsId = r.lastInsertRowid;
+    const hasMember = db.prepare('SELECT 1 FROM workspace_members WHERE workspace_id = ? AND user_id = ?').get(wsId, userId);
+    if (!hasMember) {
+      db.prepare('INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, ?)').run(wsId, userId, 'owner');
+    }
+    return wsId;
+  });
+}
+
+module.exports = { getUserCurrentWorkspace, getWorkspaceById, getUserRole, createPersonalWorkspace };

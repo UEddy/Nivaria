@@ -9,7 +9,15 @@ let dbPath;
 // ─── sql.js compatibility adapter ─────────────────────────────────────────────
 // Wraps sql.js to provide a better-sqlite3-style synchronous API.
 
+// When true, saveDb() is a no-op. Set during a transaction/savepoint because
+// sql.js's export() (used by saveDb) drops any open SAVEPOINT and can disturb an
+// open transaction — so we suppress intermediate saves and persist exactly once
+// at the outermost boundary.
+let suppressSave = false;
+let savepointCounter = 0;
+
 function saveDb() {
+  if (suppressSave) return;
   if (!sqlDb || !dbPath) return;
   const data = sqlDb.export();
   fs.writeFileSync(dbPath, Buffer.from(data));
@@ -62,7 +70,34 @@ class DatabaseWrapper {
   prepare(sql) {
     return new Statement(sql);
   }
+
+  // Run fn() inside a SAVEPOINT — atomic and nestable (safe whether or not a
+  // transaction is already open). Intermediate saveDb() calls are suppressed (a
+  // mid-savepoint export() would drop the savepoint); the DB is persisted once
+  // when the outermost savepoint/transaction completes.
+  savepoint(fn) {
+    const name = 'sp_' + (++savepointCounter);
+    const prevSuppress = suppressSave;
+    suppressSave = true;
+    sqlDb.exec(`SAVEPOINT ${name}`);
+    try {
+      const result = fn();
+      sqlDb.exec(`RELEASE ${name}`);
+      return result;
+    } catch (e) {
+      sqlDb.exec(`ROLLBACK TO ${name}`);
+      sqlDb.exec(`RELEASE ${name}`);
+      throw e;
+    } finally {
+      suppressSave = prevSuppress;
+      if (!suppressSave) saveDb(); // persist once, at the outermost level
+    }
+  }
 }
+
+// Internal: let the migration suppress intermediate saves around its own raw
+// BEGIN/COMMIT (same rationale as savepoint()). Exposed only within this module.
+function setSuppressSave(v) { suppressSave = v; }
 
 // ─── Schema & seeding ──────────────────────────────────────────────────────────
 
@@ -676,35 +711,20 @@ function runPhase10WorkspaceMigration() {
   if (!userCols.includes('deletion_cancel_token')) sqlDb.run('ALTER TABLE users ADD COLUMN deletion_cancel_token TEXT');
 
   // 2. Transactional: create workspaces + owner memberships, then backfill.
+  // Per-user workspace bootstrap is delegated to the shared helper (also used by
+  // the registration route) so the two paths can never drift. Required lazily to
+  // avoid a circular require (lib/workspace.js requires this module's getDb).
+  const { createPersonalWorkspace } = require('./lib/workspace');
+  const wsCountBefore = Number(sqlDb.exec('SELECT COUNT(*) FROM workspaces')[0].values[0][0]);
+  // Suppress intermediate saves for the whole migration transaction (export()
+  // mid-transaction is unsafe); persist once after the index/trigger step below.
+  setSuppressSave(true);
   sqlDb.exec('BEGIN');
   try {
-    let workspacesCreated = 0;
-    let membersCreated = 0;
-
     for (const [uid, email, name] of userRows) {
-      const ownerId = Number(uid);
-      let wsId;
-      const existing = sqlDb.exec(`SELECT id FROM workspaces WHERE owner_user_id = ${ownerId}`)[0]?.values || [];
-      if (existing.length) {
-        wsId = Number(existing[0][0]);
-      } else {
-        const base = (name && String(name).trim()) || String(email || '').split('@')[0] || 'My';
-        const wsName = `${base}'s workspace`;
-        sqlDb.run(
-          'INSERT INTO workspaces (name, owner_user_id, subscription_tier) VALUES (?, ?, ?)',
-          [wsName, ownerId, 'free'],
-        );
-        wsId = Number(sqlDb.exec('SELECT last_insert_rowid()')[0].values[0][0]);
-        workspacesCreated++;
-      }
-
-      // Owner membership (idempotent via UNIQUE(workspace_id, user_id)).
-      const hasMember = (sqlDb.exec(`SELECT 1 FROM workspace_members WHERE workspace_id = ${wsId} AND user_id = ${ownerId}`)[0]?.values || []).length;
-      if (!hasMember) {
-        sqlDb.run('INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, ?)', [wsId, ownerId, 'owner']);
-        membersCreated++;
-      }
+      createPersonalWorkspace(Number(uid), name, email); // idempotent, SAVEPOINT-atomic
     }
+    const workspacesCreated = Number(sqlDb.exec('SELECT COUNT(*) FROM workspaces')[0].values[0][0]) - wsCountBefore;
 
     // 3. Backfill workspace_id on every workspace-scoped table from the owner.
     for (const t of MIGRATED_TABLES) {
@@ -722,13 +742,15 @@ function runPhase10WorkspaceMigration() {
     }
 
     sqlDb.exec('COMMIT');
-    if (workspacesCreated || membersCreated) {
-      console.log(`✅ Phase 10 migration: ${workspacesCreated} workspace(s) + ${membersCreated} owner membership(s) created; workspace_id backfilled across ${MIGRATED_TABLES.length} tables`);
+    if (workspacesCreated) {
+      console.log(`✅ Phase 10 migration: ${workspacesCreated} personal workspace(s) created; workspace_id backfilled across ${MIGRATED_TABLES.length} tables`);
     }
   } catch (e) {
     sqlDb.exec('ROLLBACK');
     console.error('❌ Phase 10 workspace migration FAILED — rolled back, no changes applied:', e.message);
     throw e;
+  } finally {
+    setSuppressSave(false); // re-enable saves; final saveDb() below persists once
   }
 
   // Add workspace_id indexes + a safety trigger per table (outside txn; cheap,

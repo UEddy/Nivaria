@@ -7,6 +7,7 @@ const { getDb }       = require('../db');
 const { sendOtpEmail} = require('../email');
 const limits          = require('../middleware/rateLimits');
 const { csrfProtect } = require('../middleware/security');
+const { createPersonalWorkspace } = require('../lib/workspace');
 
 // ── Common weak passwords ──────────────────────────────────────────────────────
 
@@ -183,6 +184,11 @@ router.post('/register/complete', async (req, res) => {
     userId = r.lastInsertRowid;
     db.prepare('INSERT INTO settings (user_id) VALUES (?)').run(userId);
   }
+
+  // Phase 10: every account owns a personal workspace. The startup migration
+  // only backfills users that exist at boot, so new signups must bootstrap their
+  // own workspace here or they'd be workspace-less until a restart. Idempotent.
+  createPersonalWorkspace(userId, db.prepare('SELECT name FROM users WHERE id = ?').get(userId)?.name, email);
 
   db.prepare('UPDATE otp_codes SET verified_token = NULL WHERE id = ?').run(otp.id);
 
