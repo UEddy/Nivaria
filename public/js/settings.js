@@ -1,14 +1,15 @@
 const Settings = {
   async render(routeQuery) {
     try {
-      const [{ settings, user }, ctxData, voiceData, calData, slackData] = await Promise.all([
+      const [{ settings, user }, ctxData, voiceData, calData, slackData, subData] = await Promise.all([
         API.getSettings(),
         API.getUserContext().catch(() => null), // never block settings on context fetch
         API.getVoiceProfile().catch(() => null), // never block settings on voice profile fetch
         API.getCalendarConnections().catch(() => ({ encryption_configured: false, connections: [] })),
         API.getSlackConnection().catch(() => ({ oauth_configured: false, signing_configured: false, connected: false })),
+        API.getSubscription().catch(() => null), // Phase 10: workspace subscription state
       ]);
-      el('page-root').innerHTML = Settings.html(settings || {}, user, ctxData, voiceData, calData, slackData);
+      el('page-root').innerHTML = Settings.html(settings || {}, user, ctxData, voiceData, calData, slackData, subData);
       Settings._wireDirty();
       Settings.handleCalendarReturnParams(routeQuery);
       Settings.handleSlackReturnParams(routeQuery);
@@ -22,12 +23,11 @@ const Settings = {
     }
   },
 
-  html(s, user, ctxData, voiceData, calData, slackData) {
-    const tier = user?.tier || 'free';
-    const isProPlus = tier === 'pro' || tier === 'team';
-    const tierLabel = { free: 'Free', pro: 'Pro', team: 'Team' }[tier] || tier;
-    const limits = { free: '1', pro: '10', team: '∞' };
-    const urlNoun = `competitor URL${tier === 'free' ? '' : 's'}`;
+  html(s, user, ctxData, voiceData, calData, slackData, subData) {
+    // Phase 10: tier is workspace-driven (subData), not the deprecated user.tier.
+    const tier = (subData && subData.effectiveTier) || 'free';
+    const tierLabel = { free: 'Free', pro: 'Pro', team: 'Team', business: 'Business' }[tier] || tier;
+    const isProPlus = tier === 'pro' || tier === 'team' || tier === 'business';
     const c = ctxData?.context || {};
 
     return `
@@ -58,21 +58,7 @@ const Settings = {
 
           ${Settings.notificationsHtml(s, isProPlus, user?.email)}
 
-          <!-- Plan & billing -->
-          <div class="set-card">
-            <div class="set-card__head">
-              <div class="set-card__title">Plan &amp; billing</div>
-              <div class="set-card__desc">Your current plan and the competitor tracking limits it unlocks.</div>
-            </div>
-            <div class="set-card__body">
-              <div class="set-plan-row">
-                <span class="plan-badge plan-badge--${tier}">${tierLabel}</span>
-                <span class="set-plan-meta">${limits[tier]} ${urlNoun}</span>
-                <a href="#/pricing" class="btn btn-ghost btn-sm" style="margin-left:auto">Change plan</a>
-              </div>
-              <span class="form-hint">Billing is handled by Stripe in production. Use Demo controls below to simulate plan changes.</span>
-            </div>
-          </div>
+          ${Settings.billingHtml(subData)}
 
           <!-- Account -->
           <div class="set-card">
@@ -108,27 +94,102 @@ const Settings = {
             </div>
           </div>
 
-          <!-- Demo controls (development affordance; Stripe handles this in production) -->
-          <div class="set-card set-card--demo">
-            <div class="set-card__head">
-              <div class="set-card__title">Demo controls</div>
-              <div class="set-card__desc">Switch your account tier to test how limits and features behave. In production this is handled by Stripe.</div>
-            </div>
-            <div class="set-card__body">
-              <div style="display:flex;gap:8px;flex-wrap:wrap">
-                ${['free', 'pro', 'team'].map(t => `
-                  <button class="btn ${tier === t ? 'btn-secondary' : 'btn-ghost'} btn-sm"
-                    onclick="Settings.demoPlan('${t}')" ${tier === t ? 'disabled' : ''}>
-                    ${tier === t ? '✓ ' : ''}${t.charAt(0).toUpperCase() + t.slice(1)}
-                  </button>
-                `).join('')}
-              </div>
-            </div>
-          </div>
+          ${Settings.gdprHtml()}
 
         </div>
       </div>
     `;
+  },
+
+  // ── Plan & billing (Phase 10) ───────────────────────────────────────────────
+
+  billingHtml(sub) {
+    const tier   = (sub && sub.effectiveTier) || 'free';
+    const status = sub && sub.status;
+    const cancel = sub && sub.cancelAtPeriodEnd;
+    const periodEnd = sub && sub.currentPeriodEnd;
+    const fmt = (d) => (d ? formatShortDate(d) : '—');
+    const badgeTier = tier === 'business' ? 'team' : tier; // reuse team gradient
+    const badge = `<span class="plan-badge plan-badge--${badgeTier}">${tier.charAt(0).toUpperCase() + tier.slice(1)}</span>`;
+
+    let body;
+    if (tier === 'free') {
+      body = `
+        <div class="set-plan-row">
+          ${badge}
+          <span class="set-plan-meta">1 competitor · manual checks</span>
+          <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="Billing.subscribe(this)">Upgrade to Pro — $20/mo</button>
+        </div>
+        <span class="form-hint">Unlock 10 competitors, daily monitoring, alerts, calendar briefings, outreach playbooks, and win/loss correlation.</span>`;
+    } else if (status === 'past_due') {
+      body = `
+        <div class="set-plan-row">
+          ${badge}
+          <span class="set-plan-meta" style="color:var(--red)">Payment failed — update your card to keep Pro.</span>
+          <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="Billing.openPortal(this)">Update payment</button>
+        </div>`;
+    } else if (cancel) {
+      body = `
+        <div class="set-plan-row">
+          ${badge}
+          <span class="set-plan-meta">Your Pro access ends ${fmt(periodEnd)}.</span>
+          <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="Billing.resume(this)">Resume subscription</button>
+        </div>
+        <span class="form-hint">You keep Pro until then. Resume any time to stay subscribed.</span>`;
+    } else if (status === 'paused') {
+      body = `
+        <div class="set-plan-row">
+          ${badge}
+          <span class="set-plan-meta">Subscription paused.</span>
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="Billing.openPortal(this)">Manage</button>
+        </div>`;
+    } else {
+      body = `
+        <div class="set-plan-row">
+          ${badge}
+          <span class="set-plan-meta">Next billing ${fmt(periodEnd)}.</span>
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="Billing.openPortal(this)">Manage subscription</button>
+        </div>
+        <div style="display:flex">
+          <button class="set-linkbtn set-linkbtn--danger" onclick="Billing.confirmCancel()">Cancel subscription</button>
+        </div>`;
+    }
+
+    return `
+      <div class="set-card">
+        <div class="set-card__head">
+          <div class="set-card__title">Plan &amp; billing</div>
+          <div class="set-card__desc">Your current plan and subscription. Billing is handled securely by Lemon Squeezy.</div>
+        </div>
+        <div class="set-card__body">
+          ${body}
+          <div>
+            <button class="set-linkbtn" style="padding-left:0" onclick="Billing.reconcile(this)">Subscription not showing correctly?</button>
+          </div>
+        </div>
+      </div>`;
+  },
+
+  // ── Your data (Phase 10 GDPR) ─────────────────────────────────────────────────
+
+  gdprHtml() {
+    return `
+      <div class="set-card">
+        <div class="set-card__head">
+          <div class="set-card__title">Your data</div>
+          <div class="set-card__desc">Export everything we hold about you, or permanently delete your account.</div>
+        </div>
+        <div class="set-card__body">
+          <div class="set-plan-row">
+            <span class="set-plan-meta">Download a full JSON export of your workspace data.</span>
+            <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="Billing.exportData(this)">Export my data</button>
+          </div>
+          <div class="set-plan-row">
+            <span class="set-plan-meta">Delete your account and all data (30-day grace period).</span>
+            <button class="set-linkbtn set-linkbtn--danger" style="margin-left:auto" onclick="Billing.confirmDeleteAccount()">Delete account</button>
+          </div>
+        </div>
+      </div>`;
   },
 
   // ── Business context (Phase 6) ──────────────────────────────────────────────
@@ -857,18 +918,6 @@ const Settings = {
     const hash = window.location.hash || '';
     const qIdx = hash.indexOf('?');
     if (qIdx !== -1) history.replaceState(null, '', hash.slice(0, qIdx));
-  },
-
-  async demoPlan(tier) {
-    try {
-      await API.setTier(tier);
-      App.user.tier = tier;
-      App.updateUserUI();
-      toast(`Switched to ${tier} plan`, 'success');
-      Settings.render();
-    } catch (e) {
-      toast(e.message, 'error');
-    }
   },
 };
 window.Settings = Settings;

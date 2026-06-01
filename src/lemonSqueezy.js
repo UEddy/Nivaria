@@ -66,6 +66,31 @@ async function createProCheckout({ workspaceId, userEmail }) {
   return data && data.data && data.data.attributes ? data.data.attributes.url : null;
 }
 
+// Reconcile support: find the workspace's subscription on Lemon Squeezy when a
+// webhook was dropped/lost. Matches by customer id first, then owner email.
+// Prefers an active subscription, then the most recently created.
+async function findWorkspaceSubscription({ customerId, email }) {
+  ensureConfigured();
+  const { listSubscriptions } = require('@lemonsqueezy/lemonsqueezy.js');
+  const { data, error } = await listSubscriptions({ filter: { storeId: process.env.LEMONSQUEEZY_STORE_ID } });
+  if (error) throw new Error(error.message || 'Failed to list subscriptions');
+  const subs = (data && data.data) || [];
+  const matches = subs.filter((s) => {
+    const a = s.attributes || {};
+    return (customerId && String(a.customer_id) === String(customerId))
+      || (email && a.user_email && String(a.user_email).toLowerCase() === String(email).toLowerCase());
+  });
+  if (!matches.length) return null;
+  matches.sort((x, y) => {
+    const ax = x.attributes || {}, ay = y.attributes || {};
+    const rank = (s) => (s === 'active' ? 0 : s === 'past_due' || s === 'on_trial' ? 1 : 2);
+    if (rank(ax.status) !== rank(ay.status)) return rank(ax.status) - rank(ay.status);
+    return new Date(ay.created_at || 0) - new Date(ax.created_at || 0);
+  });
+  const best = matches[0];
+  return { id: String(best.id), attributes: best.attributes || {} };
+}
+
 async function getSubscriptionState(subscriptionId) {
   ensureConfigured();
   const { getSubscription } = require('@lemonsqueezy/lemonsqueezy.js');
@@ -123,4 +148,5 @@ module.exports = {
   isConfigured, isTestMode, variantToTier,
   createProCheckout, getSubscriptionState, getCustomerPortalUrl,
   cancelAtPeriodEnd, resume, verifyWebhookSignature,
+  findWorkspaceSubscription,
 };

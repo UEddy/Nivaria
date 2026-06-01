@@ -2,7 +2,7 @@
 const API = (() => {
   const base = '/api';
 
-  async function request(method, path, body) {
+  async function request(method, path, body, reqOpts = {}) {
     const opts = {
       method,
       headers: { 'Content-Type': 'application/json' },
@@ -20,12 +20,22 @@ const API = (() => {
 
     const res = await fetch(base + path, opts);
 
-    if (res.status === 401) {
+    // Fresh-auth endpoints (account delete/cancel) return 401 on a wrong
+    // password — those callers pass silent401 so we don't bounce to /login.
+    if (res.status === 401 && !reqOpts.silent401) {
       window.location.href = '/login?expired=1';
       return;
     }
 
     const data = await res.json().catch(() => ({}));
+
+    // Phase 10: a 402 upgrade_required from any gated endpoint shows the upgrade
+    // modal centrally — the backend owns the message + upgradeUrl, the frontend
+    // just renders. The call still rejects so the caller can stop its flow.
+    if (res.status === 402 && data && data.error === 'upgrade_required' && !reqOpts.noGateModal) {
+      try { window.showUpgradeModal && window.showUpgradeModal(data); } catch (_) {}
+    }
+
     if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), data);
     return data;
   }
@@ -40,6 +50,22 @@ const API = (() => {
     getMe:   ()     => API.get('/auth/me'),
     setTier: (tier) => API.put('/auth/me/tier', { tier }),
     logout:  ()     => API.post('/auth/logout'),
+
+    // Phase 10 — billing (Lemon Squeezy). State is webhook-driven server-side.
+    getSubscription:     ()           => API.get('/billing/subscription'),
+    checkout:            (tier='pro') => API.post('/billing/checkout', { tier }),
+    billingPortal:       ()           => API.post('/billing/portal'),
+    cancelSubscription:  ()           => API.post('/billing/cancel'),
+    resumeSubscription:  ()           => API.post('/billing/resume'),
+    reconcile:           ()           => API.post('/billing/reconcile'),
+
+    // Phase 10 — waitlist (Team/Business). Public endpoint.
+    joinWaitlist: (data) => API.post('/waitlist', data),
+
+    // Phase 10 — GDPR account rights. delete/cancel use fresh-auth (password),
+    // so a wrong password must NOT redirect to /login (silent401).
+    deleteAccount:  (password) => request('POST', '/account/delete',        { password }, { silent401: true }),
+    cancelDeletion: (password) => request('POST', '/account/delete/cancel', { password }, { silent401: true }),
 
     // Stats
     getStats: () => API.get('/changes/stats'),

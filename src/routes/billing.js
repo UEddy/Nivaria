@@ -11,6 +11,8 @@ const router = express.Router();
 const { getDb } = require('../db');
 const ls = require('../lemonSqueezy');
 const { getWorkspaceTier } = require('../lib/tierLimits');
+const { logAudit } = require('../lib/audit');
+const { mapStatus, toTs } = require('../lemonSqueezyWebhook');
 const limits = require('../middleware/rateLimits');
 
 function workspace(req) {
@@ -63,6 +65,54 @@ router.get('/subscription', (req, res) => {
     cancelAtPeriodEnd: !!ws.subscription_cancel_at_period_end,
     hasSubscription: !!ws.subscription_id,
   });
+});
+
+// POST /api/billing/reconcile → recover from a dropped/lost webhook.
+// Fetches the workspace's subscription from Lemon Squeezy (source of truth) and
+// updates local state if it has drifted (e.g. "paid but shows Free"). This is
+// the safety net for permanent webhook delivery failures.
+router.post('/reconcile', limits.billingReconcile, async (req, res) => {
+  const ws = workspace(req);
+  if (!ws) return res.status(404).json({ error: 'Workspace not found.' });
+  if (!ls.isConfigured()) return res.status(503).json({ error: 'Billing is not configured on this server.' });
+  try {
+    const remote = await ls.findWorkspaceSubscription({ customerId: ws.lemon_squeezy_customer_id, email: req.user?.email });
+    if (!remote) {
+      return res.json({ reconciled: false, message: 'No Lemon Squeezy subscription found for this account.', tier: getWorkspaceTier(ws.id) });
+    }
+    const a = remote.attributes;
+    const tier = ls.variantToTier(a.variant_id) || 'pro';
+    const status = mapStatus(a.status);
+    const periodEnd = toTs(a.cancelled ? a.ends_at : a.renews_at) || toTs(a.renews_at);
+    const before = { subscription_id: ws.subscription_id, tier: ws.subscription_tier, status: ws.subscription_status, cancel: !!ws.subscription_cancel_at_period_end };
+    const after = { subscription_id: remote.id, tier, status, cancel: !!a.cancelled };
+    const changed = JSON.stringify(before) !== JSON.stringify(after);
+
+    if (changed) {
+      getDb().prepare(`
+        UPDATE workspaces SET
+          subscription_id = ?, subscription_status = ?, subscription_tier = ?,
+          subscription_current_period_end = ?, subscription_cancel_at_period_end = ?,
+          lemon_squeezy_customer_id = ?, lemon_squeezy_subscription_variant_id = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(remote.id, status, tier, periodEnd, a.cancelled ? 1 : 0,
+             a.customer_id != null ? String(a.customer_id) : ws.lemon_squeezy_customer_id,
+             a.variant_id != null ? String(a.variant_id) : ws.lemon_squeezy_subscription_variant_id, ws.id);
+      logAudit({ workspaceId: ws.id, userId: req.userId, eventType: 'subscription_reconciled', eventData: { before, after }, req });
+    }
+
+    const fresh = workspace(req);
+    res.json({
+      reconciled: changed,
+      tier: getWorkspaceTier(ws.id),
+      status: fresh.subscription_status,
+      currentPeriodEnd: fresh.subscription_current_period_end,
+      cancelAtPeriodEnd: !!fresh.subscription_cancel_at_period_end,
+    });
+  } catch (e) {
+    res.status(502).json({ error: 'Could not reconcile with Lemon Squeezy. Please try again.' });
+  }
 });
 
 // POST /api/billing/cancel → schedule cancellation at period end (webhook-driven).

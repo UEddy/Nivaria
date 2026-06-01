@@ -250,7 +250,11 @@ const App = {
     Theme.init();
 
     try {
-      [App.user, App.stats] = await Promise.all([API.getMe(), API.getStats()]);
+      [App.user, App.stats, App.subscription] = await Promise.all([
+        API.getMe(),
+        API.getStats(),
+        API.getSubscription().catch(() => null), // Phase 10: workspace tier for the sidebar chip
+      ]);
     } catch (e) {
       console.warn('Init fetch failed:', e.message);
     }
@@ -276,11 +280,14 @@ const App = {
     el('user-name').textContent = u.name;
     el('user-email').textContent = u.email;
     el('user-avatar').textContent = u.name?.[0]?.toUpperCase() || 'U';
-    el('plan-name').textContent = { free: 'Free Plan', pro: 'Pro Plan', team: 'Team Plan' }[u.tier] || u.tier;
+    // Phase 10: tier is workspace-driven (App.subscription.effectiveTier), not the
+    // deprecated user.tier.
+    const tier = App.subscription?.effectiveTier || 'free';
+    el('plan-name').textContent = { free: 'Free Plan', pro: 'Pro Plan', team: 'Team Plan', business: 'Business Plan' }[tier] || tier;
 
     const chip = el('plan-chip');
     if (chip) {
-      chip.className = 'plan-chip plan-chip--' + (u.tier || 'free');
+      chip.className = 'plan-chip plan-chip--' + tier;
     }
   },
 
@@ -331,6 +338,13 @@ const App = {
       el('page-sub').textContent = 'Your competitive intelligence overview';
       root.innerHTML = Skeleton.dashboard();
       Dashboard.render().then(transition);
+      // One-time welcome after a successful Pro checkout (set by billing.js).
+      try {
+        if (sessionStorage.getItem('cs-welcome-pro')) {
+          sessionStorage.removeItem('cs-welcome-pro');
+          setTimeout(() => toast('You\'re on Pro — all features unlocked. 🎉', 'success'), 600);
+        }
+      } catch (_) {}
     } else if (page === 'competitors') {
       if (id) {
         el('page-title').textContent = 'Competitor Timeline';
@@ -379,11 +393,11 @@ const App = {
       el('page-sub').textContent = 'Webhooks, notifications, and account';
       root.innerHTML = Skeleton.cards(4);
       Settings.render(routeQuery).then(transition);
-    } else if (page === 'pricing') {
+    } else if (page === 'pricing' || page === 'plans') {
       el('page-title').textContent = 'Plans & Pricing';
       el('page-sub').textContent = 'Choose the plan that fits your team';
       root.innerHTML = Skeleton.cards(3);
-      Pricing.render(); transition();
+      Pricing.render().then(transition);
     } else if (page === 'onboarding') {
       el('page-title').textContent = 'Welcome to Foresight';
       el('page-sub').textContent = 'One quick step to personalize your analyses';
@@ -631,74 +645,76 @@ function navigate(path) {
   window.location.hash = path;
 }
 
-// ─── Pricing page ─────────────────────────────────────────────────────────────
+// ─── Plans & Pricing page (Phase 10) ───────────────────────────────────────────
 const Pricing = {
-  render() {
+  async render() {
+    // Authoritative tier comes from the billing subscription (workspace-driven),
+    // not App.user.tier (deprecated). Degrade gracefully if the call fails.
+    let sub = { effectiveTier: 'free', status: null, cancelAtPeriodEnd: false };
+    try { sub = await API.getSubscription(); } catch (_) {}
+    const current = sub.effectiveTier || 'free';
+
     const plans = [
       {
-        id: 'free', name: 'Free', price: 0, desc: 'Try it out, no credit card needed',
+        id: 'free', name: 'Free', price: 0, desc: 'Track a single competitor, on demand.',
         features: ['1 competitor URL', 'Manual checks only', 'Basic AI briefs', 'Community support'],
       },
       {
-        id: 'pro', name: 'Pro', price: 20, desc: 'For growing competitive teams',
-        features: ['10 competitor URLs', 'Automatic daily checks', 'Slack & Discord alerts', 'Full AI briefs', 'Priority email support'],
-        popular: true,
+        id: 'pro', name: 'Pro', price: 20, desc: 'For growing competitive teams.', popular: true,
+        features: ['10 competitor URLs', 'Automatic daily monitoring', 'Slack & Discord alerts', 'Calendar pre-meeting briefings', 'AI outreach playbooks', 'Win/loss correlation', 'Historical pattern analysis'],
       },
       {
-        id: 'team', name: 'Team', price: 49, desc: 'For sales-led organizations',
-        features: ['Unlimited competitor URLs', 'Automatic daily checks', 'Multiple webhooks', 'Team dashboard', 'API access', 'Dedicated support'],
+        id: 'team', name: 'Team', price: 49, desc: 'For sales-led organizations.', badge: 'Launching soon',
+        features: ['Unlimited competitors', 'Multiple users', 'Shared workspace', 'Advanced correlation', 'Everything in Pro'],
+      },
+      {
+        id: 'business', name: 'Business', price: 149, desc: 'For larger orgs with special needs.', badge: 'Coming soon',
+        features: ['Everything in Team', 'Tier-4 fortress site monitoring', 'Custom integrations', 'Dedicated support'],
       },
     ];
 
-    const current = App.user?.tier || 'free';
+    const cta = (p) => {
+      if (p.id === 'free') {
+        return current === 'free'
+          ? `<button class="btn btn-secondary w-full" disabled>Current plan</button>`
+          : `<button class="btn btn-ghost w-full" disabled>Included</button>`;
+      }
+      if (p.id === 'pro') {
+        return current === 'pro'
+          ? `<button class="btn btn-secondary w-full" onclick="navigate('/settings')">Current plan — Manage</button>`
+          : `<button class="btn btn-primary w-full" onclick="Billing.subscribe(this)">Subscribe</button>`;
+      }
+      // team / business → waitlist
+      return `<button class="btn btn-secondary w-full" onclick="Billing.openWaitlist('${p.id}')">Get notified</button>`;
+    };
+
+    const banner = current === 'pro'
+      ? `You're on <strong style="color:var(--txt)">Pro</strong>${sub.cancelAtPeriodEnd ? ' (cancels at period end)' : ''}.`
+      : `You're on the <strong style="color:var(--txt)">Free</strong> plan.`;
 
     el('page-root').innerHTML = `
-      <div class="pricing-wrap">
-        <div class="pricing-intro">
-          <p class="text-muted">You're on the <strong style="color:var(--txt)">${current.charAt(0).toUpperCase() + current.slice(1)}</strong> plan. Switch plans below to test tier enforcement.</p>
-        </div>
-        <div class="pricing-grid">
+      <div class="pricing-wrap pricing-wrap--4">
+        <div class="pricing-intro"><p class="text-muted">${banner}</p></div>
+        <div class="pricing-grid pricing-grid--4">
           ${plans.map(p => `
-            <div class="pricing-card ${p.popular ? 'featured' : ''}">
+            <div class="pricing-card ${p.popular ? 'featured' : ''} ${current === p.id ? 'is-current' : ''}">
               ${p.popular ? '<div class="pricing-popular">Most Popular</div>' : ''}
+              ${p.badge ? `<div class="pricing-soon">${p.badge}</div>` : ''}
               <div class="pricing-header">
                 <div class="pricing-plan">${p.name}</div>
-                <div class="pricing-price">
-                  <span class="price-amount">$${p.price}</span>
-                  <span class="price-period">/mo</span>
-                </div>
+                <div class="pricing-price"><span class="price-amount">$${p.price}</span><span class="price-period">/mo</span></div>
                 <div class="pricing-desc">${p.desc}</div>
               </div>
               <ul class="pricing-features">
                 ${p.features.map(f => `<li class="pricing-feature">${esc(f)}</li>`).join('')}
               </ul>
-              <button
-                class="btn ${p.id === current ? 'btn-secondary' : 'btn-primary'} w-full"
-                ${p.id === current ? 'disabled' : ''}
-                onclick="Pricing.switchTier('${p.id}')"
-              >
-                ${p.id === current ? '✓ Current Plan' : p.price === 0 ? 'Downgrade to Free' : 'Upgrade to ' + p.name}
-              </button>
-            </div>
-          `).join('')}
+              ${cta(p)}
+            </div>`).join('')}
         </div>
-        <p class="text-muted text-sm" style="text-align:center;margin-top:24px">
-          Stripe payments coming soon. Buttons above simulate plan switching for demo.
+        <p class="text-muted text-sm" style="text-align:center;margin-top:22px">
+          Healthcare or government compliance needs? <a href="mailto:hello@example.com" class="link-accent">Contact us</a> — Foresight is not a HIPAA-covered service.
         </p>
-      </div>
-    `;
-  },
-
-  async switchTier(tier) {
-    try {
-      await API.setTier(tier);
-      App.user.tier = tier;
-      App.updateUserUI();
-      toast(`Switched to ${tier} plan`, 'success');
-      Pricing.render();
-    } catch (e) {
-      toast(e.message, 'error');
-    }
+      </div>`;
   },
 };
 window.Pricing = Pricing;

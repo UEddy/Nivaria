@@ -20,7 +20,7 @@ const EVENT_TYPES = Object.freeze([
   // Operational extras emitted by the webhook + billing layer:
   'subscription_updated', 'subscription_expired', 'subscription_paused',
   'subscription_unpaused', 'subscription_payment_recovered',
-  'webhook_signature_invalid', 'account_deletion_cancelled',
+  'webhook_signature_invalid', 'account_deletion_cancelled', 'subscription_reconciled',
 ]);
 
 function hashIp(ip) {

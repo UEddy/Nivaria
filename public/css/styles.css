@@ -1141,6 +1141,50 @@ tbody tr:hover td { background: var(--bg-hover); }
   margin-top: 1px;
 }
 
+/* ── Phase 10: four-tier Plans grid ──────────────────────────────
+   Desktop ≥1024: four columns. Tablet 640–1023: 2×2. Phone <640: stacked.
+   Scoped to .pricing-grid--4 (specificity beats the legacy .pricing-grid
+   media rules) so the four-card page is responsive independently. */
+.pricing-wrap--4 { max-width: 1120px; }
+.pricing-grid--4 { grid-template-columns: repeat(4, 1fr); max-width: 1120px; gap: 16px; }
+@media (max-width: 1023px) {
+  .pricing-grid--4 { grid-template-columns: repeat(2, 1fr); max-width: 640px; }
+}
+@media (max-width: 639px) {
+  .pricing-grid--4 { grid-template-columns: 1fr; max-width: 100%; }
+}
+/* "Launching soon" / "Coming soon" badge (top-right, distinct from Most Popular) */
+.pricing-card { /* ensure badges anchor to the card */ }
+.pricing-soon {
+  position: absolute; top: 12px; right: 12px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase;
+  padding: 4px 9px; border-radius: 999px;
+  background: var(--bg-elevated); color: var(--txt-3); border: 1px solid var(--border-2);
+}
+.pricing-card.is-current { border-color: var(--border-accent); }
+
+/* Upgrade-gate modal feature list */
+.upgrade-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.upgrade-list li { position: relative; padding-left: 24px; font-size: 13.5px; color: var(--txt-2); line-height: 1.45; }
+.upgrade-list li::before {
+  content: ''; position: absolute; left: 0; top: 1px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--green-dim); border: 1px solid rgba(16,185,129,0.25);
+  background-image: url("data:image/svg+xml,%3Csvg width='9' height='7' viewBox='0 0 10 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 4L3.5 6.5L9 1' stroke='%2310B981' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: center;
+}
+
+/* Inline success state for waitlist + deletion modals */
+.wl-success { display: flex; align-items: flex-start; gap: 12px; padding: 6px 0; }
+.wl-success__icon {
+  flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--green-dim); color: var(--green-2); border: 1px solid rgba(16,185,129,0.25);
+}
+.wl-success__text { font-size: 14px; color: var(--txt); line-height: 1.55; align-self: center; }
+
+.link-accent { color: var(--accent-2); text-decoration: none; }
+.link-accent:hover { text-decoration: underline; }
+
 /* ── Modal ───────────────────────────────────────────────────── */
 .modal-overlay {
   display: none; position: fixed; inset: 0;

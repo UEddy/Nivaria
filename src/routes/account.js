@@ -163,33 +163,33 @@ function processScheduledDeletions() {
   for (const u of due) {
     const wsIds = ownedWorkspaceIds(db, u.id);
     const ph = wsIds.length ? wsIds.map(() => '?').join(',') : 'NULL';
-    db.exec('BEGIN');
     try {
-      if (wsIds.length) {
-        // Retain payment_events for accounting — anonymize the workspace link.
-        db.prepare(`UPDATE payment_events SET workspace_id = NULL WHERE workspace_id IN (${ph})`).run(...wsIds);
-        // Children first (changes via competitors), then the rest.
-        db.prepare(`DELETE FROM changes WHERE competitor_id IN (SELECT id FROM competitors WHERE workspace_id IN (${ph}))`).run(...wsIds);
-        // Tables scoped by a workspace_id column.
-        for (const t of ['generated_playbooks', 'deals', 'tracked_meetings', 'calendar_connections', 'slack_installations', 'correlations', 'pattern_alerts', 'competitors', 'workspace_members']) {
-          db.prepare(`DELETE FROM ${t} WHERE workspace_id IN (${ph})`).run(...wsIds);
+      // Atomic + save-safe (savepoint suppresses mid-transaction export()).
+      db.savepoint(() => {
+        if (wsIds.length) {
+          // Retain payment_events for accounting — anonymize the workspace link.
+          db.prepare(`UPDATE payment_events SET workspace_id = NULL WHERE workspace_id IN (${ph})`).run(...wsIds);
+          // Children first (changes via competitors), then the rest.
+          db.prepare(`DELETE FROM changes WHERE competitor_id IN (SELECT id FROM competitors WHERE workspace_id IN (${ph}))`).run(...wsIds);
+          // Tables scoped by a workspace_id column.
+          for (const t of ['generated_playbooks', 'deals', 'tracked_meetings', 'calendar_connections', 'slack_installations', 'correlations', 'pattern_alerts', 'competitors', 'workspace_members']) {
+            db.prepare(`DELETE FROM ${t} WHERE workspace_id IN (${ph})`).run(...wsIds);
+          }
+          // The workspaces table itself is keyed by `id`, not `workspace_id`.
+          db.prepare(`DELETE FROM workspaces WHERE id IN (${ph})`).run(...wsIds);
         }
-        // The workspaces table itself is keyed by `id`, not `workspace_id`.
-        db.prepare(`DELETE FROM workspaces WHERE id IN (${ph})`).run(...wsIds);
-      }
-      // Personal, user-scoped data.
-      db.prepare('DELETE FROM user_context WHERE user_id = ?').run(u.id);
-      db.prepare('DELETE FROM user_voice_profile WHERE user_id = ?').run(u.id);
-      db.prepare('DELETE FROM settings WHERE user_id = ?').run(u.id);
-      db.prepare('DELETE FROM otp_codes WHERE email = ?').run(u.email);
-      db.prepare('DELETE FROM login_attempts WHERE email = ?').run(u.email);
-      db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
-      db.exec('COMMIT');
+        // Personal, user-scoped data.
+        db.prepare('DELETE FROM user_context WHERE user_id = ?').run(u.id);
+        db.prepare('DELETE FROM user_voice_profile WHERE user_id = ?').run(u.id);
+        db.prepare('DELETE FROM settings WHERE user_id = ?').run(u.id);
+        db.prepare('DELETE FROM otp_codes WHERE email = ?').run(u.email);
+        db.prepare('DELETE FROM login_attempts WHERE email = ?').run(u.email);
+        db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
+      });
       // audit_log is append-only and retained (user_id kept as an integer ref).
       logAudit({ userId: u.id, eventType: 'account_deletion_completed', eventData: { workspaces: wsIds.length } });
       deleted++;
     } catch (e) {
-      db.exec('ROLLBACK');
       console.error(`account deletion failed for user ${u.id} (rolled back):`, e.message);
     }
   }

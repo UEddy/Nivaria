@@ -41,6 +41,7 @@ module.exports = {
   // ── Phase 10: payment + account endpoints (per-user unless noted) ───────────
   billingCheckout: makeUserLimiter(60 * 60 * 1000, 10, 60), // 10 / user / hour
   billingPortal:   makeUserLimiter(60 * 60 * 1000, 30, 60), // 30 / user / hour
+  billingReconcile: makeUserLimiter(60 * 60 * 1000, 5, 60), // 5 / user / hour
   accountDelete:   makeUserLimiter(60 * 60 * 1000, 3, 60),  // 3 / user / hour (paranoia)
   waitlist:        makeLimiter(60 * 60 * 1000, 5, 60),       // 5 / IP / hour (public)
 

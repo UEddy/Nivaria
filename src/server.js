@@ -79,7 +79,8 @@ app.use(helmet({
       defaultSrc:     ["'self'"],
       // 'unsafe-inline' required for the anti-flash theme snippet in static HTML files.
       // A nonce-based CSP would remove this; tracked as a known limitation.
-      scriptSrc:      ["'self'", "'unsafe-inline'"],
+      // Phase 10: Lemon Squeezy overlay (lemon.js) is loaded from app.lemonsqueezy.com.
+      scriptSrc:      ["'self'", "'unsafe-inline'", 'https://app.lemonsqueezy.com', 'https://assets.lemonsqueezy.com'],
       // Helmet's default for script-src-attr is 'none', which blocks all inline
       // event handlers (onclick, oninput, etc.). The SPA uses inline handlers
       // throughout for view switching, OTP submit, password eye toggles, etc.
@@ -88,8 +89,9 @@ app.use(helmet({
       styleSrc:       ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc:        ["'self'", 'https://fonts.gstatic.com'],
       imgSrc:         ["'self'", 'data:', 'https:'],
-      connectSrc:     ["'self'"],
-      frameSrc:       ["'none'"],
+      // Lemon Squeezy overlay posts to / loads assets from *.lemonsqueezy.com.
+      connectSrc:     ["'self'", 'https://*.lemonsqueezy.com'],
+      frameSrc:       ["'self'", 'https://*.lemonsqueezy.com'],
       objectSrc:      ["'none'"],
       baseUri:        ["'self'"],
       formAction:     ["'self'"],
