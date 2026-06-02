@@ -46,8 +46,8 @@ I demonstrated my ability to scope, develop, and release a true full-stack solut
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/UEddy/Foresight.git
-   cd Foresight
+   git clone https://github.com/UEddy/Nivaria.git
+   cd Nivaria
    ```
 2. Install dependencies:
    ```bash
