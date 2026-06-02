@@ -1,5 +1,7 @@
 # Foresight — Mobile Pass: Comprehensive Report (Phases A–J)
 
+> **Note:** The project was renamed to Nivaria on 2026-06-02. This report uses the project's original name "Foresight" as it described historical work.
+
 **Closing report for the end-to-end mobile responsiveness pass.**
 Baseline: `main @ 51aa7eb` (2026-05-28). Closed: Phase J, 2026-05-30.
 

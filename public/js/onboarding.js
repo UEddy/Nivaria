@@ -72,7 +72,7 @@ const Onboarding = {
             </div>
             <div>
               <h2 class="onboarding-title">Tell us about your business</h2>
-              <p class="onboarding-sub">Foresight uses this context to write briefs from your strategic perspective. All fields are optional. You can edit any of this later in Settings.</p>
+              <p class="onboarding-sub">Nivaria uses this context to write briefs from your strategic perspective. All fields are optional. You can edit any of this later in Settings.</p>
             </div>
           </div>
 
@@ -347,7 +347,7 @@ const Onboarding = {
             </div>
             <div>
               <h2 class="onboarding-title">Measure what competitors cost you</h2>
-              <p class="onboarding-sub">Log your win/loss outcomes and tag the competitor on each loss. Foresight lines those losses up against what each competitor changed in the 30 days before the deal closed, then turns it into estimated revenue at risk. Logging a deal takes about ten seconds, in-app or via a Slack command.</p>
+              <p class="onboarding-sub">Log your win/loss outcomes and tag the competitor on each loss. Nivaria lines those losses up against what each competitor changed in the 30 days before the deal closed, then turns it into estimated revenue at risk. Logging a deal takes about ten seconds, in-app or via a Slack command.</p>
             </div>
           </div>
 

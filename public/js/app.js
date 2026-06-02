@@ -399,7 +399,7 @@ const App = {
       root.innerHTML = Skeleton.cards(3);
       Pricing.render().then(transition);
     } else if (page === 'onboarding') {
-      el('page-title').textContent = 'Welcome to Foresight';
+      el('page-title').textContent = 'Welcome to Nivaria';
       el('page-sub').textContent = 'One quick step to personalize your analyses';
       root.innerHTML = Skeleton.cards(3);
       Onboarding.render().then(transition);
@@ -712,7 +712,7 @@ const Pricing = {
             </div>`).join('')}
         </div>
         <p class="text-muted text-sm" style="text-align:center;margin-top:22px">
-          Healthcare or government compliance needs? <a href="mailto:hello@example.com" class="link-accent">Contact us</a> — Foresight is not a HIPAA-covered service.
+          Healthcare or government compliance needs? <a href="mailto:hello@nivaria.app" class="link-accent">Contact us</a> — Nivaria is not a HIPAA-covered service.
         </p>
       </div>`;
   },

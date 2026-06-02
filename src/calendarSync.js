@@ -247,14 +247,14 @@ async function sendReauthEmail(userId, provider, accountEmail) {
     return;
   }
   const axios = require('axios');
-  const FROM = process.env.RESEND_FROM || 'Foresight <onboarding@resend.dev>';
+  const FROM = process.env.RESEND_FROM || 'Nivaria <onboarding@resend.dev>';
   const appUrl = process.env.APP_URL || 'http://localhost:3000';
   await axios.post(
     'https://api.resend.com/emails',
     {
       from: FROM,
       to: [user.email],
-      subject: 'Foresight: re-connect your calendar',
+      subject: 'Nivaria: re-connect your calendar',
       html: `<p>Hi ${user.name || ''},</p>
              <p>Your ${provider === 'google' ? 'Google' : 'Microsoft'} Calendar connection
              (${accountEmail || 'unknown account'}) expired and could not be refreshed automatically.</p>

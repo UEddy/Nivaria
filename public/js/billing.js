@@ -143,7 +143,7 @@ const Billing = {
            </select>
          </div>`
       : `<div class="form-group">
-           <label class="form-label" for="wl-usecase">What would you use Foresight for?</label>
+           <label class="form-label" for="wl-usecase">What would you use Nivaria for?</label>
            <textarea class="form-input form-textarea" id="wl-usecase" rows="4" maxlength="2000"
              placeholder="Industry, team size, special requirements."></textarea>
          </div>`;

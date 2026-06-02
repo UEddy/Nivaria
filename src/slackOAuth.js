@@ -1,9 +1,9 @@
 // Phase 9 — Slack "Add to Slack" OAuth v2 install flow.
 //
-// A logged-in Foresight user clicks "Add to Slack" in Settings. We redirect to
+// A logged-in Nivaria user clicks "Add to Slack" in Settings. We redirect to
 // Slack's authorize screen requesting the `commands` bot scope. On callback we
 // exchange the code for a bot token and capture the installing Slack user id
-// (authed_user.id) so future slash commands resolve back to this Foresight
+// (authed_user.id) so future slash commands resolve back to this Nivaria
 // account. Bot tokens are encrypted at rest by src/calendarTokens.js (the same
 // generic AES-256-GCM vault used for calendar tokens).
 //

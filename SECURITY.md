@@ -1,6 +1,6 @@
 # Security
 
-This document describes the security controls in place for Foresight, how to report issues, and recommended production configuration.
+This document describes the security controls in place for Nivaria, how to report issues, and recommended production configuration.
 
 ---
 
@@ -85,7 +85,7 @@ This document describes the security controls in place for Foresight, how to rep
 
 ## Reporting a security issue
 
-Please report security vulnerabilities privately by emailing **security@foresight.com** (replace with your real address).
+Please report security vulnerabilities privately by emailing **security@nivaria.app** (replace with your real address).
 
 Include:
 - Description of the vulnerability
@@ -119,7 +119,7 @@ SESSION_SECRET=<64-char random hex>
 APP_URL=https://yourdomain.com
 
 RESEND_API_KEY=re_...
-RESEND_FROM=Foresight <noreply@yourdomain.com>
+RESEND_FROM=Nivaria <noreply@yourdomain.com>
 
 ANTHROPIC_API_KEY=sk-ant-...
 

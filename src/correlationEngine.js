@@ -5,7 +5,7 @@
 // competitor, we look at that competitor's meaningful changes in the 30 days
 // BEFORE the deal closed, classify each change (pricing / messaging / feature),
 // and count how many losses line up with each kind of move. Confidence is a
-// function of the count of supporting deals — nothing fancier, because Foresight
+// function of the count of supporting deals — nothing fancier, because Nivaria
 // users will never have the sample sizes that real statistical inference needs.
 //
 // STATISTICAL HONESTY is enforced in the language: every description says

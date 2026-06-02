@@ -273,7 +273,7 @@ const BattleCard = {
         '',
         `OPPORTUNITY: ${a.opportunity || ''}`,
         '',
-        `Source: Foresight | ${c.competitor_url}`,
+        `Source: Nivaria | ${c.competitor_url}`,
       ].join('\n');
 
       const result = await shareOrCopy({ title: `Brief: ${c.competitor_name}`, text });

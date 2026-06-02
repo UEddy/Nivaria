@@ -1,14 +1,14 @@
-# 🔍 Foresight
+# 🔍 Nivaria
 
 *AI-powered competitor intelligence for B2B sales teams.*
 
 ## Overview
 
-Foresight watches competitor websites on a schedule, detects meaningful changes, and uses Claude to turn each diff into a structured brief with threat scoring and a recommended response. Sales teams learn about a competitor's new pricing, feature launch, or messaging shift the day it ships, not weeks later from a deal they lost. The product replaces a manual research process that most B2B teams either skip entirely or assign to whoever has the least to do.
+Nivaria watches competitor websites on a schedule, detects meaningful changes, and uses Claude to turn each diff into a structured brief with threat scoring and a recommended response. Sales teams learn about a competitor's new pricing, feature launch, or messaging shift the day it ships, not weeks later from a deal they lost. The product replaces a manual research process that most B2B teams either skip entirely or assign to whoever has the least to do.
 
 ## Why I built this
 
-I demonstrated my ability to scope, develop, and release a true full-stack solution on short notice by building Foresight from start to finish in 48 hours using Claude Code. The choice of WASM SQLite over a native driver, the synchronous DB adapter, the DB-backed session storage, the tier-enforcement layer, the multi-step OTP authentication flow, and the AI prompt structure for briefs are all architectural choices that I oversaw. The idea was to demonstrate both rapidity and judgment.
+I demonstrated my ability to scope, develop, and release a true full-stack solution on short notice by building Nivaria from start to finish in 48 hours using Claude Code. The choice of WASM SQLite over a native driver, the synchronous DB adapter, the DB-backed session storage, the tier-enforcement layer, the multi-step OTP authentication flow, and the AI prompt structure for briefs are all architectural choices that I oversaw. The idea was to demonstrate both rapidity and judgment.
 
 ## Features
 
@@ -20,7 +20,7 @@ I demonstrated my ability to scope, develop, and release a true full-stack solut
 - Slack and Discord webhook alerts when changes are detected
 - Daily scheduled checks via cron, with per-competitor manual re-check
 - Pre-meeting briefings: connect Google Calendar and get a brief pushed to your webhook 30 min before any meeting that mentions a tracked competitor (by title or attendee domain)
-- Win/loss logging and an ROI dashboard: tag deal outcomes to competitors (in-app or via a Slack slash command) and Foresight correlates losses with competitor activity to estimate revenue at risk
+- Win/loss logging and an ROI dashboard: tag deal outcomes to competitors (in-app or via a Slack slash command) and Nivaria correlates losses with competitor activity to estimate revenue at risk
 - Slack deal logging: `/foresight lost-deal Acme $40K vs BambooHR` logs a deal in one line, with request-signature verification and replay protection
 - Three-mode theme system (system, light, dark) with anti-flash inline detection
 
@@ -66,7 +66,7 @@ I demonstrated my ability to scope, develop, and release a true full-stack solut
 
 ## Calendar setup (pre-meeting briefings)
 
-Phase 7 connects Google Calendar so Foresight can push a briefing to your Slack/Discord webhook 30 minutes before any meeting that mentions a tracked competitor.
+Phase 7 connects Google Calendar so Nivaria can push a briefing to your Slack/Discord webhook 30 minutes before any meeting that mentions a tracked competitor.
 
 1. **Generate the token-encryption key** and paste it into `.env` as `CALENDAR_TOKEN_ENCRYPTION_KEY`:
    ```bash
@@ -85,14 +85,14 @@ Phase 7 connects Google Calendar so Foresight can push a briefing to your Slack/
 
 Before launching publicly, the Google OAuth app must move from "Testing" → "In production" via Google's verification process. While unverified:
 - Users hit a "Google hasn't verified this app" warning screen at consent time
-- "Continue" requires clicking "Advanced" → "Go to Foresight (unsafe)"
+- "Continue" requires clicking "Advanced" → "Go to Nivaria (unsafe)"
 - The 100-user test cap applies
 
 Verification is a separate launch task. Submit at OAuth consent screen → "Publish app" with a privacy policy URL, app domain, and brand verification artifacts. Sensitive scopes (Calendar API counts as sensitive) require a 4 to 8 week review.
 
 ## Win/loss & ROI
 
-Sales reps log deal outcomes and Foresight quantifies what competitors cost the business. For every lost or stalled deal tagged to a competitor, the engine looks at that competitor's meaningful changes in the 30 days before the deal closed, classifies them (pricing / messaging / feature), and surfaces patterns like "8 of your 12 tracked deals against Acme closed within 30 days of a pricing change."
+Sales reps log deal outcomes and Nivaria quantifies what competitors cost the business. For every lost or stalled deal tagged to a competitor, the engine looks at that competitor's meaningful changes in the 30 days before the deal closed, classifies them (pricing / messaging / feature), and surfaces patterns like "8 of your 12 tracked deals against Acme closed within 30 days of a pricing change."
 
 - The math is pure data analysis, no AI: simple correlation and counting, which is the honest ceiling for the sample sizes these teams have. Confidence is a function of supporting-deal count (low 3 to 5, medium 6 to 14, high 15+), every finding says "correlates with" rather than "caused", and small samples are flagged.
 - Two logging paths, both optimized for speed: an inline form on the Deals page (no modal), and the Slack slash command below.
@@ -100,7 +100,7 @@ Sales reps log deal outcomes and Foresight quantifies what competitors cost the 
 
 ## Plans & billing (Lemon Squeezy)
 
-Subscriptions run on [Lemon Squeezy](https://lemonsqueezy.com) as merchant of record — it handles all card data and PCI compliance; Foresight stores none. Billing is workspace-scoped: every user owns one personal workspace that carries the subscription. Tiers: **Free** ($0) and **Pro** ($20/mo) are live; **Team** ($49/mo) and **Business** ($149/mo) are waitlist-only.
+Subscriptions run on [Lemon Squeezy](https://lemonsqueezy.com) as merchant of record — it handles all card data and PCI compliance; Nivaria stores none. Billing is workspace-scoped: every user owns one personal workspace that carries the subscription. Tiers: **Free** ($0) and **Pro** ($20/mo) are live; **Team** ($49/mo) and **Business** ($149/mo) are waitlist-only.
 
 Subscription state is driven **solely** by signed webhooks — the app never writes tier/status from a route, so local state can't drift from Lemon Squeezy.
 
@@ -110,7 +110,7 @@ Toggle **Test Mode ON** (top-right of the dashboard) and keep it on for the whol
 
 1. **API key** — Settings → API → *Create API key* → `LEMONSQUEEZY_API_KEY` (server-side only; never sent to the client or logged).
 2. **Store ID** — Settings → Stores → `LEMONSQUEEZY_STORE_ID`.
-3. **Pro variant** — Products → *New Product* "Foresight Pro", Subscription / $20 per month → copy the **variant** id → `LEMONSQUEEZY_PRO_VARIANT_ID`.
+3. **Pro variant** — Products → *New Product* "Nivaria Pro", Subscription / $20 per month → copy the **variant** id → `LEMONSQUEEZY_PRO_VARIANT_ID`.
 4. **Webhook** — Settings → Webhooks → *New webhook*. Request URL `https://<your-host>/api/webhooks/lemonsqueezy` (use your ngrok URL while testing). Generate a strong signing secret, paste the same value into `LEMONSQUEEZY_WEBHOOK_SECRET`, and subscribe to all `subscription_*` events.
 
 Leave `LEMONSQUEEZY_TEST_MODE=true` until going live (Phase 13). Enable the **Customer Portal** under Settings → Customer Portal so the "Manage subscription" button works. The webhook contract (every event → state change) is documented in [`docs/webhook-event-mapping.md`](docs/webhook-event-mapping.md).
@@ -127,13 +127,13 @@ Connect a Slack workspace so reps can log deals without leaving Slack.
 
 1. **Create a Slack app** at [api.slack.com/apps](https://api.slack.com/apps) ("From scratch").
 2. **Signing secret** (required): Basic Information -> App Credentials -> Signing Secret. Put it in `.env` as `SLACK_SIGNING_SECRET`. The slash command endpoint verifies every request's signature and rejects anything older than 5 minutes (replay protection).
-3. **Bot scope + OAuth**: OAuth & Permissions -> Bot Token Scopes -> add `commands`. Add `http://localhost:3000/api/slack/oauth/callback` (adjust host for production) under Redirect URLs. Copy the Client ID and Client Secret into `.env` as `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET` / `SLACK_REDIRECT_URI`. This powers the "Add to Slack" button in Settings, which links the installing Slack user to their Foresight account.
+3. **Bot scope + OAuth**: OAuth & Permissions -> Bot Token Scopes -> add `commands`. Add `http://localhost:3000/api/slack/oauth/callback` (adjust host for production) under Redirect URLs. Copy the Client ID and Client Secret into `.env` as `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET` / `SLACK_REDIRECT_URI`. This powers the "Add to Slack" button in Settings, which links the installing Slack user to their Nivaria account.
 4. **Slash command**: Slash Commands -> Create New Command:
    - Command: `/foresight`
    - Request URL: `https://YOUR_HOST/api/slack/commands`
    - Usage hint: `lost-deal Acme $40K vs BambooHR`
 5. **Interactivity** (for the competitor-picker buttons when a name doesn't match): Interactivity & Shortcuts -> on -> Request URL `https://YOUR_HOST/api/slack/interactions`.
-6. In Foresight, open Settings and click **Add to Slack**, then try `/foresight lost-deal Acme $40K vs BambooHR` in any channel.
+6. In Nivaria, open Settings and click **Add to Slack**, then try `/foresight lost-deal Acme $40K vs BambooHR` in any channel.
 
 Command syntax: `/foresight <outcome> <deal name> [$value] [vs competitor]`, where outcome is `lost-deal`, `won-deal`, or `stalled`. The value parser accepts `$40K`, `40000`, `$40,000`, and `1.5M`. Responses are ephemeral, so a deal's value is only ever shown to the person who logged it.
 

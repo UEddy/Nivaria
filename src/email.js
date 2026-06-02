@@ -4,12 +4,12 @@ const axios = require('axios');
 // (onboarding@resend.dev can only deliver to the Resend account owner's email).
 // Set RESEND_FROM to a verified-domain address (e.g. no-reply@yourdomain.com)
 // before going to production.
-const FROM = process.env.RESEND_FROM || 'Foresight <onboarding@resend.dev>';
+const FROM = process.env.RESEND_FROM || 'Nivaria <onboarding@resend.dev>';
 
 async function sendOtpEmail(toEmail, code, purpose) {
   const subject = purpose === 'reset'
-    ? 'Reset your Foresight password'
-    : 'Your Foresight verification code';
+    ? 'Reset your Nivaria password'
+    : 'Your Nivaria verification code';
 
   try {
     const resp = await axios.post(
@@ -66,7 +66,7 @@ function buildHtml(code, purpose) {
               🔍
             </td>
             <td style="padding-left:11px;font-size:15px;font-weight:700;color:#F1F5F9;letter-spacing:-0.3px">
-              Foresight
+              Nivaria
             </td>
           </tr></table>
         </td></tr>
@@ -93,7 +93,7 @@ function buildHtml(code, purpose) {
 
         <tr><td style="padding:18px 36px;border-top:1px solid #1A1A1A">
           <p style="margin:0;font-size:11.5px;color:#374151">
-            Foresight: Competitor Intelligence Platform
+            Nivaria: Competitor Intelligence Platform
           </p>
         </td></tr>
 
@@ -118,7 +118,7 @@ async function sendAccountDeletionEmail(toEmail, cancelUrl, scheduledDate) {
       <tr><td style="padding:36px 36px 28px">
         <p style="margin:0 0 6px;font-size:21px;font-weight:800;color:#F1F5F9;letter-spacing:-0.5px">We received your deletion request</p>
         <p style="margin:0 0 22px;font-size:14px;color:#94A3B8;line-height:1.65">
-          Your Foresight account and all associated data are scheduled to be permanently deleted on
+          Your Nivaria account and all associated data are scheduled to be permanently deleted on
           <strong style="color:#F1F5F9">${when}</strong> (30 days from now).
         </p>
         <p style="margin:0 0 24px;font-size:14px;color:#94A3B8;line-height:1.65">
@@ -127,14 +127,14 @@ async function sendAccountDeletionEmail(toEmail, cancelUrl, scheduledDate) {
         <a href="${cancelUrl}" style="display:inline-block;background:#6366F1;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:13px 22px;border-radius:10px">Cancel deletion &amp; keep my account</a>
         <p style="margin:24px 0 0;font-size:12px;color:#4B5563;line-height:1.6">If the button doesn't work, paste this link into your browser:<br>${cancelUrl}</p>
       </td></tr>
-      <tr><td style="padding:18px 36px;border-top:1px solid #1A1A1A"><p style="margin:0;font-size:11.5px;color:#374151">Foresight: Competitor Intelligence Platform</p></td></tr>
+      <tr><td style="padding:18px 36px;border-top:1px solid #1A1A1A"><p style="margin:0;font-size:11.5px;color:#374151">Nivaria: Competitor Intelligence Platform</p></td></tr>
     </table>
   </td></tr></table>
 </body></html>`;
 
   try {
     const resp = await axios.post('https://api.resend.com/emails',
-      { from: FROM, to: [toEmail], subject: 'Your Foresight account deletion request', html },
+      { from: FROM, to: [toEmail], subject: 'Your Nivaria account deletion request', html },
       { headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, timeout: 12000 });
     return resp.data;
   } catch (err) {

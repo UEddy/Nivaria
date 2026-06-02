@@ -278,7 +278,7 @@ const Settings = {
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
             </div>
             <div class="set-empty__title">Your voice profile is empty</div>
-            <div class="set-empty__desc">Foresight will use sensible defaults when generating outreach. Set it up to make every message sound like you.</div>
+            <div class="set-empty__desc">Nivaria will use sensible defaults when generating outreach. Set it up to make every message sound like you.</div>
             <button class="btn btn-primary btn-sm" onclick="Settings.expandVoiceProfile()">Set up voice profile</button>
           </div>
           <div id="vp-editor" class="set-card__body" data-dirty-group style="display:none;margin-top:20px">${editor}</div>
@@ -403,7 +403,7 @@ const Settings = {
       <div class="set-card">
         <div class="set-card__head">
           <div class="set-card__title">Calendar connection</div>
-          <div class="set-card__desc">Connect a calendar so Foresight can match upcoming meetings to tracked competitors. Briefing delivery preferences live in the Notifications section below.</div>
+          <div class="set-card__desc">Connect a calendar so Nivaria can match upcoming meetings to tracked competitors. Briefing delivery preferences live in the Notifications section below.</div>
         </div>
         <div class="set-card__body">
 
@@ -603,7 +603,7 @@ const Settings = {
             Notifications
             ${!isProPlus ? `<span class="tier-badge">Pro+</span>` : ''}
           </div>
-          <div class="set-card__desc">Where Foresight delivers briefings and change alerts.${!isProPlus ? ' Upgrade to Pro to enable webhook notifications.' : ''}</div>
+          <div class="set-card__desc">Where Nivaria delivers briefings and change alerts.${!isProPlus ? ' Upgrade to Pro to enable webhook notifications.' : ''}</div>
         </div>
         <div class="set-card__body" data-dirty-group>
 

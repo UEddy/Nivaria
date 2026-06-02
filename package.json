@@ -1,5 +1,5 @@
 {
-  "name": "foresight",
+  "name": "nivaria",
   "version": "1.0.0",
   "description": "AI-powered competitor intelligence monitoring platform",
   "main": "src/server.js",

@@ -148,7 +148,7 @@ function usageMessage() {
   return {
     response_type: 'ephemeral',
     text: [
-      '*Foresight deal logging*',
+      '*Nivaria deal logging*',
       'Usage: `/foresight <outcome> <deal name> [$value] [vs competitor]`',
       '',
       'Examples:',
@@ -164,7 +164,7 @@ function usageMessage() {
 function notLinkedMessage(appUrl) {
   return {
     response_type: 'ephemeral',
-    text: `Your Slack account isn't linked to Foresight yet. Open <${appUrl}/app#/settings|Settings in Foresight> and click "Add to Slack" to connect, then try again.`,
+    text: `Your Slack account isn't linked to Nivaria yet. Open <${appUrl}/app#/settings|Settings in Nivaria> and click "Add to Slack" to connect, then try again.`,
   };
 }
 
@@ -176,7 +176,7 @@ function confirmationMessage({ outcome, deal_name, value_usd, competitor_name, a
   const summary = parts.join(' ');
   return {
     response_type: 'ephemeral', // value stays private to the logging user
-    text: `:white_check_mark: Logged: *${summary}* · close date today · <${appUrl}/app#/deals|view in Foresight>`,
+    text: `:white_check_mark: Logged: *${summary}* · close date today · <${appUrl}/app#/deals|view in Nivaria>`,
   };
 }
 
@@ -192,7 +192,7 @@ function competitorPickerMessage({ pending, competitors, appUrl }) {
     { type: 'section', text: { type: 'mrkdwn', text: `${namePart}\nPick one to log *${pending.outcome} ${pending.deal_name}*:` } },
   ];
   if (top.length === 0) {
-    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `You have no tracked competitors yet. Add one in <${appUrl}/app#/competitors|Foresight> first.` } });
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `You have no tracked competitors yet. Add one in <${appUrl}/app#/competitors|Nivaria> first.` } });
   } else {
     blocks.push({
       type: 'actions',

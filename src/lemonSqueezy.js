@@ -57,7 +57,7 @@ async function createProCheckout({ workspaceId, userEmail }) {
     },
     productOptions: {
       redirectUrl: `${appUrl}/app#/settings?upgraded=1`,
-      receiptButtonText: 'Back to Foresight',
+      receiptButtonText: 'Back to Nivaria',
     },
     checkoutOptions: { embed: true, media: false, logo: true },
     testMode: isTestMode(),

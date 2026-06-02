@@ -500,7 +500,7 @@ const Deals = {
           </div>
           <div class="roi-primer-title">Quantify what competitors cost you</div>
           <div class="roi-primer-desc">
-            Log your win/loss outcomes and tag the competitor on each loss. Foresight lines those losses up against what each competitor changed in the 30 days before the deal closed, then surfaces the patterns: "you lost N deals against X within 30 days of their pricing changes." It turns tracked activity into estimated revenue impact.
+            Log your win/loss outcomes and tag the competitor on each loss. Nivaria lines those losses up against what each competitor changed in the 30 days before the deal closed, then surfaces the patterns: "you lost N deals against X within 30 days of their pricing changes." It turns tracked activity into estimated revenue impact.
           </div>
           <button class="btn btn-primary" onclick="Deals.switchTab('log'); setTimeout(()=>Deals.toggleForm(), 60)">Log your first deal</button>
         </div>`;
@@ -514,7 +514,7 @@ const Deals = {
           <div class="roi-progress-title">${roi.total_deals} deal${roi.total_deals === 1 ? '' : 's'} logged</div>
           <div class="roi-progress-desc">
             ${more > 0
-              ? `Log ${more} more deal${more === 1 ? '' : 's'} (with at least 3 losses tagged to competitors) and Foresight will start surfacing correlations. Patterns get reliable around 15 logged deals.`
+              ? `Log ${more} more deal${more === 1 ? '' : 's'} (with at least 3 losses tagged to competitors) and Nivaria will start surfacing correlations. Patterns get reliable around 15 logged deals.`
               : `You have enough deals, but need at least 3 losses tagged to a competitor before patterns can form. Tag the competitor on your losses to unlock the dashboard.`}
           </div>
           <div class="roi-banner">

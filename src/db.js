@@ -384,7 +384,7 @@ const SCHEMA = `
   -- row per (user, team). bot_token_enc is AES-256-GCM encrypted at rest by
   -- src/calendarTokens.js (the same generic token vault used for calendar
   -- tokens). slack_user_id is the installing Slack user, used to resolve an
-  -- incoming slash command back to this Foresight account.
+  -- incoming slash command back to this Nivaria account.
   CREATE TABLE IF NOT EXISTS slack_installations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -581,7 +581,7 @@ async function initDb() {
   if (!existingUser) {
     const apiKey = 'cs-' + uuidv4().replace(/-/g, '');
     db.prepare('INSERT INTO users (email, name, tier, api_key) VALUES (?, ?, ?, ?)')
-      .run('demo@foresight.com', 'Demo User', 'pro', apiKey);
+      .run('demo@nivaria.app', 'Demo User', 'pro', apiKey);
     db.prepare('INSERT INTO settings (user_id) VALUES (?)').run(1);
     seedDemoData();
     console.log(`\n✅ Demo account created. API Key: ${apiKey}\n`);
@@ -594,7 +594,7 @@ async function initDb() {
     const hash = bcrypt.hashSync('Demo1234!', 12);
     db.prepare('UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = 1').run(hash);
     saveDb();
-    console.log('✅ Demo credentials: demo@foresight.com / Demo1234!');
+    console.log('✅ Demo credentials: demo@nivaria.app / Demo1234!');
   }
 
   // Phase 9: seed a populated win/loss dataset for the demo user so the ROI

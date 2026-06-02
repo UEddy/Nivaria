@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Foresight: Sign in</title>
+  <title>Nivaria: Sign in</title>
 
   <!--
     Anti-flash: read theme from localStorage and apply before ANY CSS renders.
@@ -472,9 +472,9 @@
 <!-- Main content -->
 <div class="auth-wrap">
 
-  <a href="/" class="auth-logo" aria-label="Foresight home">
+  <a href="/" class="auth-logo" aria-label="Nivaria home">
     <div class="auth-logo-icon" aria-hidden="true">🔍</div>
-    <span class="auth-logo-name">Foresight</span>
+    <span class="auth-logo-name">Nivaria</span>
   </a>
 
   <div class="auth-card" id="auth-card">
@@ -563,10 +563,10 @@ function render() {
   const sw   = document.getElementById('auth-switch');
 
   document.title = State.mode === 'register'
-    ? 'Foresight: Create account'
+    ? 'Nivaria: Create account'
     : State.mode === 'forgot'
-    ? 'Foresight: Reset password'
-    : 'Foresight: Sign in';
+    ? 'Nivaria: Reset password'
+    : 'Nivaria: Sign in';
 
   if (State.mode === 'login') {
     root.innerHTML = renderLogin();
@@ -601,7 +601,7 @@ function switchMode(mode) {
 function renderLogin() {
   return `
     <h1 class="auth-title">Welcome back</h1>
-    <p class="auth-sub">Sign in to your Foresight account</p>
+    <p class="auth-sub">Sign in to your Nivaria account</p>
     <div class="msg msg-error" id="msg"></div>
     <form id="login-form" novalidate>
       <div class="form-group">

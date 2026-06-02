@@ -85,7 +85,7 @@ router.get('/export', (req, res) => {
 
   logAudit({ workspaceId: req.workspaceId, userId, eventType: 'data_export_requested', req });
 
-  const filename = `foresight-data-export-${userId}-${Date.now()}.json`;
+  const filename = `nivaria-data-export-${userId}-${Date.now()}.json`;
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.send(JSON.stringify(data, null, 2));

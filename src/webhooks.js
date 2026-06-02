@@ -40,7 +40,7 @@ async function sendSlackAlert(webhookUrl, competitor, analysis, changeId) {
       {
         type: 'context',
         elements: [
-          { type: 'mrkdwn', text: `Foresight | <${appUrl}/#/history/${changeId}|View Full Brief>` },
+          { type: 'mrkdwn', text: `Nivaria | <${appUrl}/#/history/${changeId}|View Full Brief>` },
         ],
       },
     ],
@@ -54,7 +54,7 @@ async function sendDiscordAlert(webhookUrl, competitor, analysis, changeId) {
   const emoji = THREAT_EMOJI[analysis.threat_level] || '⚪';
 
   const payload = {
-    username: 'Foresight',
+    username: 'Nivaria',
     embeds: [
       {
         title: `🔍 ${competitor.name}: Page Changed`,
@@ -67,7 +67,7 @@ async function sendDiscordAlert(webhookUrl, competitor, analysis, changeId) {
           { name: '💬 Sales Talking Points', value: analysis.talking_points.map(p => `• ${p}`).join('\n'), inline: false },
         ],
         url: `${appUrl}/#/history/${changeId}`,
-        footer: { text: 'Foresight • AI-Powered Competitive Intelligence' },
+        footer: { text: 'Nivaria • AI-Powered Competitive Intelligence' },
         timestamp: new Date().toISOString(),
       },
     ],

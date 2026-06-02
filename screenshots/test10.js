@@ -24,7 +24,7 @@ function auditCount() {
   const cd = res.headers.get('content-disposition') || '';
   const raw = await res.text();
   console.log('status:', res.status, '| Content-Disposition:', cd);
-  checks.push(res.status === 200 && /attachment; filename="foresight-data-export-1-\d+\.json"/.test(cd));
+  checks.push(res.status === 200 && /attachment; filename="nivaria-data-export-1-\d+\.json"/.test(cd));
 
   const data = JSON.parse(raw);
   const sections = ['export_metadata', 'user', 'workspaces', 'workspace_members', 'competitors', 'changes', 'generated_playbooks', 'deals', 'tracked_meetings', 'calendar_connections', 'slack_installations', 'correlations', 'pattern_alerts', 'user_context', 'user_voice_profile', 'settings', 'audit_log'];

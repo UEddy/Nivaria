@@ -123,7 +123,7 @@ function formatSlackPayload({ competitor, meeting, change, points, matchReason, 
       { type: 'section', text: { type: 'mrkdwn', text: `*${meeting.title}*\n${startStr} · ${matchLabel}` } },
       { type: 'section', text: { type: 'mrkdwn', text: `*${competitor.name}*, most recent change (${changeDate}):\n${emoji} *${change.headline || 'Change detected'}*` } },
       { type: 'section', text: { type: 'mrkdwn', text: pointBlock } },
-      { type: 'context', elements: [{ type: 'mrkdwn', text: `Foresight · <${appUrl}/app#/history/${change.id}|Full brief>` }] },
+      { type: 'context', elements: [{ type: 'mrkdwn', text: `Nivaria · <${appUrl}/app#/history/${change.id}|Full brief>` }] },
     ],
   };
 }
@@ -138,20 +138,20 @@ function formatDiscordPayload({ competitor, meeting, change, points, matchReason
 
   if (!change) {
     return {
-      username: 'Foresight',
+      username: 'Nivaria',
       embeds: [{
         title: `📅 ${competitor.name} mentioned in your next meeting`,
         description: `**${meeting.title}**\n${startStr} · ${matchLabel}\n\nNo material changes in the last ${RECENT_CHANGE_LOOKBACK_DAYS} days.`,
         url: `${appUrl}/app#/competitors`,
         color: 0x6366f1,
-        footer: { text: 'Foresight · pre-meeting briefing' },
+        footer: { text: 'Nivaria · pre-meeting briefing' },
         timestamp: new Date().toISOString(),
       }],
     };
   }
 
   return {
-    username: 'Foresight',
+    username: 'Nivaria',
     embeds: [{
       title: `📅 ${competitor.name}: pre-meeting briefing`,
       description: `**${meeting.title}**\n${startStr} · ${matchLabel}\n\n**${change.headline || 'Change detected'}**`,
@@ -162,7 +162,7 @@ function formatDiscordPayload({ competitor, meeting, change, points, matchReason
         { name: 'Detected', value: String(change.detected_at || '').slice(0, 10), inline: true },
         { name: 'Talking points', value: points.length > 0 ? points.map(p => `• ${p}`).join('\n') : 'None', inline: false },
       ],
-      footer: { text: 'Foresight · pre-meeting briefing' },
+      footer: { text: 'Nivaria · pre-meeting briefing' },
       timestamp: new Date().toISOString(),
     }],
   };

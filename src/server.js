@@ -307,7 +307,7 @@ initDb().then(() => {
   logAnthropicKeyStatus();
   startScheduler();
   app.listen(PORT, () => {
-    console.log(`\n🔍 Foresight — http://localhost:${PORT}\n`);
+    console.log(`\n🔍 Nivaria — http://localhost:${PORT}\n`);
   });
 }).catch(err => {
   console.error('Failed to start:', err);

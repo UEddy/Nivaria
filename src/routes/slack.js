@@ -8,8 +8,8 @@
 //   POST /api/slack/interactions       button clicks (Slack-signed, no session)
 //
 // The slash command + interactions endpoints are authenticated by Slack's
-// request signature (HMAC + timestamp replay window), NOT by a Foresight
-// session. We resolve the incoming Slack (team_id, user_id) to a Foresight
+// request signature (HMAC + timestamp replay window), NOT by a Nivaria
+// session. We resolve the incoming Slack (team_id, user_id) to a Nivaria
 // account via the slack_installations table written during OAuth install.
 
 const express = require('express');

@@ -24,7 +24,7 @@ router.get('/autocomplete', (req, res) => {
 router.get('/export', (req, res) => {
   const csv = dealsToCsv(req.userId);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="foresight-deals-${new Date().toISOString().slice(0, 10)}.csv"`);
+  res.setHeader('Content-Disposition', `attachment; filename="nivaria-deals-${new Date().toISOString().slice(0, 10)}.csv"`);
   res.send(csv);
 });
 
