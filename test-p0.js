@@ -167,7 +167,7 @@ const assert = require('assert');
   } catch (e) { fail('detectJsWall', e); }
 
   // ════════════════════════════════════════════════════════════════════════════
-  console.log('\n── BUG 3: block-page → status=\'blocked\', no hash update ───────');
+  console.log('\n── BUG 3: anti-bot page → status=\'anti_bot\', no hash update ────');
 
   try {
     const c = seedCompetitor('blocked-target', 'old_hash_BLOCKED');
@@ -175,15 +175,18 @@ const assert = require('assert');
     const r = await checkCompetitor(c, db);
 
     assert.strictEqual(r.ok, false, 'expected ok=false');
-    assert.strictEqual(r.status, 'blocked', 'expected status=blocked');
+    // A Cloudflare bot-challenge now classifies as an anti-bot block (was the
+    // generic 'blocked'). The stored message is user-facing; the technical
+    // "Cloudflare challenge" reason goes to the logs only.
+    assert.strictEqual(r.status, 'anti_bot', 'expected status=anti_bot');
 
     const fresh = reloadCompetitor(c.id);
-    assert.strictEqual(fresh.last_check_status, 'blocked', 'last_check_status not blocked');
-    assert.ok(fresh.last_check_error && fresh.last_check_error.includes('Cloudflare'), 'error message missing');
+    assert.strictEqual(fresh.last_check_status, 'anti_bot', 'last_check_status not anti_bot');
+    assert.ok(fresh.last_check_error && fresh.last_check_error.includes('anti-bot'), 'human anti-bot message missing');
     assert.strictEqual(fresh.last_content_hash, 'old_hash_BLOCKED', 'hash must NOT advance on block');
     assert.strictEqual(changesFor(c.id).length, 0, 'no change row should be inserted');
-    pass('block page: hash preserved, status surfaced, no change row');
-  } catch (e) { fail('block page handling', e); }
+    pass('anti-bot page: hash preserved, status surfaced, no change row');
+  } catch (e) { fail('anti-bot page handling', e); }
 
   // ════════════════════════════════════════════════════════════════════════════
   console.log('\n── BUG 2: empty content → status=\'empty_content\', no hash update');
@@ -198,7 +201,9 @@ const assert = require('assert');
 
     const fresh = reloadCompetitor(c.id);
     assert.strictEqual(fresh.last_check_status, 'empty_content');
-    assert.ok(fresh.last_check_error.includes('bodyText='));
+    // last_check_error now holds the user-facing message, not the raw
+    // "bodyText=…" technical detail (that goes to the logs).
+    assert.ok(fresh.last_check_error.includes('extract content'));
     assert.strictEqual(fresh.last_content_hash, 'old_hash_EMPTY', 'hash must NOT advance on empty content');
     assert.strictEqual(changesFor(c.id).length, 0);
     pass('empty content: hash preserved, status surfaced, no change row');

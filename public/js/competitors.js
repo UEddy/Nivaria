@@ -263,30 +263,36 @@ const Competitors = {
       return `<span class="status-pill status-pill--paused"><span class="status-dot"></span>Paused</span>`;
     }
     const s = c.last_check_status || '';
+    // last_check_error now holds a human-friendly message (set by the scraper's
+    // error classifier), so it's safe to surface directly as the tooltip.
     const tip = c.last_check_error ? ` title="${esc(c.last_check_error)}"` : '';
-    if (s === 'blocked') {
-      return `<span class="status-pill status-pill--blocked"${tip}><span class="status-dot"></span>Blocked</span>`;
-    }
-    if (s === 'empty_content') {
-      return `<span class="status-pill status-pill--empty"${tip}><span class="status-dot"></span>Empty</span>`;
-    }
-    if (s === 'selector_not_found') {
-      const sel = c.css_selector ? ` (${esc(c.css_selector)})` : '';
-      const fullTip = ` title="Selector not found${sel}. The page structure may have changed."`;
-      return `<span class="status-pill status-pill--selector-missing"${fullTip}><span class="status-dot"></span>Selector not found</span>`;
-    }
-    if (s.startsWith('fetch_failed')) {
-      return `<span class="status-pill status-pill--fetch-error"${tip}><span class="status-dot"></span>Fetch error</span>`;
-    }
-    if (s === 'render_failed') {
-      return `<span class="status-pill status-pill--fetch-error"${tip}><span class="status-dot"></span>Render error</span>`;
-    }
-    if (s === 'ssrf_blocked') {
-      return `<span class="status-pill status-pill--blocked"${tip}><span class="status-dot"></span>Blocked (SSRF)</span>`;
+    const pill = (cls, label) =>
+      `<span class="status-pill status-pill--${cls}"${tip}><span class="status-dot"></span>${label}</span>`;
+
+    // Map each error_type/status to a short pill label + a reused pill colour.
+    // The full human message is in the tooltip; the label stays terse. `ok_*`
+    // is handled separately below (successful fetch, AI fell back).
+    const PILL = {
+      ssrf_blocked:       ['blocked',          'Private address'],
+      access_denied:      ['blocked',          'Access denied'],
+      anti_bot:           ['blocked',          'Anti-bot'],
+      blocked:            ['blocked',          'Blocked'],          // legacy rows
+      dns_nxdomain:       ['fetch-error',      'DNS error'],
+      connection_failed:  ['fetch-error',      "Can't connect"],
+      server_error:       ['fetch-error',      'Server error'],
+      http_error:         ['fetch-error',      'HTTP error'],
+      render_failed:      ['fetch-error',      'Render error'],     // legacy rows
+      fetch_failed:       ['fetch-error',      'Fetch error'],
+      empty_content:      ['empty',            'Empty'],
+      selector_not_found: ['selector-missing', 'Selector not found'],
+    };
+    if (PILL[s]) {
+      const [cls, label] = PILL[s];
+      return pill(cls, label);
     }
     if (s.startsWith('ok_')) {
       // Successful fetch but AI analysis fell back (ok_ai_out_of_credits, ok_no_ai_key, etc.)
-      return `<span class="status-pill status-pill--ai-down"${tip}><span class="status-dot"></span>AI down</span>`;
+      return pill('ai-down', 'AI down');
     }
     return `<span class="status-pill status-pill--active"><span class="status-dot"></span>Active</span>`;
   },

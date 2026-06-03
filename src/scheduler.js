@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const { getDb } = require('./db');
-const { fetchPageContent, generateDiff } = require('./scraper');
+const { fetchPageContent, generateDiff, classifyScrapeError } = require('./scraper');
 const { analyzeChange, buildFallbackAnalysis, estimateCostUsd } = require('./analyzer');
 const { classifyChange } = require('./changeGate');
 const { sendAlerts, sendPatternAlert } = require('./webhooks');
@@ -10,26 +10,11 @@ const { getCompetitorHistory, invalidateCompetitorHistory } = require('./histori
 const { getUserContext, formatContextForPrompt, hasMeaningfulContext } = require('./userContext');
 const { generatePlaybooksForChange } = require('./playbooks');
 
-function fetchErrorToStatus(err) {
-  if (err && err.code === 'BLOCKED_PAGE')       return { status: 'blocked',             msg: err.message };
-  if (err && err.code === 'EMPTY_CONTENT')      return { status: 'empty_content',       msg: err.message };
-  if (err && err.code === 'SELECTOR_NOT_FOUND') return { status: 'selector_not_found',  msg: `Selector "${err.selector}" matched no elements. The page structure may have changed.` };
-  if (err && err.code === 'SSRF_BLOCKED')       return { status: 'ssrf_blocked',        msg: err.message };
-  if (err && err.code === 'RENDER_FAILED')      return { status: 'render_failed',       msg: err.message };
-  const httpStatus = err && err.response && err.response.status;
-  if (httpStatus) {
-    if (httpStatus === 403) return { status: 'blocked',      msg: `HTTP 403, likely bot block` };
-    if (httpStatus === 404) return { status: 'fetch_failed', msg: `HTTP 404, page not found` };
-    if (httpStatus === 429) return { status: 'fetch_failed', msg: `HTTP 429, rate limited by site` };
-    if (httpStatus >= 500)  return { status: 'fetch_failed', msg: `HTTP ${httpStatus}, site error` };
-    return { status: 'fetch_failed', msg: `HTTP ${httpStatus}` };
-  }
-  if (err && err.code === 'ECONNABORTED') return { status: 'fetch_failed', msg: 'timeout' };
-  // Playwright navigation timeouts surface as TimeoutError with a name field.
-  if (err && (err.name === 'TimeoutError' || /Timeout.*exceeded/i.test(err.message || ''))) {
-    return { status: 'render_failed', msg: 'render timeout (30s)' };
-  }
-  return { status: 'fetch_failed', msg: (err && err.message) || 'unknown fetch error' };
+// Thin adapter over the scraper's central classifier. Kept (and exported) so the
+// scheduler has one call site and the error vocabulary lives in exactly one place
+// (src/scraper.js). `url` lets the classifier put the offending URL in the log.
+function fetchErrorToStatus(err, url) {
+  return classifyScrapeError(err, url);
 }
 
 async function checkCompetitor(competitor, db) {
@@ -51,11 +36,13 @@ async function checkCompetitor(competitor, db) {
     renderDuration = r.renderDuration;
     console.log(`  ⏱  render=${renderMode} duration=${renderDuration}ms`);
   } catch (err) {
-    const { status, msg } = fetchErrorToStatus(err);
-    console.error(`  ✗ Fetch failed (${status}, render=${renderMode}): ${competitor.name} — ${msg}`);
+    const { error_type, status, human, technical } = fetchErrorToStatus(err, competitor.url);
+    // Log the engineer-facing reason (error_type + URL); store the user-facing
+    // message so the UI never has to surface a raw code or a stack-trace string.
+    console.error(`  ✗ Fetch failed [${error_type}] ${competitor.name} (render=${renderMode}) — ${technical}`);
     db.prepare(`UPDATE competitors SET last_check_status = ?, last_check_error = ?, last_check_at = CURRENT_TIMESTAMP WHERE id = ?`)
-      .run(status, msg.slice(0, 500), competitor.id);
-    return { ok: false, status, error: msg };
+      .run(status, human.slice(0, 500), competitor.id);
+    return { ok: false, status, error_type, error: human };
   }
 
   // ── CHANGE DETECTION ─────────────────────────────────────────────────────────
