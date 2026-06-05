@@ -427,10 +427,38 @@
       transition: background 0.3s;
     }
 
+    /* ── Signup consent text ─────────────────────────────────────────── */
+    .auth-consent {
+      margin-top: 16px;
+      font-size: 12px; line-height: 1.5;
+      color: var(--a-txt-muted); text-align: center;
+    }
+    .auth-consent a {
+      color: var(--a-accent); text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .auth-consent a:hover { color: var(--a-accent-hover); }
+
+    /* ── Footer (Phase 11C — legal links) ────────────────────────────── */
+    .auth-footer {
+      position: relative; z-index: 1;
+      padding: 24px 20px 28px;
+      display: flex; align-items: center; justify-content: center;
+      gap: 8px 20px; flex-wrap: wrap;
+      border-top: 1px solid var(--a-border);
+    }
+    .auth-footer-copy { font-size: 12px; color: var(--a-txt-muted); }
+    .auth-footer a {
+      font-size: 12px; color: var(--a-txt-3);
+      text-decoration: none; transition: color 0.15s ease;
+    }
+    .auth-footer a:hover { color: var(--a-accent); }
+
     @media (max-width: 480px) {
       .auth-card { padding: 28px 24px; }
       .otp-digit { width: 44px; height: 52px; font-size: 20px; }
       .auth-theme-corner { top: 14px; right: 16px; }
+      .auth-footer { flex-direction: column; gap: 10px; }
     }
   </style>
 </head>
@@ -484,6 +512,14 @@
   <div class="auth-switch" id="auth-switch"></div>
 
 </div>
+
+<footer class="auth-footer" role="contentinfo">
+  <span class="auth-footer-copy">&copy; 2026 Nivaria</span>
+  <a href="/privacy">Privacy Policy</a>
+  <a href="/terms">Terms of Service</a>
+  <a href="/cookies">Cookie Policy</a>
+  <a href="mailto:support@nivaria.app">support@nivaria.app</a>
+</footer>
 
 <script>
 // ── Theme ──────────────────────────────────────────────────────────────────────
@@ -713,6 +749,7 @@ function renderPassword(flow) {
       <div style="margin-top:20px">
         <button type="submit" class="btn btn-primary" id="submit-btn" disabled>${flow === 'register' ? 'Create account' : 'Update password'}</button>
       </div>
+      ${flow === 'register' ? `<p class="auth-consent">By creating an account, you agree to our <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</p>` : ''}
     </form>`;
 }
 

@@ -3795,3 +3795,23 @@ button:focus-visible,
   /* Outreach Copy / Edit / Regenerate row used a 6px column gap. */
   .outreach-actions { column-gap: 8px; }
 }
+
+/* ── App footer (Phase 11C — legal links) ─────────────────────── */
+.app-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  padding: 22px 28px;
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+.app-footer-copy { font-size: 0.8125rem; color: var(--txt-3); }
+.app-footer-links { display: flex; gap: 22px; flex-wrap: wrap; }
+.app-footer-links a {
+  font-size: 0.8125rem; color: var(--txt-2);
+  text-decoration: none; transition: color 0.15s ease;
+}
+.app-footer-links a:hover { color: var(--accent-2); }
+@media (max-width: 600px) {
+  .app-footer { flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px 16px; }
+  .app-footer-links { flex-direction: column; gap: 10px; }
+}

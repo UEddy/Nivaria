@@ -28,6 +28,8 @@ const waitlistRouter     = require('./routes/waitlist');
 const accountRouter      = require('./routes/account');
 const { handleLemonSqueezyWebhook } = require('./lemonSqueezyWebhook');
 const { getUserCurrentWorkspace } = require('./lib/workspace');
+// Phase 11C — public legal pages (Privacy / Terms / Cookies).
+const { registerLegalRoutes } = require('./routes/legal');
 
 // ── DB-backed session store ────────────────────────────────────────────────────
 
@@ -268,6 +270,10 @@ app.get('/register', (req, res) => {
   if (req.session?.userId) return res.redirect('/app');
   res.sendFile(path.join(__dirname, '../public/auth/index.html'));
 });
+
+// ── Public legal pages (Phase 11C) ───────────────────────────────────────────────
+// /privacy, /terms, /cookies — no auth, registered before the SPA catch-all.
+registerLegalRoutes(app);
 
 // ── Dashboard SPA ──────────────────────────────────────────────────────────────
 

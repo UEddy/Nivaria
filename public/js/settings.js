@@ -180,6 +180,9 @@ const Settings = {
           <div class="set-card__desc">Export everything we hold about you, or permanently delete your account.</div>
         </div>
         <div class="set-card__body">
+          <p class="set-plan-meta" style="margin-bottom:14px;line-height:1.55">
+            Nivaria respects your data rights. You can export your data or delete your account at any time. See our <a href="/privacy" target="_blank" rel="noopener" class="link-accent">Privacy Policy</a> for details.
+          </p>
           <div class="set-plan-row">
             <span class="set-plan-meta">Download a full JSON export of your workspace data.</span>
             <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="Billing.exportData(this)">Export my data</button>

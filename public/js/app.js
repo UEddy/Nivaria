@@ -712,7 +712,7 @@ const Pricing = {
             </div>`).join('')}
         </div>
         <p class="text-muted text-sm" style="text-align:center;margin-top:22px">
-          Healthcare or government compliance needs? <a href="mailto:hello@nivaria.app" class="link-accent">Contact us</a> — Nivaria is not a HIPAA-covered service.
+          Healthcare or government compliance needs? Contact us at <a href="mailto:support@nivaria.app" class="link-accent">support@nivaria.app</a> for details.
         </p>
       </div>`;
   },
