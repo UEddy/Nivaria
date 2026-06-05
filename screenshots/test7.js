@@ -8,7 +8,7 @@ const BASE = 'http://localhost:3000';
 (async () => {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
-  const login = await ctx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@competitor-shadow.com', password: 'Demo1234!' } });
+  const login = await ctx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@nivaria.app', password: 'Demo1234!' } });
   if (!login.ok()) { console.error('login failed', login.status(), '(login rate limit?)'); process.exit(1); }
   const page = await ctx.newPage();
   await page.goto(`${BASE}/app#/plans`, { waitUntil: 'networkidle' }).catch(() => {});

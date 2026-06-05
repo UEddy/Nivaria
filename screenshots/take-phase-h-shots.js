@@ -16,7 +16,7 @@ fs.mkdirSync(OUT, { recursive: true });
 (async () => {
   const browser = await chromium.launch();
   const seedCtx = await browser.newContext();
-  const login = await seedCtx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@competitor-shadow.com', password: 'Demo1234!' } });
+  const login = await seedCtx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@nivaria.app', password: 'Demo1234!' } });
   if (!login.ok()) throw new Error(`login: ${login.status()}`);
   const storageState = await seedCtx.storageState();
   await seedCtx.close();

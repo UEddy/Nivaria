@@ -40,7 +40,7 @@ function pageAudit() {
 
   // Single login, share storage across all viewports.
   const seedCtx = await browser.newContext();
-  const login = await seedCtx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@competitor-shadow.com', password: 'Demo1234!' } });
+  const login = await seedCtx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@nivaria.app', password: 'Demo1234!' } });
   if (!login.ok()) throw new Error(`login seed: ${login.status()} ${await login.text()}`);
   const storageState = await seedCtx.storageState();
   await seedCtx.close();

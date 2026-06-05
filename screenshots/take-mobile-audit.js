@@ -105,7 +105,7 @@ function runAudit() {
   const pub = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
   // Logged-IN context for app surfaces.
   const appCtx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
-  const login = await appCtx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@competitor-shadow.com', password: 'Demo1234!' } });
+  const login = await appCtx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@nivaria.app', password: 'Demo1234!' } });
   if (!login.ok()) { console.error('Login failed:', login.status(), await login.text()); process.exit(1); }
 
   const results = {};

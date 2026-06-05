@@ -17,7 +17,7 @@ const TAG = process.argv[3] || '';
 
 async function login(browser) {
   const ctx = await browser.newContext();
-  const r = await ctx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@competitor-shadow.com', password: 'Demo1234!' } });
+  const r = await ctx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@nivaria.app', password: 'Demo1234!' } });
   if (!r.ok()) throw new Error(`login ${r.status()}`);
   const state = await ctx.storageState();
   await ctx.close();

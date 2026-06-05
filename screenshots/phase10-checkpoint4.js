@@ -24,7 +24,7 @@ async function gotoApp(page, hash) {
 (async () => {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const login = await ctx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@competitor-shadow.com', password: 'Demo1234!' } });
+  const login = await ctx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@nivaria.app', password: 'Demo1234!' } });
   if (!login.ok()) { console.error('Login failed', login.status(), await login.text()); process.exit(1); }
 
   const page = await ctx.newPage();

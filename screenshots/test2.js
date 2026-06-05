@@ -6,7 +6,7 @@ const path = require('path');
 const BASE = 'http://localhost:3000';
 
 async function session() {
-  const r = await fetch(`${BASE}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'demo@competitor-shadow.com', password: 'Demo1234!' }) });
+  const r = await fetch(`${BASE}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'demo@nivaria.app', password: 'Demo1234!' }) });
   const cookie = (r.headers.get('set-cookie') || '').split(';')[0];
   const me = await (await fetch(`${BASE}/api/auth/me`, { headers: { Cookie: cookie } })).json();
   return { cookie, csrf: me.csrfToken };

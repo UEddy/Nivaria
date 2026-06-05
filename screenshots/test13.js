@@ -38,7 +38,7 @@ function auditLatest() {
   console.log(`  drift created (DB shows Free, LS still active): ${drifted ? '✅' : '❌'}`); checks.push(drifted);
 
   // 2. Reconcile (authenticated as demo).
-  const login = await fetch(`${BASE}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'demo@competitor-shadow.com', password: 'Demo1234!' }) });
+  const login = await fetch(`${BASE}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'demo@nivaria.app', password: 'Demo1234!' }) });
   if (login.status === 429) { console.log('  ⚠ login rate-limited; cannot complete reconcile call'); process.exit(1); }
   const cookie = (login.headers.get('set-cookie') || '').split(';')[0];
   const me = await j(await fetch(`${BASE}/api/auth/me`, { headers: { Cookie: cookie } }));

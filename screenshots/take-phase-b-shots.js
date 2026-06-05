@@ -16,7 +16,7 @@ const log = (n, ok, detail) => { results.interactions[n] = { ok, detail }; conso
 
 async function authed(browser, viewport) {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: 2, hasTouch: viewport.width < 768, isMobile: viewport.width < 768 });
-  const login = await ctx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@competitor-shadow.com', password: 'Demo1234!' } });
+  const login = await ctx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@nivaria.app', password: 'Demo1234!' } });
   if (!login.ok()) throw new Error(`login: ${login.status()}`);
   return ctx;
 }

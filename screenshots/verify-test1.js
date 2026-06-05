@@ -16,7 +16,7 @@ const rows = (db, sql) => { const r = db.exec(sql); return r[0] ? r[0].values.ma
 async function login() {
   const res = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'demo@competitor-shadow.com', password: 'Demo1234!' }),
+    body: JSON.stringify({ email: 'demo@nivaria.app', password: 'Demo1234!' }),
   });
   const cookie = (res.headers.get('set-cookie') || '').split(';')[0];
   return { ok: res.ok, cookie };

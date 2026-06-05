@@ -12,7 +12,7 @@ const OUT = __dirname;
 
   // Authenticate (cookie persists in the context's jar).
   const login = await context.request.post(`${BASE}/api/auth/login`, {
-    data: { email: 'demo@competitor-shadow.com', password: 'Demo1234!' },
+    data: { email: 'demo@nivaria.app', password: 'Demo1234!' },
   });
   if (!login.ok()) { console.error('Login failed:', login.status(), await login.text()); process.exit(1); }
 

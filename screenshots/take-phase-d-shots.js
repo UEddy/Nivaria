@@ -59,7 +59,7 @@ function pageAudit() {
   // Single login, share the cookie storage across every viewport context so we
   // don't hammer the login rate limiter (10 / 15min / IP).
   const seedCtx = await browser.newContext();
-  const login = await seedCtx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@competitor-shadow.com', password: 'Demo1234!' } });
+  const login = await seedCtx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@nivaria.app', password: 'Demo1234!' } });
   if (!login.ok()) throw new Error(`login seed: ${login.status()}`);
   const storageState = await seedCtx.storageState();
   await seedCtx.close();

@@ -5,7 +5,7 @@ const path = require('path');
 const BASE = 'http://localhost:3000';
 
 (async () => {
-  const [, , hash, name, email = 'demo@competitor-shadow.com', password = 'Demo1234!', width = '1440'] = process.argv;
+  const [, , hash, name, email = 'demo@nivaria.app', password = 'Demo1234!', width = '1440'] = process.argv;
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: parseInt(width, 10), height: 950 } });
   const login = await ctx.request.post(`${BASE}/api/auth/login`, { data: { email, password } });
