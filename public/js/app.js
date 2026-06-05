@@ -342,7 +342,7 @@ const App = {
       try {
         if (sessionStorage.getItem('cs-welcome-pro')) {
           sessionStorage.removeItem('cs-welcome-pro');
-          setTimeout(() => toast('You\'re on Pro — all features unlocked. 🎉', 'success'), 600);
+          setTimeout(() => toast('You\'re on Pro: all features unlocked. 🎉', 'success'), 600);
         }
       } catch (_) {}
     } else if (page === 'competitors') {
@@ -681,7 +681,7 @@ const Pricing = {
       }
       if (p.id === 'pro') {
         return current === 'pro'
-          ? `<button class="btn btn-secondary w-full" onclick="navigate('/settings')">Current plan — Manage</button>`
+          ? `<button class="btn btn-secondary w-full" onclick="navigate('/settings')">Current plan · Manage</button>`
           : `<button class="btn btn-primary w-full" onclick="Billing.subscribe(this)">Subscribe</button>`;
       }
       // team / business → waitlist

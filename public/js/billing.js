@@ -7,7 +7,7 @@ const X_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stro
 
 const PRO_INCLUDES = [
   '10 competitors with automatic daily monitoring',
-  'Slack & Discord alerts + calendar briefings',
+  'Slack & Discord alerts and calendar briefings',
   'AI outreach playbooks',
   'Win/loss correlation & historical pattern analysis',
 ];
@@ -83,7 +83,7 @@ const Billing = {
       <div class="modal-header"><div class="modal-title">Cancel Pro?</div>
         <button class="modal-close" onclick="closeModal()">${X_ICON}</button></div>
       <div class="modal-body"><p style="color:var(--txt-2);line-height:1.7">
-        Your Pro features stay active until the end of the current billing period — you won't lose access immediately. You can resume any time before then.</p></div>
+        Your Pro features stay active until the end of the current billing period. You won't lose access immediately. You can resume any time before then.</p></div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeModal()">Keep Pro</button>
         <button class="btn btn-danger" onclick="Billing.doCancel(this)">Cancel at period end</button>
@@ -129,7 +129,7 @@ const Billing = {
     const isTeam = tier === 'team';
     const label = isTeam ? 'Team' : 'Business';
     const blurb = isTeam
-      ? 'Team adds shared workspaces and multi-user seats. Launching soon — leave your email and we’ll notify you first.'
+      ? 'Team adds shared workspaces and multi-user seats. Launching soon. Leave your email and we’ll notify you first.'
       : 'Business adds advanced monitoring, custom integrations, and dedicated support. Tell us about your use case and we’ll be in touch.';
     const field = isTeam
       ? `<div class="form-group">
@@ -181,7 +181,7 @@ const Billing = {
       const r = await API.joinWaitlist(payload);
       const label = tier === 'team' ? 'Team' : 'Business';
       const msg = r.alreadySignedUp
-        ? `You’re already on the ${label} waitlist — we’ll be in touch.`
+        ? `You’re already on the ${label} waitlist. We’ll be in touch.`
         : `You’re on the ${label} waitlist! We’ll email ${esc(email)} when it’s ready.`;
       el('wl-body').innerHTML = `
         <div class="wl-success">
@@ -208,7 +208,7 @@ const Billing = {
       <div class="modal-header"><div class="modal-title">Delete account</div>
         <button class="modal-close" onclick="closeModal()">${X_ICON}</button></div>
       <div class="modal-body" id="del-body">
-        <p style="color:var(--txt-2);line-height:1.7">This schedules permanent deletion of your account and all workspace data in <strong>30 days</strong>. We’ll email you a cancellation link — you can undo it any time before then.</p>
+        <p style="color:var(--txt-2);line-height:1.7">This schedules permanent deletion of your account and all workspace data in <strong>30 days</strong>. We’ll email you a cancellation link. You can undo it any time before then.</p>
         <div class="form-group">
           <label class="form-label" for="del-pw">Confirm your password to continue</label>
           <input class="form-input" id="del-pw" type="password" autocomplete="current-password" placeholder="Your password" />
@@ -257,7 +257,7 @@ function showUpgradeModal(info) {
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Maybe later</button>
-      <button class="btn btn-primary" onclick="Billing.upgradeFromGate()">Upgrade — $20/month</button>
+      <button class="btn btn-primary" onclick="Billing.upgradeFromGate()">Upgrade ($20/month)</button>
     </div>`);
 }
 window.showUpgradeModal = showUpgradeModal;

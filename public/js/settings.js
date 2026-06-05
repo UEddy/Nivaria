@@ -118,14 +118,14 @@ const Settings = {
         <div class="set-plan-row">
           ${badge}
           <span class="set-plan-meta">1 competitor · manual checks</span>
-          <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="Billing.subscribe(this)">Upgrade to Pro — $20/mo</button>
+          <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="Billing.subscribe(this)">Upgrade to Pro ($20/mo)</button>
         </div>
         <span class="form-hint">Unlock 10 competitors, daily monitoring, alerts, calendar briefings, outreach playbooks, and win/loss correlation.</span>`;
     } else if (status === 'past_due') {
       body = `
         <div class="set-plan-row">
           ${badge}
-          <span class="set-plan-meta" style="color:var(--red)">Payment failed — update your card to keep Pro.</span>
+          <span class="set-plan-meta" style="color:var(--red)">Payment failed. Update your card to keep Pro.</span>
           <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="Billing.openPortal(this)">Update payment</button>
         </div>`;
     } else if (cancel) {
