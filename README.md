@@ -8,7 +8,7 @@ Nivaria watches competitor websites on a schedule, detects meaningful changes, a
 
 ## Why I built this
 
-I demonstrated my ability to scope, develop, and release a true full-stack solution on short notice by building Nivaria from start to finish in 48 hours using Claude Code. The choice of WASM SQLite over a native driver, the synchronous DB adapter, the DB-backed session storage, the tier-enforcement layer, the multi-step OTP authentication flow, and the AI prompt structure for briefs are all architectural choices that I oversaw. The idea was to demonstrate both rapidity and judgment.
+I built Nivaria from the ground up as a full-stack solution to help B2B businesses turn competitor activity into closed deals. I personally drove the architectural decisions: selecting WASM SQLite over a native driver, building the synchronous database adapter, designing database-backed session storage, implementing the tier-enforcement layer, creating the multi-step OTP authentication flow, and engineering the AI prompts that generate competitor briefs. The aim was to deliver a product that combines technical depth with real commercial judgment, built for the way B2B sales and marketing teams actually work.
 
 ## Features
 
@@ -127,7 +127,7 @@ Connect a Slack workspace so reps can log deals without leaving Slack.
 
 1. **Create a Slack app** at [api.slack.com/apps](https://api.slack.com/apps) ("From scratch").
 2. **Signing secret** (required): Basic Information -> App Credentials -> Signing Secret. Put it in `.env` as `SLACK_SIGNING_SECRET`. The slash command endpoint verifies every request's signature and rejects anything older than 5 minutes (replay protection).
-3. **Bot scope + OAuth**: OAuth & Permissions -> Bot Token Scopes -> add `commands`. Add `http://localhost:3000/api/slack/oauth/callback` (adjust host for production) under Redirect URLs. Copy the Client ID and Client Secret into `.env` as `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET` / `SLACK_REDIRECT_URI`. This powers the "Add to Slack" button in Settings, which links the installing Slack user to their Nivaria account.
+3. **Bot scope and OAuth**: OAuth & Permissions -> Bot Token Scopes -> add `commands`. Add `http://localhost:3000/api/slack/oauth/callback` (adjust host for production) under Redirect URLs. Copy the Client ID and Client Secret into `.env` as `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET` / `SLACK_REDIRECT_URI`. This powers the "Add to Slack" button in Settings, which links the installing Slack user to their Nivaria account.
 4. **Slash command**: Slash Commands -> Create New Command:
    - Command: `/foresight`
    - Request URL: `https://YOUR_HOST/api/slack/commands`
