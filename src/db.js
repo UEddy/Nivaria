@@ -584,7 +584,9 @@ async function initDb() {
       .run('demo@nivaria.app', 'Demo User', 'pro', apiKey);
     db.prepare('INSERT INTO settings (user_id) VALUES (?)').run(1);
     seedDemoData();
-    console.log(`\n✅ Demo account created. API Key: ${apiKey}\n`);
+    // Never log the API key value — it persists forever in deployment logs.
+    // The key lives only in the DB and is shown in the UI at creation time.
+    console.log('\n✅ Demo account created.\n');
   }
 
   // Ensure demo user has a password for testing
@@ -594,7 +596,8 @@ async function initDb() {
     const hash = bcrypt.hashSync('Demo1234!', 12);
     db.prepare('UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = 1').run(hash);
     saveDb();
-    console.log('✅ Demo credentials: demo@nivaria.app / Demo1234!');
+    // Don't log the password value — credentials must not appear in any log stream.
+    console.log('✅ Demo credentials configured for demo@nivaria.app');
   }
 
   // Phase 9: seed a populated win/loss dataset for the demo user so the ROI
