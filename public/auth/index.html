@@ -383,12 +383,38 @@
       transition: background 0.3s, border-color 0.3s, color 0.2s;
     }
 
+    /* ── OTP expiry countdown ────────────────────────────────────────── */
+    .otp-expiry {
+      text-align: center;
+      font-size: 12.5px; font-weight: 600;
+      color: var(--a-txt-3);
+      margin-bottom: 18px;
+      font-variant-numeric: tabular-nums;
+    }
+    .otp-expiry.expired { color: var(--a-err-txt); }
+
     /* ── Resend row ──────────────────────────────────────────────────── */
     .resend-row {
       text-align: center; margin-top: 14px;
       font-size: 13px; color: var(--a-txt-muted);
     }
     .resend-row .link-btn { font-size: 13px; }
+    .link-btn:disabled { color: var(--a-txt-muted); cursor: not-allowed; text-decoration: none; }
+
+    /* When the code has expired, the resend action becomes a prominent pill. */
+    .link-btn.resend-prominent {
+      font-weight: 700; text-decoration: none;
+      background: var(--a-accent-dim);
+      border: 1px solid var(--a-accent-dim-bdr);
+      border-radius: 8px; padding: 6px 12px;
+    }
+    .link-btn.resend-prominent:hover { color: var(--a-accent-hover); }
+
+    /* ── Start-over link (OTP screen) ────────────────────────────────── */
+    .auth-switch-inline {
+      text-align: center; margin-top: 16px;
+      font-size: 13px; color: var(--a-txt-muted);
+    }
 
     /* ── Bottom switch ───────────────────────────────────────────────── */
     .auth-switch {
@@ -574,7 +600,14 @@ const State = {
   verifiedToken: '',
   resendTimer: null,
   resendSeconds: 0,
+  expiryTimer: null,
+  expirySeconds: 0,
+  codeExpired: false,
 };
+
+// OTP validity must mirror the backend (10 min); resend cooldown is anti-spam.
+const OTP_TTL_SECONDS = 600;
+const RESEND_COOLDOWN_SECONDS = 30;
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 
@@ -610,14 +643,14 @@ function render() {
     wireLoginForm();
   } else if (State.mode === 'register') {
     if (State.step === 1) { root.innerHTML = renderRegisterEmail(); wireRegisterEmailForm(); }
-    else if (State.step === 2) { root.innerHTML = renderOtp('register'); wireOtpInputs('register'); startResendTimer(); }
+    else if (State.step === 2) { root.innerHTML = renderOtp('register'); wireOtpInputs('register'); startOtpTimers(); }
     else if (State.step === 3) { root.innerHTML = renderPassword('register'); wirePasswordForm('register'); }
     sw.innerHTML = State.step === 1
       ? `Already have an account? <button class="link-btn" onclick="switchMode('login')">Sign in</button>`
       : '';
   } else if (State.mode === 'forgot') {
     if (State.step === 1) { root.innerHTML = renderForgotEmail(); wireForgotEmailForm(); }
-    else if (State.step === 2) { root.innerHTML = renderOtp('forgot'); wireOtpInputs('forgot'); startResendTimer(); }
+    else if (State.step === 2) { root.innerHTML = renderOtp('forgot'); wireOtpInputs('forgot'); startOtpTimers(); }
     else if (State.step === 3) { root.innerHTML = renderPassword('forgot'); wirePasswordForm('forgot'); }
     sw.innerHTML = State.step === 1
       ? `<button class="link-btn" onclick="switchMode('login')">Back to sign in</button>`
@@ -626,8 +659,8 @@ function render() {
 }
 
 function switchMode(mode) {
-  clearResendTimer();
-  State.mode = mode; State.step = 1; State.email = ''; State.verifiedToken = '';
+  clearOtpTimers();
+  State.mode = mode; State.step = 1; State.email = ''; State.verifiedToken = ''; State.codeExpired = false;
   history.replaceState(null, '', mode === 'register' ? '/register' : '/login');
   render();
 }
@@ -689,7 +722,8 @@ function renderOtp(flow) {
       Back
     </button>
     <h1 class="auth-title">${label}</h1>
-    <p class="auth-sub">${sub}. It expires in 10 minutes.</p>
+    <p class="auth-sub">${sub}.</p>
+    <div class="otp-expiry" id="otp-expiry"></div>
     <div class="msg msg-error" id="msg"></div>
     <div class="otp-inputs" id="otp-wrap">
       <input class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="one-time-code" />
@@ -701,7 +735,10 @@ function renderOtp(flow) {
     </div>
     <button class="btn btn-primary" id="submit-btn" onclick="submitOtp('${flow}')" disabled>Verify code</button>
     <div class="resend-row" id="resend-row">
-      <span>Resend code in <strong id="resend-count">60</strong>s</span>
+      Didn't get it? <button class="link-btn" id="resend-btn" onclick="resendOtp()" disabled>Resend code</button>
+    </div>
+    <div class="auth-switch-inline">
+      <button class="link-btn" onclick="startOver()">Already verified or want to start over?</button>
     </div>`;
 }
 
@@ -874,7 +911,7 @@ async function doRegisterRequest(email) {
   try {
     await post('/api/auth/register/request', { email });
     State.email = email; State.step = 2;
-    clearResendTimer(); render();
+    clearOtpTimers(); render();
   } catch (err) {
     showMsg(err.message || 'Failed to send code. Please try again.');
     setLoading(false);
@@ -889,7 +926,7 @@ async function submitOtp(flow) {
     const endpoint = flow === 'register' ? '/api/auth/register/verify' : '/api/auth/forgot/verify';
     const res = await post(endpoint, { email: State.email, code });
     State.verifiedToken = res.token; State.step = 3;
-    clearResendTimer(); render();
+    clearOtpTimers(); render();
   } catch (err) {
     showMsg(err.message || 'Invalid code. Please try again.');
     setLoading(false);
@@ -914,7 +951,7 @@ async function doForgotRequest(email) {
   try {
     await post('/api/auth/forgot/request', { email });
     State.email = email; State.step = 2;
-    clearResendTimer(); render();
+    clearOtpTimers(); render();
   } catch (err) {
     showMsg(err.message || 'Failed to send code. Please try again.');
     setLoading(false);
@@ -926,7 +963,7 @@ async function doForgotReset(password) {
   try {
     await post('/api/auth/forgot/reset', { email: State.email, token: State.verifiedToken, password });
     State.mode = 'login'; State.step = 1; State.email = ''; State.verifiedToken = '';
-    clearResendTimer(); render();
+    clearOtpTimers(); render();
     setTimeout(() => showMsg('Password updated. Please sign in with your new password.', 'success'), 50);
   } catch (err) {
     showMsg(err.message || 'Something went wrong. Please try again.');
@@ -935,13 +972,25 @@ async function doForgotReset(password) {
 }
 
 async function resendOtp() {
+  const btn = document.getElementById('resend-btn');
+  if (btn?.disabled) return; // guard against rapid double-clicks
   const flow = State.mode;
-  const endpoint = flow === 'register' ? '/api/auth/register/request' : '/api/auth/forgot/request';
+  const endpoint = flow === 'register' ? '/api/auth/register/resend' : '/api/auth/forgot/request';
+
+  // Start the 30s cooldown immediately so the button can't be spammed while the
+  // request is in flight.
+  startResendCooldown();
   try {
     await post(endpoint, { email: State.email });
-    clearResendTimer(); startResendTimer();
-    showMsg('A new code has been sent.', 'info');
+    // A fresh code was issued — restart the expiry countdown and clear inputs.
+    startExpiryTimer();
+    clearOtpInputs();
+    showMsg('New code sent. Check your email or logs.', 'success');
   } catch (err) {
+    // Let the user retry right away on failure.
+    clearResendTimer();
+    State.resendSeconds = 0;
+    updateResendUI();
     showMsg(err.message || 'Failed to resend code.');
   }
 }
@@ -1024,27 +1073,99 @@ function checkPwRules() {
   if (btn) btn.disabled = !allOk;
 }
 
-function goBack() { clearResendTimer(); State.step = 1; render(); }
+function goBack()   { clearOtpTimers(); State.step = 1; State.codeExpired = false; render(); }
 
-function startResendTimer() {
-  State.resendSeconds = 60;
-  updateResendUI();
+// Returns to step 1 of the current flow (the signup form, for register). Lets a
+// user who already has an account — or who entered the wrong email — get out of
+// the verification screen without being stuck.
+function startOver() { clearOtpTimers(); State.step = 1; State.verifiedToken = ''; State.codeExpired = false; render(); }
+
+// ── OTP screen timers ────────────────────────────────────────────────────────
+// Two independent countdowns run on the verification screen:
+//   • expiry   — how long the current code stays valid (mirrors the backend)
+//   • cooldown — anti-spam delay before "Resend code" is clickable again
+
+function startOtpTimers() {
+  startExpiryTimer();      // sets codeExpired = false before the resend UI reads it
+  startResendCooldown();
+}
+function clearOtpTimers() {
   clearResendTimer();
+  clearExpiryTimer();
+}
+
+// Resend cooldown — disables the button for RESEND_COOLDOWN_SECONDS.
+function startResendCooldown() {
+  clearResendTimer();
+  State.resendSeconds = RESEND_COOLDOWN_SECONDS;
+  updateResendUI();
   State.resendTimer = setInterval(() => {
     State.resendSeconds--;
-    if (State.resendSeconds <= 0) {
-      clearResendTimer();
-      const row = document.getElementById('resend-row');
-      if (row) row.innerHTML = `Didn't get it? <button class="link-btn" onclick="resendOtp()">Resend code</button>`;
-    } else { updateResendUI(); }
+    if (State.resendSeconds <= 0) clearResendTimer();
+    updateResendUI();
   }, 1000);
 }
 function updateResendUI() {
-  const el = document.getElementById('resend-count');
-  if (el) el.textContent = State.resendSeconds;
+  const btn = document.getElementById('resend-btn');
+  if (!btn) return;
+  if (State.resendSeconds > 0) {
+    btn.disabled = true;
+    btn.textContent = `Resend code in ${State.resendSeconds}s`;
+    btn.classList.remove('resend-prominent');
+  } else {
+    btn.disabled = false;
+    btn.textContent = 'Resend code';
+    // Draw attention to the resend action once the code has expired.
+    btn.classList.toggle('resend-prominent', State.codeExpired);
+  }
 }
 function clearResendTimer() {
   if (State.resendTimer) { clearInterval(State.resendTimer); State.resendTimer = null; }
+}
+
+// Expiry countdown — mirrors the 10-minute backend OTP TTL.
+function startExpiryTimer() {
+  clearExpiryTimer();
+  State.expirySeconds = OTP_TTL_SECONDS;
+  State.codeExpired = false;
+  updateExpiryUI();
+  State.expiryTimer = setInterval(() => {
+    State.expirySeconds--;
+    if (State.expirySeconds <= 0) {
+      clearExpiryTimer();
+      State.codeExpired = true;
+      // Force-enable the resend button with prominence (the 30s cooldown has
+      // long since elapsed by the 10-minute mark, but be defensive).
+      clearResendTimer();
+      State.resendSeconds = 0;
+      updateResendUI();
+    }
+    updateExpiryUI();
+  }, 1000);
+}
+function updateExpiryUI() {
+  const el = document.getElementById('otp-expiry');
+  if (!el) return;
+  if (State.codeExpired) {
+    el.className = 'otp-expiry expired';
+    el.textContent = 'Your code has expired. Request a new one below.';
+  } else {
+    const m = Math.floor(State.expirySeconds / 60);
+    const s = String(State.expirySeconds % 60).padStart(2, '0');
+    el.className = 'otp-expiry';
+    el.textContent = `Code expires in ${m}:${s}`;
+  }
+}
+function clearExpiryTimer() {
+  if (State.expiryTimer) { clearInterval(State.expiryTimer); State.expiryTimer = null; }
+}
+
+// Clears the 6 digit boxes and re-disables the verify button (used after a resend).
+function clearOtpInputs() {
+  document.querySelectorAll('.otp-digit').forEach(i => { i.value = ''; i.classList.remove('filled'); });
+  const sb = document.getElementById('submit-btn');
+  if (sb) sb.disabled = true;
+  document.querySelector('.otp-digit')?.focus();
 }
 
 // ── Eye icon toggle ────────────────────────────────────────────────────────────
@@ -1111,6 +1232,7 @@ window.submitOtp    = submitOtp;
 window.resendOtp    = resendOtp;
 window.switchMode   = switchMode;
 window.goBack       = goBack;
+window.startOver    = startOver;
 window.checkPwRules = checkPwRules;
 window.toggleEye    = toggleEye;
 

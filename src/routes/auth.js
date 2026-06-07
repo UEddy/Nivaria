@@ -124,6 +124,55 @@ router.post('/register/request', limits.register, async (req, res) => {
   }
 });
 
+// ── Registration — Resend OTP ─────────────────────────────────────────────────
+// Explicit "Resend code" action from the verification page. Unlike
+// /register/request (which reuses a still-valid code so an accidental double
+// submit doesn't churn the OTP), a resend is a deliberate user action — usually
+// because the previous code expired — so we ALWAYS invalidate any outstanding
+// code and issue a fresh one.
+
+router.post('/register/resend', limits.register, async (req, res) => {
+  const email = sanitizeEmail(req.body.email);
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: 'Invalid email address' });
+  }
+
+  const db = getDb();
+
+  // Already verified — nothing to resend; the user should just log in.
+  const existing = db.prepare('SELECT email_verified FROM users WHERE email = ?').get(email);
+  if (existing?.email_verified) {
+    return res.status(400).json({ error: 'An account already exists with this email. Please log in.' });
+  }
+
+  // Pending-verification state is represented by a prior 'register' OTP for this
+  // email (no users row exists until /register/complete). Requiring one stops
+  // this endpoint from being used to blast codes at addresses that never began
+  // signup.
+  const priorOtp = db.prepare(
+    "SELECT id FROM otp_codes WHERE email = ? AND purpose = 'register' ORDER BY id DESC LIMIT 1"
+  ).get(email);
+  if (!priorOtp) {
+    return res.status(400).json({ error: 'No pending verification for this email. Please start signup again.' });
+  }
+
+  // Invalidate every outstanding code, then issue a fresh one.
+  const code = generateOtp();
+  db.prepare("UPDATE otp_codes SET used = 1 WHERE email = ? AND purpose = 'register' AND used = 0").run(email);
+  db.prepare('INSERT INTO otp_codes (email, code, purpose, expires_at) VALUES (?, ?, ?, ?)').run(
+    email, code, 'register', new Date(Date.now() + 10 * 60 * 1000).toISOString()
+  );
+
+  // sendOtpEmail never throws on a delivery failure (it falls back to logging the
+  // OTP under [EMAIL_FALLBACK]); guard anyway so an unexpected throw can't 500.
+  try {
+    await sendOtpEmail(email, code, 'register');
+  } catch (err) {
+    console.error('OTP resend email error:', err.message);
+  }
+  res.json({ sent: true });
+});
+
 // ── Registration — Step 2: verify OTP ─────────────────────────────────────────
 
 router.post('/register/verify', limits.otp, (req, res) => {
