@@ -163,8 +163,9 @@ router.post('/register/resend', limits.register, async (req, res) => {
     email, code, 'register', new Date(Date.now() + 10 * 60 * 1000).toISOString()
   );
 
-  // sendOtpEmail never throws on a delivery failure (it falls back to logging the
-  // OTP under [EMAIL_FALLBACK]); guard anyway so an unexpected throw can't 500.
+  // sendOtpEmail never throws on a delivery failure (it logs the error under
+  // [EMAIL_DELIVERY_FAILED] and degrades gracefully); guard anyway so an
+  // unexpected throw can't 500.
   try {
     await sendOtpEmail(email, code, 'register');
   } catch (err) {

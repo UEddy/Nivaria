@@ -985,7 +985,7 @@ async function resendOtp() {
     // A fresh code was issued — restart the expiry countdown and clear inputs.
     startExpiryTimer();
     clearOtpInputs();
-    showMsg('New code sent. Check your email or logs.', 'success');
+    showMsg('New code sent. Check your email.', 'success');
   } catch (err) {
     // Let the user retry right away on failure.
     clearResendTimer();

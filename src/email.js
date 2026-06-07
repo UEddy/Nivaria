@@ -8,28 +8,27 @@ const FROM = process.env.RESEND_FROM || 'Nivaria <onboarding@resend.dev>';
 
 // ── OTP delivery (with graceful fallback) ──────────────────────────────────────
 //
-// TEMPORARY (Phase 12, pre-12D): the Resend domain for nivaria.app is not yet
-// verified, so production email delivery can fail. Rather than block signup, we
-// catch ANY delivery failure, log the OTP to the console with an [EMAIL_FALLBACK]
-// prefix (greppable in Railway logs), and return success to the caller so the
-// user still sees "verification code sent" and can complete signup by pasting
-// the OTP we read from the logs.
+// Sends the OTP via Resend (the nivaria.app domain was verified in Phase 12D).
+// If delivery fails for any reason (missing/bad key, timeout, network error) we
+// log the error type, recipient, and purpose under [EMAIL_DELIVERY_FAILED] — but
+// NEVER the OTP value itself. The code lives only in the database and in the
+// delivered email; it must appear nowhere in our logs.
 //
-// This INTENTIONALLY logs the OTP, which is sensitive. It is a known, accepted
-// trade-off only while Resend is being set up, and MUST be removed once Phase
-// 12D verifies the domain (tracked as a follow-up commit). We never log the
-// user's password or session token here — only the OTP, recipient, and purpose.
+// The function swallows delivery failures and returns a non-throwing result so a
+// transient error doesn't 500 the signup. The user simply sees that a code was
+// sent and can use "Resend code" if it never arrives.
 //
-// This function never throws on a delivery failure; callers treat it as success.
+// (Phase 12, pre-12D temporarily logged the OTP to the console as a stopgap while
+// the Resend domain was unverified; that logging was removed once it verified.)
 async function sendOtpEmail(toEmail, code, purpose) {
   const subject = purpose === 'reset'
     ? 'Reset your Nivaria password'
     : 'Your Nivaria verification code';
 
-  // No Resend key configured — covers local dev AND production-before-Resend-is
-  // -set-up. Skip the network call entirely and fall back to console logging.
+  // No Resend key configured (e.g. local dev). Skip the network call. The OTP is
+  // still available in the otp_codes table for anyone with DB access to test with.
   if (!process.env.RESEND_API_KEY) {
-    console.error('[EMAIL_FALLBACK]', { error: 'RESEND_API_KEY not configured', otp: code, recipient: toEmail, purpose });
+    console.error('[EMAIL_DELIVERY_FAILED]', { error: 'RESEND_API_KEY not configured', recipient: toEmail, purpose });
     return { fallback: true, delivered: false };
   }
 
@@ -52,11 +51,11 @@ async function sendOtpEmail(toEmail, code, purpose) {
     );
     return { delivered: true, data: resp.data };
   } catch (err) {
-    // Any Resend failure (unverified domain 403, bad key 401, timeout, network
-    // error). In production this is intentional during Resend setup: STILL log
-    // the OTP so the signup can complete, and do NOT rethrow.
+    // Any Resend failure (bad key 401, timeout, network error). Log the error
+    // type, recipient, and purpose for debugging — never the OTP — and do not
+    // rethrow, so a transient delivery failure can't block signup.
     const errorMessage = err.response?.data ? JSON.stringify(err.response.data) : err.message;
-    console.error('[EMAIL_FALLBACK]', { error: errorMessage, otp: code, recipient: toEmail, purpose });
+    console.error('[EMAIL_DELIVERY_FAILED]', { error: errorMessage, recipient: toEmail, purpose });
     return { fallback: true, delivered: false };
   }
 }

@@ -51,7 +51,7 @@ const { chromium } = require('playwright');
   await resendBtn.click();
   await page.waitForSelector('#msg.show.msg-success');
   const msg = (await page.textContent('#msg')).trim();
-  ok(msg === 'New code sent. Check your email or logs.', `confirmation message ("${msg}")`);
+  ok(msg === 'New code sent. Check your email.', `confirmation message ("${msg}")`);
   ok(await resendBtn.isDisabled(), 'resend button re-disabled after clicking (cooldown restarted)');
   await page.screenshot({ path: 'screenshots/phase12c/03-after-resend.png' });
 
