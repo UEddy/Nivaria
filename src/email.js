@@ -6,10 +6,32 @@ const axios = require('axios');
 // before going to production.
 const FROM = process.env.RESEND_FROM || 'Nivaria <onboarding@resend.dev>';
 
+// ── OTP delivery (with graceful fallback) ──────────────────────────────────────
+//
+// TEMPORARY (Phase 12, pre-12D): the Resend domain for nivaria.app is not yet
+// verified, so production email delivery can fail. Rather than block signup, we
+// catch ANY delivery failure, log the OTP to the console with an [EMAIL_FALLBACK]
+// prefix (greppable in Railway logs), and return success to the caller so the
+// user still sees "verification code sent" and can complete signup by pasting
+// the OTP we read from the logs.
+//
+// This INTENTIONALLY logs the OTP, which is sensitive. It is a known, accepted
+// trade-off only while Resend is being set up, and MUST be removed once Phase
+// 12D verifies the domain (tracked as a follow-up commit). We never log the
+// user's password or session token here — only the OTP, recipient, and purpose.
+//
+// This function never throws on a delivery failure; callers treat it as success.
 async function sendOtpEmail(toEmail, code, purpose) {
   const subject = purpose === 'reset'
     ? 'Reset your Nivaria password'
     : 'Your Nivaria verification code';
+
+  // No Resend key configured — covers local dev AND production-before-Resend-is
+  // -set-up. Skip the network call entirely and fall back to console logging.
+  if (!process.env.RESEND_API_KEY) {
+    console.error('[EMAIL_FALLBACK]', { error: 'RESEND_API_KEY not configured', otp: code, recipient: toEmail, purpose });
+    return { fallback: true, delivered: false };
+  }
 
   try {
     const resp = await axios.post(
@@ -28,18 +50,14 @@ async function sendOtpEmail(toEmail, code, purpose) {
         timeout: 12000,
       }
     );
-    return resp.data;
+    return { delivered: true, data: resp.data };
   } catch (err) {
-    const resendError = err.response?.data;
-    if (
-      process.env.NODE_ENV !== 'production' &&
-      resendError?.statusCode === 403 &&
-      resendError?.name === 'validation_error'
-    ) {
-      console.warn(`[DEV] Resend blocked delivery to unverified domain. Check your DB otp_codes table for the code (never log codes in production).`);
-      return { devFallback: true };
-    }
-    throw err;
+    // Any Resend failure (unverified domain 403, bad key 401, timeout, network
+    // error). In production this is intentional during Resend setup: STILL log
+    // the OTP so the signup can complete, and do NOT rethrow.
+    const errorMessage = err.response?.data ? JSON.stringify(err.response.data) : err.message;
+    console.error('[EMAIL_FALLBACK]', { error: errorMessage, otp: code, recipient: toEmail, purpose });
+    return { fallback: true, delivered: false };
   }
 }
 
