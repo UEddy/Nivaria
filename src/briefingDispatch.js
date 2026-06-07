@@ -65,7 +65,14 @@ Return ONLY a JSON array of strings, no prose, no markdown fences.`;
   const resp = await getAnthropic().messages.create({
     model: HAIKU_MODEL,
     max_tokens: 400,
-    system: 'You write tight, factual pre-meeting prep for B2B sales reps. No fluff.',
+    system:
+`You write tight, factual pre-meeting prep for B2B sales reps. No fluff.
+
+STYLE GUIDELINES (apply to every talking point you write):
+- Do not use em-dashes (—) in any output. Use commas, periods, or parentheses instead.
+- Do not use the terms "battlecards" or "battle cards." Use "competitive briefings," "sales positioning notes," or "competitor playbooks" instead.
+- Write naturally and concisely. Avoid AI-tells like "leverage," "delve," "robust," "seamless," "In summary," or "It's worth noting that."
+- When listing items, use "and" or commas between them, not the "+" character or em-dashes.`,
     messages: [{ role: 'user', content: userPrompt }],
   });
 
