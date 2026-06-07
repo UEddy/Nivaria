@@ -495,9 +495,15 @@ const SCHEMA = `
 `;
 
 async function initDb() {
-  const dataDir = path.join(__dirname, '../data');
-  fs.mkdirSync(dataDir, { recursive: true });
-  dbPath = path.join(dataDir, 'competitor-shadow.db');
+  // DATABASE_PATH lets the deploy target point the SQLite file at a mounted
+  // volume; it falls back to the in-repo ./data dir for local dev. On Railway's
+  // ephemeral filesystem (no volume on the Trial plan) this still works — the DB
+  // simply resets on container restart, which is acceptable for the Phase 12A
+  // test deploy.
+  dbPath = process.env.DATABASE_PATH
+    ? path.resolve(process.env.DATABASE_PATH)
+    : path.join(__dirname, '../data', 'competitor-shadow.db');
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
   const initSqlJs = require('sql.js');
   const SQL = await initSqlJs();
@@ -577,27 +583,34 @@ async function initDb() {
 
   saveDb();
 
-  const existingUser = db.prepare('SELECT id FROM users WHERE id = 1').get();
-  if (!existingUser) {
-    const apiKey = 'cs-' + uuidv4().replace(/-/g, '');
-    db.prepare('INSERT INTO users (email, name, tier, api_key) VALUES (?, ?, ?, ?)')
-      .run('demo@nivaria.app', 'Demo User', 'pro', apiKey);
-    db.prepare('INSERT INTO settings (user_id) VALUES (?)').run(1);
-    seedDemoData();
-    // Never log the API key value — it persists forever in deployment logs.
-    // The key lives only in the DB and is shown in the UI at creation time.
-    console.log('\n✅ Demo account created.\n');
-  }
+  // Demo account (seeded login + sample data) is a DEV-ONLY convenience. It must
+  // never be created in production: shipping a known email/password pair to a
+  // public deployment is an open door. In production the DB boots empty and the
+  // first real signup becomes user #1. The Phase 9 demo-deal seed below is also
+  // implicitly skipped in production because it keys off this user existing.
+  if (process.env.NODE_ENV !== 'production') {
+    const existingUser = db.prepare('SELECT id FROM users WHERE id = 1').get();
+    if (!existingUser) {
+      const apiKey = 'cs-' + uuidv4().replace(/-/g, '');
+      db.prepare('INSERT INTO users (email, name, tier, api_key) VALUES (?, ?, ?, ?)')
+        .run('demo@nivaria.app', 'Demo User', 'pro', apiKey);
+      db.prepare('INSERT INTO settings (user_id) VALUES (?)').run(1);
+      seedDemoData();
+      // Never log the API key value — it persists forever in deployment logs.
+      // The key lives only in the DB and is shown in the UI at creation time.
+      console.log('\n✅ Demo account created.\n');
+    }
 
-  // Ensure demo user has a password for testing
-  const demoUser = db.prepare('SELECT id, password_hash FROM users WHERE id = 1').get();
-  if (demoUser && !demoUser.password_hash) {
-    const bcrypt = require('bcryptjs');
-    const hash = bcrypt.hashSync('Demo1234!', 12);
-    db.prepare('UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = 1').run(hash);
-    saveDb();
-    // Don't log the password value — credentials must not appear in any log stream.
-    console.log('✅ Demo credentials configured for demo@nivaria.app');
+    // Ensure demo user has a password for testing
+    const demoUser = db.prepare('SELECT id, password_hash FROM users WHERE id = 1').get();
+    if (demoUser && !demoUser.password_hash) {
+      const bcrypt = require('bcryptjs');
+      const hash = bcrypt.hashSync('Demo1234!', 12);
+      db.prepare('UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = 1').run(hash);
+      saveDb();
+      // Don't log the password value — credentials must not appear in any log stream.
+      console.log('✅ Demo credentials configured for demo@nivaria.app');
+    }
   }
 
   // Phase 9: seed a populated win/loss dataset for the demo user so the ROI

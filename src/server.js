@@ -72,6 +72,39 @@ const sessionStore = new SqlJsSessionStore();
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+// ── Production env validation — fail fast on missing critical secrets ──────────
+// A predictable SESSION_SECRET lets anyone forge session cookies, so there is no
+// safe fallback in production: we refuse to boot without a real one. Other
+// integrations (Anthropic, Lemon Squeezy, Resend) either degrade gracefully or
+// are wired up in later Phase 12 sub-steps, so they are not hard requirements here.
+const DEV_SESSION_SECRET = 'cs-dev-secret-CHANGE-THIS-IN-PRODUCTION';
+if (IS_PRODUCTION) {
+  const missing = [];
+  if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET === DEV_SESSION_SECRET) {
+    missing.push('SESSION_SECRET (set it to a strong random value)');
+  }
+  if (missing.length) {
+    console.error('❌ Refusing to start in production — missing or invalid env:\n  - ' + missing.join('\n  - '));
+    process.exit(1);
+  }
+}
+
+// ── Trust the Railway reverse proxy ────────────────────────────────────────────
+// Railway terminates TLS at its edge and forwards to the app over HTTP with
+// X-Forwarded-* headers. Trusting the first proxy hop makes req.protocol,
+// req.secure, and req.ip reflect the real client connection — required for
+// secure-cookie emission (production cookies are secure:true) and for correct
+// IP-based rate limiting.
+app.set('trust proxy', 1);
+
+// ── Health check (Railway monitoring) ──────────────────────────────────────────
+// Registered first, before logging/session/static, so it stays cheap and
+// dependency-free: no DB query, no session cookie, not written to the request
+// log. Railway polls this to decide the container is live, so it must answer
+// even while the DB is still initializing.
+app.get('/health', (_req, res) => res.status(200).json({ status: 'ok' }));
 
 // ── Security headers (helmet) ──────────────────────────────────────────────────
 
@@ -127,7 +160,9 @@ app.use(requestLogger);
 
 app.use(session({
   name:             'cs.sid',
-  secret:           process.env.SESSION_SECRET || 'cs-dev-secret-CHANGE-THIS-IN-PRODUCTION',
+  // In production the env guard above guarantees SESSION_SECRET is set, so this
+  // fallback only ever applies in local dev.
+  secret:           process.env.SESSION_SECRET || DEV_SESSION_SECRET,
   resave:           false,
   saveUninitialized: false,
   store:            sessionStore,
