@@ -257,6 +257,20 @@ const BattleCard = {
       const a = c.analysis || {};
       const points = Array.isArray(c.talking_points) ? c.talking_points : (a.talking_points || []);
 
+      // Guard against copying an empty/pending brief. Without this, a brief whose
+      // analysis hasn't been generated yet collapses to just the "Source: … | url"
+      // footer, so the clipboard ends up holding only the competitor URL. Detect
+      // that the brief has no real body and tell the user to wait instead.
+      const nonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;
+      const isPending = c.analysis_status && c.analysis_status !== 'ok';
+      const hasBody = nonEmpty(c.headline) || nonEmpty(a.summary) ||
+        nonEmpty(a.recommended_response) || nonEmpty(c.recommended_response) ||
+        nonEmpty(a.opportunity) || points.length > 0;
+      if (isPending || !hasBody) {
+        toast('Brief not yet generated. Try again in a few minutes.', 'info');
+        return;
+      }
+
       const text = [
         `BRIEF: ${c.competitor_name}`,
         `Date: ${formatDate(c.detected_at)}`,

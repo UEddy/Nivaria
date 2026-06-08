@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const { removePhase9DemoData } = require('./db/migrations/remove-phase9-demo-data');
 
 let db;       // DatabaseWrapper
 let sqlDb;    // raw sql.js Database
@@ -647,6 +648,15 @@ async function initDb() {
   // No-op when NODE_ENV==='production'.
   seedDevProWorkspace();
 
+  // One-time PRODUCTION cleanup of the Phase 9 demo-data leak (see the migration
+  // for the safety model). No-op in dev/test and idempotent in production — once
+  // the demo rows are gone, subsequent boots match nothing and delete nothing.
+  try {
+    removePhase9DemoData(db);
+  } catch (e) {
+    console.warn('[CLEANUP] Phase 9 demo-data cleanup skipped (non-fatal):', e.message);
+  }
+
   saveDb();
   console.log('✅ Database initialized');
   return db;
@@ -816,6 +826,15 @@ function runPhase10WorkspaceMigration() {
 //   • a couple of stalled deals against NovaTech (which has a feature launch);
 //   • several won deals (no competitor) for a realistic win rate.
 function seedPhase9DemoData() {
+  // Demo win/loss data is a DEV-ONLY convenience, same policy as seedDemoData().
+  // It must NEVER seed in production: this function hardcodes competitor_id 1/2/3
+  // for its backdated changes/deals, so in production (where the first real
+  // signup is user #1 and their first competitor is id 1) it would staple
+  // "Acme"/"NovaTech" demo briefs and 18 fake deals onto whatever REAL competitor
+  // happens to occupy those ids. See remove-phase9-demo-data.js for the cleanup.
+  if (process.env.NODE_ENV === 'production') {
+    return; // Demo data is dev-only; never seed in production
+  }
   const now = new Date();
   const dateOffset = (days) => {
     const d = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
