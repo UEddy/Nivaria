@@ -446,6 +446,9 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_workspace_members_ws   ON workspace_members(workspace_id);
 
   -- Waitlist captures for the not-yet-active Team and Business tiers.
+  -- notified_at is reserved for a future "your tier is now live" mailout (NULL
+  -- until that email is sent). A user may join both tiers but not the same tier
+  -- twice — enforced by UNIQUE(email, tier).
   CREATE TABLE IF NOT EXISTS waitlist_signups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL,
@@ -453,8 +456,10 @@ const SCHEMA = `
     team_size_estimate INTEGER,
     use_case TEXT,
     signed_up_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    notified_at DATETIME,
     UNIQUE(email, tier)
   );
+  CREATE INDEX IF NOT EXISTS idx_waitlist_email ON waitlist_signups(email);
 
   -- Webhook audit + idempotency. lemon_squeezy_event_id UNIQUE is the DB-level
   -- guarantee a replayed webhook can never be processed twice. Rows are RETAINED
@@ -576,6 +581,14 @@ async function initDb() {
   const settingsCols = (sqlDb.exec('PRAGMA table_info(settings)')[0]?.values || []).map(v => v[1]);
   if (!settingsCols.includes('briefings_enabled'))     sqlDb.run('ALTER TABLE settings ADD COLUMN briefings_enabled INTEGER DEFAULT 1');
   if (!settingsCols.includes('briefing_lead_minutes')) sqlDb.run('ALTER TABLE settings ADD COLUMN briefing_lead_minutes INTEGER DEFAULT 30');
+
+  // Phase 12: waitlist notification tracking (additive; existing DBs created the
+  // table before this column existed). Index speeds up admin/dup-check lookups.
+  const waitlistCols = (sqlDb.exec('PRAGMA table_info(waitlist_signups)')[0]?.values || []).map(v => v[1]);
+  if (waitlistCols.length && !waitlistCols.includes('notified_at')) {
+    sqlDb.run('ALTER TABLE waitlist_signups ADD COLUMN notified_at DATETIME');
+  }
+  sqlDb.run('CREATE INDEX IF NOT EXISTS idx_waitlist_email ON waitlist_signups(email)');
 
   // Phase 5: speed up per-competitor reverse-chronological lookups used by
   // historicalContext.getCompetitorHistory and the new timeline endpoints.

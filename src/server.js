@@ -30,6 +30,8 @@ const { handleLemonSqueezyWebhook } = require('./lemonSqueezyWebhook');
 const { getUserCurrentWorkspace } = require('./lib/workspace');
 // Phase 11C — public legal pages (Privacy / Terms / Cookies).
 const { registerLegalRoutes } = require('./routes/legal');
+// Phase 12 — developer-only admin views (waitlist), gated by ADMIN_EMAILS.
+const { registerAdminRoutes } = require('./routes/admin');
 
 // ── DB-backed session store ────────────────────────────────────────────────────
 
@@ -309,6 +311,11 @@ app.get('/register', (req, res) => {
 // ── Public legal pages (Phase 11C) ───────────────────────────────────────────────
 // /privacy, /terms, /cookies — no auth, registered before the SPA catch-all.
 registerLegalRoutes(app);
+
+// ── Admin pages (Phase 12) ────────────────────────────────────────────────────────
+// /admin, /admin/waitlist — session auth + ADMIN_EMAILS gate (enforced inside the
+// router). Registered before the SPA catch-all so /admin/* resolves here.
+registerAdminRoutes(app);
 
 // ── Dashboard SPA ──────────────────────────────────────────────────────────────
 
