@@ -93,6 +93,127 @@
     });
   }
 
+  // ── Waitlist modal (Team / Business) ───────────────────────
+  function initWaitlist() {
+    const overlay = document.getElementById('lp-wl-overlay');
+    const modal   = document.getElementById('lp-wl-modal');
+    const form    = document.getElementById('lp-wl-form');
+    const email   = document.getElementById('lp-wl-email');
+    const msg     = document.getElementById('lp-wl-msg');
+    const submit  = document.getElementById('lp-wl-submit');
+    const closeBtn = document.getElementById('lp-wl-close');
+    const titleEl = document.getElementById('lp-wl-title');
+    const descEl  = document.getElementById('lp-wl-desc');
+    const triggers = document.querySelectorAll('[data-waitlist]');
+    if (!overlay || !modal || !form || !triggers.length) return;
+
+    let currentTier = 'team';
+    let lastFocused = null;
+    let submitting = false;
+
+    const label = () => (currentTier === 'team' ? 'Team' : 'Business');
+
+    function setMsg(text, type) {
+      msg.textContent = text || '';
+      msg.className = 'lp-modal-msg' + (type ? ' ' + type : '');
+    }
+
+    function open(tier) {
+      currentTier = tier === 'business' ? 'business' : 'team';
+      titleEl.textContent = `Get notified when ${label()} is available`;
+      descEl.textContent  = `We'll email you when the ${label()} tier launches.`;
+      form.reset();
+      setMsg('');
+      submitting = false;
+      submit.disabled = false;
+      email.disabled = false;
+      submit.textContent = 'Join Waitlist';
+      lastFocused = document.activeElement;
+      overlay.hidden = false;
+      document.body.style.overflow = 'hidden';
+      // Focus the input on the next frame (after the element is visible).
+      requestAnimationFrame(() => email.focus());
+    }
+
+    function close() {
+      overlay.hidden = true;
+      document.body.style.overflow = '';
+      if (lastFocused && typeof lastFocused.focus === 'function') lastFocused.focus();
+    }
+
+    // Keep Tab focus inside the modal while it's open.
+    function trapFocus(e) {
+      if (e.key !== 'Tab') return;
+      const f = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      const items = Array.prototype.filter.call(f, el => !el.disabled && el.offsetParent !== null);
+      if (!items.length) return;
+      const first = items[0];
+      const last  = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+
+    triggers.forEach(btn => {
+      btn.addEventListener('click', () => open(btn.getAttribute('data-waitlist')));
+    });
+
+    closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    document.addEventListener('keydown', (e) => {
+      if (overlay.hidden) return;
+      if (e.key === 'Escape') close();
+      else trapFocus(e);
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (submitting) return;
+      if (!email.checkValidity()) { email.reportValidity(); return; }
+
+      submitting = true;
+      submit.disabled = true;
+      email.disabled = true;
+      setMsg('Submitting…');
+
+      try {
+        const res = await fetch('/api/waitlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.value.trim(), tier_interest: currentTier }),
+        });
+        let data = {};
+        try { data = await res.json(); } catch (_) {}
+
+        if (res.ok) {
+          // Success — leave the form disabled to prevent double-submit.
+          submit.textContent = 'Done';
+          if (data.already_signed_up) {
+            setMsg(`You're already on the waitlist for ${label()}.`, 'success');
+          } else {
+            setMsg(`You're on the list. We'll email you when ${label()} is available.`, 'success');
+          }
+        } else {
+          // Recoverable — re-enable so the user can retry.
+          submitting = false;
+          submit.disabled = false;
+          email.disabled = false;
+          if (res.status === 429) {
+            setMsg('Too many requests right now. Please try again in a little while.', 'error');
+          } else if (res.status === 400) {
+            setMsg(data.error || 'Please enter a valid email address.', 'error');
+          } else {
+            setMsg('Something went wrong. Please try again.', 'error');
+          }
+        }
+      } catch (_) {
+        submitting = false;
+        submit.disabled = false;
+        email.disabled = false;
+        setMsg('Network error. Please check your connection and try again.', 'error');
+      }
+    });
+  }
+
   // ── Init ──────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     initTheme();
@@ -100,5 +221,6 @@
     initScrollAnimations();
     initMobileMenu();
     initVideo();
+    initWaitlist();
   });
 })();

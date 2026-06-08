@@ -709,3 +709,145 @@ img, svg { display: block; }
   background: linear-gradient(90deg, transparent, var(--lp-accent), transparent);
   opacity: 0.3;
 }
+
+/* ── Pricing: 4-tier simplified grid (Phase 12) ──────────────── */
+.lp-pricing-grid-4 {
+  grid-template-columns: repeat(4, 1fr);
+  max-width: 1120px;
+  gap: 20px;
+}
+/* Tablet: two-up. Phone: stacked. These come after the base .lp-pricing-grid
+   media query in source order, so they win for the 4-tier grid. */
+@media (max-width: 980px) {
+  .lp-pricing-grid-4 { grid-template-columns: repeat(2, 1fr); max-width: 640px; }
+}
+@media (max-width: 560px) {
+  .lp-pricing-grid-4 { grid-template-columns: 1fr; max-width: 380px; }
+}
+
+/* Slim card: name + price + subtitle + CTA only (no feature list). Flex column
+   keeps the CTA pinned to the bottom so all four cards align. */
+.lp-plan-card-slim {
+  display: flex;
+  flex-direction: column;
+  min-height: 232px;
+  padding: 32px 28px;
+}
+.lp-plan-card-slim .lp-plan-desc { margin-bottom: 28px; }
+.lp-plan-card-slim .lp-plan-cta { margin-top: auto; }
+
+/* Render the CTA as a proper centered button for both <a> and <button>. */
+.lp-plan-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+/* Secondary CTA for waitlist tiers — outline rather than solid fill. */
+.lp-plan-cta-outline {
+  background: transparent;
+  color: var(--lp-accent);
+  border: 1.5px solid var(--lp-border);
+}
+.lp-plan-cta-outline:hover {
+  background: rgba(99,102,241,0.08);
+  border-color: var(--lp-accent);
+  color: var(--lp-accent);
+  transform: translateY(-1px);
+}
+
+/* ── Waitlist modal (Phase 12) ───────────────────────────────── */
+.lp-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0,0,0,0.62);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: lp-overlay-in 0.18s ease;
+}
+/* Beat the UA [hidden]{display:none} rule, which our display:flex would mask. */
+.lp-modal-overlay[hidden] { display: none; }
+.lp-modal {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  background: var(--lp-bg-2);
+  border: 1px solid var(--lp-border);
+  border-radius: var(--lp-radius-lg);
+  padding: 32px 28px 28px;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.5);
+  animation: lp-modal-in 0.22s cubic-bezier(0.16,1,0.3,1);
+}
+.lp-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--lp-txt-2);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.lp-modal-close:hover { background: var(--lp-bg-card); color: var(--lp-txt); }
+.lp-modal-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--lp-txt);
+  margin-bottom: 8px;
+  padding-right: 28px;
+  line-height: 1.25;
+}
+.lp-modal-desc {
+  font-size: 0.9rem;
+  color: var(--lp-txt-2);
+  line-height: 1.6;
+  margin-bottom: 22px;
+}
+.lp-modal-form { display: flex; flex-direction: column; }
+.lp-modal-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--lp-txt-2);
+  margin-bottom: 8px;
+}
+.lp-modal-input {
+  height: 46px;
+  padding: 0 14px;
+  border-radius: 10px;
+  background: var(--lp-bg-card);
+  border: 1.5px solid var(--lp-border);
+  color: var(--lp-txt);
+  font-size: 0.9375rem;
+  font-family: var(--lp-font);
+  transition: border-color 0.15s ease;
+}
+.lp-modal-input::placeholder { color: var(--lp-txt-3); }
+.lp-modal-input:focus { outline: none; border-color: var(--lp-accent); }
+.lp-modal-msg {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  margin: 10px 0 0;
+}
+.lp-modal-msg:empty { margin: 0; }
+.lp-modal-msg.error   { color: #F87171; }
+.lp-modal-msg.success { color: #34D399; }
+.lp-modal-submit { margin-top: 16px; }
+.lp-modal-submit:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+@keyframes lp-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lp-modal-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-modal-overlay, .lp-modal { animation: none; }
+}
