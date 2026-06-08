@@ -38,6 +38,28 @@ const FEATURE_TO_LIMIT = {
   historical_context: 'historicalContext',
 };
 
+// ── Developer override (Phase 12) ─────────────────────────────────────────────
+// is_developer is a per-user emergency flag (set via /admin/set-developer) that
+// grants UNLIMITED Pro feature access regardless of subscription state. It is a
+// hard override, not subject to expiration.
+//
+// It deliberately lives in the FEATURE-ACCESS layer only. getWorkspaceTier()
+// below is NOT overridden, so billing/checkout (src/routes/billing.js) always
+// sees the REAL Lemon Squeezy subscription state — paid-tier logic is unaffected.
+function isDeveloperUser(userId) {
+  if (!userId) return false;
+  const u = getDb().prepare('SELECT is_developer FROM users WHERE id = ?').get(userId);
+  return !!(u && u.is_developer);
+}
+
+// Resolve the override via a workspace's owner, so it applies both in request
+// handlers and in the background scheduler (which only has workspace_id).
+function workspaceOwnerIsDeveloper(workspaceId) {
+  if (!workspaceId) return false;
+  const w = getDb().prepare('SELECT owner_user_id FROM workspaces WHERE id = ?').get(workspaceId);
+  return w ? isDeveloperUser(w.owner_user_id) : false;
+}
+
 // Effective tier, accounting for cancellation grace periods.
 function getWorkspaceTier(workspaceId) {
   if (!workspaceId) return 'free';
@@ -65,6 +87,8 @@ function getLimits(workspaceId) {
 }
 
 function canWorkspaceAccess(workspaceId, feature) {
+  // Developer override: unlimited access regardless of subscription state.
+  if (workspaceOwnerIsDeveloper(workspaceId)) return true;
   const key = FEATURE_TO_LIMIT[feature];
   if (!key) return false;
   return !!getLimits(workspaceId)[key];
@@ -76,6 +100,8 @@ function maxCompetitors(workspaceId) {
 
 // True if the workspace can add one more competitor at its current count.
 function canAddCompetitor(workspaceId, currentCount) {
+  // Developer override: no competitor cap.
+  if (workspaceOwnerIsDeveloper(workspaceId)) return true;
   const max = maxCompetitors(workspaceId);
   if (max === -1) return true;
   return currentCount < max;
@@ -91,7 +117,9 @@ function upgradeRequired(res, feature) {
   });
 }
 
-// Express middleware: deny with 402 + a gate_violation audit entry.
+// Express middleware: deny with 402 + a gate_violation audit entry. The
+// developer override is honoured here too, since canWorkspaceAccess() bypasses
+// for a developer-owned workspace (so next() is called, no violation logged).
 function requireFeature(feature) {
   return (req, res, next) => {
     const wsId = req.workspaceId;
@@ -105,4 +133,5 @@ module.exports = {
   TIER_LIMITS, FEATURE_INFO,
   getWorkspaceTier, getLimits, canWorkspaceAccess,
   maxCompetitors, canAddCompetitor, upgradeRequired, requireFeature,
+  isDeveloperUser, workspaceOwnerIsDeveloper,
 };

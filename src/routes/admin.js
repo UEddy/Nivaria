@@ -1,16 +1,24 @@
-// Phase 12 — developer-only admin views. Currently a single page: the
-// Team/Business waitlist. Access is gated to the emails listed in the
-// ADMIN_EMAILS env var (comma-separated). This is a deliberately minimal
-// stand-in for a real role system (slated for a later phase).
+// Phase 12 — developer-only admin views, gated by the ADMIN_EMAILS env var
+// (comma-separated). A deliberately minimal stand-in for a real role system.
 //
-// Mounted directly on the app (not as a sub-router) so the paths stay /admin
-// and /admin/waitlist, registered BEFORE the SPA catch-all in server.js.
+// Pages:
+//   GET  /admin                 → redirect to /admin/waitlist
+//   GET  /admin/waitlist        → Team/Business waitlist table
+//   GET  /admin/users           → user list with is_developer status
+//   GET  /admin/set-developer   → form to toggle a user's is_developer flag
+//   POST /admin/set-developer   → apply the toggle (CSRF-protected, audited)
+//
+// Mounted directly on the app (not as a sub-router) so paths stay /admin*,
+// registered BEFORE the SPA catch-all in server.js.
 
+const crypto  = require('crypto');
+const express = require('express');
 const { getDb } = require('../db');
 const { logAudit } = require('../lib/audit');
 
-// Parse ADMIN_EMAILS once at module load. Comma-separated, case-insensitive,
-// whitespace-trimmed. Empty/unset → nobody is an admin (safe default).
+// Parse ADMIN_EMAILS at call time (so an env change takes effect on restart
+// without code edits). Comma-separated, case-insensitive, whitespace-trimmed.
+// Empty/unset → nobody is an admin (safe default).
 function getAdminEmails() {
   return String(process.env.ADMIN_EMAILS || '')
     .split(',')
@@ -23,7 +31,7 @@ function isAdminEmail(email) {
   return getAdminEmails().includes(String(email).trim().toLowerCase());
 }
 
-// Minimal HTML escaper for user-controlled values rendered into the table.
+// Minimal HTML escaper for user-controlled values rendered into pages.
 function esc(v) {
   if (v == null) return '';
   return String(v)
@@ -34,20 +42,40 @@ function esc(v) {
     .replace(/'/g, '&#39;');
 }
 
+// Constant-time string compare for the CSRF token.
+function safeEqual(a, b) {
+  const ba = Buffer.from(String(a || ''));
+  const bb = Buffer.from(String(b || ''));
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
+
 // Guard: must be logged in (else → /login) AND an admin email (else → 403).
-// Resolves req.adminUser on success. Used for browser-facing /admin pages, so
-// it redirects rather than returning a JSON 401 the way the API requireAuth does.
+// Resolves req.adminUser and ensures the session carries a CSRF token (used by
+// the set-developer form). Redirects rather than returning JSON 401 because
+// these are browser-facing pages.
 function requireAdmin(req, res, next) {
-  if (!req.session?.userId) {
-    return res.redirect('/login');
-  }
+  if (!req.session?.userId) return res.redirect('/login');
   const user = getDb().prepare('SELECT id, email FROM users WHERE id = ?').get(req.session.userId);
   if (!user) return res.redirect('/login');
-  if (!isAdminEmail(user.email)) {
-    return res.status(403).type('html').send(renderDenied());
+  if (!isAdminEmail(user.email)) return res.status(403).type('html').send(renderDenied());
+  if (!req.session.csrfToken) {
+    req.session.csrfToken = crypto.randomBytes(32).toString('hex');
+    req.session.save(() => {});
   }
   req.adminUser = user;
   next();
+}
+
+function navHtml(active) {
+  const links = [
+    ['/admin/waitlist', 'Waitlist'],
+    ['/admin/users', 'Users'],
+    ['/admin/set-developer', 'Set developer'],
+  ];
+  return `<nav class="admin-nav">${links
+    .map(([href, label]) => `<a href="${href}"${active === href ? ' class="active"' : ''}>${label}</a>`)
+    .join('')}</nav>`;
 }
 
 function renderShell(title, bodyHtml) {
@@ -71,6 +99,14 @@ function renderShell(title, bodyHtml) {
       -webkit-font-smoothing: antialiased; padding: 40px 24px;
     }
     .admin-wrap { max-width: 1080px; margin: 0 auto; }
+    .admin-nav { display: flex; gap: 6px; margin-bottom: 28px; flex-wrap: wrap; }
+    .admin-nav a {
+      font-size: 0.8125rem; font-weight: 600; color: var(--txt-2);
+      text-decoration: none; padding: 6px 12px; border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .admin-nav a:hover { color: var(--txt); background: var(--bg-card); }
+    .admin-nav a.active { color: #fff; background: var(--accent); border-color: var(--accent); }
     .admin-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
     h1 { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; }
     .admin-sub { color: var(--txt-2); font-size: 0.875rem; margin-bottom: 28px; }
@@ -80,14 +116,35 @@ function renderShell(title, bodyHtml) {
     tbody td { padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--txt); vertical-align: top; }
     tbody tr:last-child td { border-bottom: none; }
     tbody tr:hover { background: rgba(255,255,255,0.02); }
-    .tier-pill { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
-    .tier-team { background: rgba(129,140,248,0.16); color: #A5B4FC; }
-    .tier-business { background: rgba(16,185,129,0.16); color: #34D399; }
+    .pill { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+    .pill-team { background: rgba(129,140,248,0.16); color: #A5B4FC; }
+    .pill-business { background: rgba(16,185,129,0.16); color: #34D399; }
+    .pill-dev { background: rgba(245,158,11,0.18); color: #FBBF24; }
+    .pill-off { background: rgba(255,255,255,0.06); color: var(--txt-3); }
     .muted { color: var(--txt-3); }
     .empty { padding: 40px 16px; text-align: center; color: var(--txt-2); }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
     .back { display: inline-block; margin-top: 24px; font-size: 0.8125rem; color: var(--txt-2); }
+    form.admin-form { max-width: 460px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+    .field { margin-bottom: 18px; }
+    label { display: block; font-size: 0.8125rem; font-weight: 600; color: var(--txt-2); margin-bottom: 6px; }
+    input[type=email], input[type=text], select {
+      width: 100%; height: 42px; padding: 0 12px; border-radius: 9px;
+      background: var(--bg-card); border: 1.5px solid var(--border);
+      color: var(--txt); font-size: 0.9rem; font-family: inherit;
+    }
+    input:focus, select:focus { outline: none; border-color: var(--accent); }
+    button.submit {
+      height: 42px; padding: 0 22px; border: none; border-radius: 9px;
+      background: var(--accent); color: #fff; font-weight: 700; font-size: 0.875rem;
+      font-family: inherit; cursor: pointer;
+    }
+    button.submit:hover { filter: brightness(1.08); }
+    .note { padding: 12px 14px; border-radius: 9px; font-size: 0.85rem; margin-bottom: 20px; }
+    .note-ok  { background: rgba(16,185,129,0.12); color: #34D399; border: 1px solid rgba(16,185,129,0.3); }
+    .note-err { background: rgba(239,68,68,0.12); color: #F87171; border: 1px solid rgba(239,68,68,0.3); }
+    .warn { font-size: 0.8rem; color: var(--txt-3); margin-top: 14px; }
   </style>
 </head>
 <body>
@@ -105,55 +162,171 @@ function renderDenied() {
     <a class="back" href="/app">&larr; Back to app</a>`);
 }
 
+function devPill(on) {
+  return on
+    ? '<span class="pill pill-dev">developer</span>'
+    : '<span class="pill pill-off">no</span>';
+}
+
 function renderWaitlist(rows) {
   const body = rows.length
     ? rows.map(r => `
         <tr>
           <td class="muted">${esc(r.id)}</td>
           <td>${esc(r.email)}</td>
-          <td><span class="tier-pill tier-${esc(r.tier_interest)}">${esc(r.tier_interest)}</span></td>
+          <td><span class="pill pill-${esc(r.tier_interest)}">${esc(r.tier_interest)}</span></td>
           <td>${esc(r.created_at)}</td>
           <td>${r.notified_at ? esc(r.notified_at) : '<span class="muted">—</span>'}</td>
         </tr>`).join('')
     : `<tr><td class="empty" colspan="5">No waitlist signups yet.</td></tr>`;
 
   return renderShell('Waitlist', `
+    ${navHtml('/admin/waitlist')}
     <div class="admin-head">
       <h1>Waitlist signups</h1>
       <span class="admin-sub"><span class="admin-count">${rows.length}</span> total</span>
     </div>
     <p class="admin-sub">Team and Business tier interest captured from the marketing site and in-app upgrade gate.</p>
     <table>
-      <thead>
-        <tr><th>id</th><th>email</th><th>tier_interest</th><th>created_at</th><th>notified_at</th></tr>
-      </thead>
+      <thead><tr><th>id</th><th>email</th><th>tier_interest</th><th>created_at</th><th>notified_at</th></tr></thead>
       <tbody>${body}</tbody>
     </table>
     <a class="back" href="/app">&larr; Back to app</a>`);
 }
 
+function renderUsers(rows) {
+  const devCount = rows.filter(r => r.is_developer).length;
+  const body = rows.length
+    ? rows.map(r => `
+        <tr>
+          <td class="muted">${esc(r.id)}</td>
+          <td>${esc(r.email)}</td>
+          <td>${esc(r.name)}</td>
+          <td>${devPill(!!r.is_developer)}</td>
+          <td>${esc(r.created_at)}</td>
+        </tr>`).join('')
+    : `<tr><td class="empty" colspan="5">No users.</td></tr>`;
+
+  return renderShell('Users', `
+    ${navHtml('/admin/users')}
+    <div class="admin-head">
+      <h1>Users</h1>
+      <span class="admin-sub"><span class="admin-count">${devCount}</span> with developer access</span>
+    </div>
+    <p class="admin-sub">Developer accounts have an emergency override granting unlimited Pro features regardless of subscription. Manage via <a href="/admin/set-developer">Set developer</a>.</p>
+    <table>
+      <thead><tr><th>id</th><th>email</th><th>name</th><th>developer</th><th>created_at</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    <a class="back" href="/app">&larr; Back to app</a>`);
+}
+
+// note: { type: 'ok'|'err', text } | null. prefillEmail: pre-populate the field.
+function renderSetDeveloperForm(csrfToken, note, prefillEmail) {
+  const noteHtml = note
+    ? `<div class="note note-${note.type === 'ok' ? 'ok' : 'err'}">${esc(note.text)}</div>`
+    : '';
+  return renderShell('Set developer', `
+    ${navHtml('/admin/set-developer')}
+    <div class="admin-head"><h1>Set developer flag</h1></div>
+    <p class="admin-sub">Grant or revoke the emergency Pro override for a specific user by email.</p>
+    ${noteHtml}
+    <form class="admin-form" method="POST" action="/admin/set-developer">
+      <input type="hidden" name="_csrf" value="${esc(csrfToken)}">
+      <div class="field">
+        <label for="email">User email</label>
+        <input type="email" id="email" name="email" required placeholder="user@example.com" value="${esc(prefillEmail || '')}">
+      </div>
+      <div class="field">
+        <label for="is_developer">Developer access</label>
+        <select id="is_developer" name="is_developer">
+          <option value="true">Enable (grant unlimited Pro)</option>
+          <option value="false">Disable (normal tier behaviour)</option>
+        </select>
+      </div>
+      <button class="submit" type="submit">Apply</button>
+      <p class="warn">This override grants unlimited Pro features regardless of Lemon Squeezy subscription state. It does not change billing or the user's actual paid tier.</p>
+    </form>
+    <a class="back" href="/admin/users">&larr; Back to users</a>`);
+}
+
 function registerAdminRoutes(app) {
-  // Bare /admin → the only page we have for now.
+  const urlencoded = express.urlencoded({ extended: false });
+
   app.get('/admin', requireAdmin, (_req, res) => res.redirect('/admin/waitlist'));
 
   app.get('/admin/waitlist', requireAdmin, (req, res) => {
-    // Column aliases map the storage names (tier, signed_up_at) onto the
-    // display contract (tier_interest, created_at).
+    // Column aliases map storage names (tier, signed_up_at) onto the display
+    // contract (tier_interest, created_at).
     const rows = getDb().prepare(`
       SELECT id, email, tier AS tier_interest, signed_up_at AS created_at, notified_at
       FROM waitlist_signups
       ORDER BY signed_up_at DESC, id DESC
     `).all();
+    logAudit({ userId: req.adminUser.id, workspaceId: req.workspaceId || null,
+      eventType: 'admin_view_waitlist', eventData: { count: rows.length }, req });
+    res.type('html').send(renderWaitlist(rows));
+  });
 
+  app.get('/admin/users', requireAdmin, (req, res) => {
+    const rows = getDb().prepare(
+      'SELECT id, email, name, is_developer, created_at FROM users ORDER BY id ASC'
+    ).all();
+    logAudit({ userId: req.adminUser.id, workspaceId: req.workspaceId || null,
+      eventType: 'admin_view_users', eventData: { count: rows.length }, req });
+    res.type('html').send(renderUsers(rows));
+  });
+
+  app.get('/admin/set-developer', requireAdmin, (req, res) => {
+    res.type('html').send(renderSetDeveloperForm(req.session.csrfToken, null, req.query.email));
+  });
+
+  app.post('/admin/set-developer', urlencoded, requireAdmin, (req, res) => {
+    const token = req.body?._csrf;
+    if (!safeEqual(token, req.session.csrfToken)) {
+      return res.status(403).type('html').send(
+        renderSetDeveloperForm(req.session.csrfToken, { type: 'err', text: 'Invalid request token. Please reload and try again.' })
+      );
+    }
+
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const value = String(req.body?.is_developer || '') === 'true' ? 1 : 0;
+
+    if (!email) {
+      return res.status(400).type('html').send(
+        renderSetDeveloperForm(req.session.csrfToken, { type: 'err', text: 'An email address is required.' }, email)
+      );
+    }
+
+    const db = getDb();
+    const user = db.prepare('SELECT id, email, is_developer FROM users WHERE email = ?').get(email);
+    if (!user) {
+      return res.status(404).type('html').send(
+        renderSetDeveloperForm(req.session.csrfToken, { type: 'err', text: `No user found with email ${email}.` }, email)
+      );
+    }
+
+    db.prepare('UPDATE users SET is_developer = ? WHERE id = ?').run(value, user.id);
+
+    // Audit every change: which admin set what value on which target.
     logAudit({
       userId: req.adminUser.id,
       workspaceId: req.workspaceId || null,
-      eventType: 'admin_view_waitlist',
-      eventData: { count: rows.length },
+      eventType: 'set_developer_flag',
+      eventData: {
+        target_user_id: user.id,
+        target_email: user.email,
+        is_developer: !!value,
+        previous: !!user.is_developer,
+        set_by: req.adminUser.email,
+      },
       req,
     });
 
-    res.type('html').send(renderWaitlist(rows));
+    const text = value
+      ? `Developer access ENABLED for ${user.email}. They now have unlimited Pro features.`
+      : `Developer access DISABLED for ${user.email}. Normal tier behaviour applies.`;
+    res.type('html').send(renderSetDeveloperForm(req.session.csrfToken, { type: 'ok', text }, email));
   });
 }
 

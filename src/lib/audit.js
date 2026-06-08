@@ -21,6 +21,8 @@ const EVENT_TYPES = Object.freeze([
   'subscription_updated', 'subscription_expired', 'subscription_paused',
   'subscription_unpaused', 'subscription_payment_recovered',
   'webhook_signature_invalid', 'account_deletion_cancelled', 'subscription_reconciled',
+  // Phase 12 admin actions:
+  'admin_view_waitlist', 'admin_view_users', 'set_developer_flag',
 ]);
 
 function hashIp(ip) {

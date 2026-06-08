@@ -530,6 +530,9 @@ async function initDb() {
   if (!userCols.includes('email_verified'))  sqlDb.run('ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0');
   if (!userCols.includes('last_login'))      sqlDb.run('ALTER TABLE users ADD COLUMN last_login DATETIME');
   if (!userCols.includes('session_version')) sqlDb.run('ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 1');
+  // Phase 12: emergency per-user override granting unlimited Pro feature access
+  // regardless of subscription state (see src/lib/tierLimits.js). Admin-set only.
+  if (!userCols.includes('is_developer'))    sqlDb.run('ALTER TABLE users ADD COLUMN is_developer INTEGER DEFAULT 0');
 
   // Migrate competitors table for P0 check-status tracking
   const compCols = (sqlDb.exec('PRAGMA table_info(competitors)')[0]?.values || []).map(v => v[1]);
