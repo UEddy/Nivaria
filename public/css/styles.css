@@ -424,6 +424,7 @@ img, svg { display: block; }
 /* ── Main Wrapper ────────────────────────────────────────────── */
 .main-wrapper {
   flex: 1;
+  min-width: 0;
   margin-left: var(--sidebar-w);
   display: flex;
   flex-direction: column;
@@ -3433,7 +3434,7 @@ html       { overflow-x: hidden; }
   /* Voice radios stack one-per-row on phone — three side-by-side at 375 squeezes
      each into ~95px which truncates the helper text. */
   .voice-radio-group:not(.voice-radio-group--stack) { flex-direction: column; }
-  .voice-radio { min-width: 0; min-height: 44px; padding: 14px 14px; }
+  .voice-radio { min-width: 0; min-height: 44px; padding: 14px 14px; flex: 0 0 auto; }
 
   /* Sticky save row: keep "Save and continue" reachable while filling a long
      form (especially step 2 with 7 fields). Pull out to card edge with negative
@@ -3483,6 +3484,13 @@ html       { overflow-x: hidden; }
 
   /* Two-up settings rows stack. */
   .set-row-2 { grid-template-columns: 1fr; gap: 14px; }
+
+  /* Plan row: .btn is white-space:nowrap and the row doesn't wrap, so on narrow
+     widths the action button (margin-left:auto) clips its label ("Manage
+     subscriptio"). Wrap the row and give the meta the full first line so the
+     button drops to its own right-aligned line. */
+  .set-plan-row { flex-wrap: wrap; }
+  .set-plan-row > .set-plan-meta { flex-basis: 100%; }
 
   /* ── Root cause of the horizontal overflow ───────────────────────────────
      The integration "meta" line used white-space:nowrap + ellipsis. On a
