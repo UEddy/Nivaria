@@ -259,8 +259,8 @@ const BattleCard = {
 
       // Guard against copying an empty/pending brief. Without this, a brief whose
       // analysis hasn't been generated yet collapses to just the "Source: … | url"
-      // footer, so the clipboard ends up holding only the competitor URL. Detect
-      // that the brief has no real body and tell the user to wait instead.
+      // footer, so the clipboard would end up holding only the competitor URL.
+      // Detect that the brief has no real body and tell the user to wait instead.
       const nonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;
       const isPending = c.analysis_status && c.analysis_status !== 'ok';
       const hasBody = nonEmpty(c.headline) || nonEmpty(a.summary) ||
@@ -290,10 +290,16 @@ const BattleCard = {
         `Source: Nivaria | ${c.competitor_url}`,
       ].join('\n');
 
-      const result = await shareOrCopy({ title: `Brief: ${c.competitor_name}`, text });
-      if (result === 'share')     toast('Brief shared', 'success');
-      else if (result === 'clipboard') toast('Brief copied to clipboard', 'success');
-      // 'cancelled' — user dismissed the share sheet; no toast needed.
+      // Write the brief text straight to the clipboard. We deliberately do NOT
+      // route the brief through the OS share sheet (shareOrCopy): on desktop
+      // browsers that implement the Web Share API (e.g. Edge on Windows),
+      // selecting the share sheet's "Copy" target writes the originating *page
+      // URL* — the app host, e.g. "https://railway.com/" — to the clipboard
+      // instead of our text payload, so users ended up with a bare URL rather
+      // than the brief. Writing the string ourselves keeps the clipboard
+      // contents deterministic: it's always the brief we just built.
+      await navigator.clipboard.writeText(text);
+      toast('Brief copied to clipboard', 'success');
     } catch (e) {
       toast('Could not copy: ' + e.message, 'error');
     }

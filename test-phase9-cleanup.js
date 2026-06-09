@@ -166,14 +166,18 @@ async function testCopyHandler() {
   const src = fs.readFileSync(path.join(__dirname, 'public/js/battlecard.js'), 'utf8');
 
   const makeCtx = (change) => {
-    const state = { toasts: [], shared: false };
+    const state = { toasts: [], written: null };
     const sandbox = {
       window: {},
       console,
       API: { getChange: async () => change },
       toast: (msg) => state.toasts.push(msg),
       formatDate: () => 'today',
-      shareOrCopy: async () => { state.shared = true; return 'clipboard'; },
+      // The brief copy writes straight to the clipboard (it must NOT route
+      // through the OS share sheet, which can substitute the page URL). Capture
+      // exactly what lands on the clipboard so we can assert it's the brief.
+      navigator: { clipboard: { writeText: async (t) => { state.written = t; } } },
+      shareOrCopy: async () => { throw new Error('brief copy must not use shareOrCopy'); },
       el: () => ({ innerHTML: '' }),
     };
     vm.createContext(sandbox);
@@ -186,14 +190,14 @@ async function testCopyHandler() {
     const { BattleCard, state } = makeCtx({ id: 1, competitor_name: 'Stripe', competitor_url: 'https://stripe.com', analysis_status: 'pending', analysis: {} });
     await BattleCard.copy(1);
     check('pending brief shows "not yet generated" toast', state.toasts.some(t => /not yet generated/i.test(t)), JSON.stringify(state.toasts));
-    check('pending brief does NOT copy to clipboard', state.shared === false);
+    check('pending brief does NOT copy to clipboard', state.written === null);
   }
   // Empty brief — status ok but no body at all (would otherwise copy URL-only).
   {
     const { BattleCard, state } = makeCtx({ id: 2, competitor_name: 'Stripe', competitor_url: 'https://stripe.com/changelog', analysis_status: 'ok', analysis: {}, headline: '', talking_points: [] });
     await BattleCard.copy(2);
     check('empty brief shows "not yet generated" toast', state.toasts.some(t => /not yet generated/i.test(t)));
-    check('empty brief does NOT copy URL-only to clipboard', state.shared === false);
+    check('empty brief does NOT copy URL-only to clipboard', state.written === null);
   }
   // Full brief — must still copy normally.
   {
@@ -202,7 +206,8 @@ async function testCopyHandler() {
       analysis: { summary: 'Real summary', recommended_response: 'Do this', talking_points: ['point a'] },
       talking_points: ['point a'] });
     await BattleCard.copy(3);
-    check('full brief copies to clipboard', state.shared === true);
+    check('full brief copies the brief text to clipboard', typeof state.written === 'string' && /BRIEF: Stripe/.test(state.written) && /Real summary/.test(state.written));
+    check('full brief clipboard is the brief, not a bare URL', typeof state.written === 'string' && !/^https?:\/\/\S+$/.test(state.written.trim()));
     check('full brief shows success toast', state.toasts.some(t => /copied|shared/i.test(t)));
   }
 }

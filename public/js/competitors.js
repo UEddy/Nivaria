@@ -85,7 +85,7 @@ const Competitors = {
                     </a>
                   </td>
                   <td>${Competitors.statusPill(c)}</td>
-                  <td class="text-muted text-sm">${c.last_checked ? timeAgo(c.last_checked) : '-'}</td>
+                  <td class="text-muted text-sm">${c.last_checked ? timeAgo(c.last_checked) : 'Pending first check'}</td>
                   <td>
                     ${c.change_count > 0
                       ? `<a href="#/history?competitor_id=${c.id}" class="change-count-link">${c.change_count}</a>`
@@ -154,7 +154,7 @@ const Competitors = {
   cardHtml(c) {
     const urlNoProto = c.url.replace(/^https?:\/\//, '');
     const urlShort   = urlNoProto.length > 38 ? urlNoProto.substring(0, 38) + '…' : urlNoProto;
-    const lastChecked = c.last_checked ? timeAgo(c.last_checked) : '—';
+    const lastChecked = c.last_checked ? timeAgo(c.last_checked) : 'Pending first check';
     const lastChangeAt = c.last_change_at ? timeAgo(c.last_change_at) : '';
     return `
       <article class="comp-card" data-comp-id="${c.id}">

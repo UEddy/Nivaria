@@ -430,9 +430,24 @@ function esc(str) {
     .replace(/"/g, '&quot;');
 }
 
+// SQLite CURRENT_TIMESTAMP yields "YYYY-MM-DD HH:MM:SS" in UTC with no zone
+// marker. Browsers parse that bare form as *local* time, so a value written
+// "now" by the server reads as the user's UTC offset in the past — e.g. a
+// just-checked competitor shows "1h ago" for a UTC+1 user. Normalize the bare
+// SQLite form to explicit UTC; ISO strings (which carry their own T/Z) match
+// neither branch of the guard and pass through untouched.
+function parseDbDate(dateStr) {
+  if (!dateStr) return null;
+  const s = String(dateStr);
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s)) {
+    return new Date(s.replace(' ', 'T') + 'Z');
+  }
+  return new Date(s);
+}
+
 function timeAgo(dateStr) {
   if (!dateStr) return 'Never';
-  const diff = Date.now() - new Date(dateStr).getTime();
+  const diff = Date.now() - parseDbDate(dateStr).getTime();
   const m = Math.floor(diff / 60000);
   if (m < 1) return 'Just now';
   if (m < 60) return `${m}m ago`;
@@ -440,12 +455,12 @@ function timeAgo(dateStr) {
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
   if (d < 7) return `${d}d ago`;
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return parseDbDate(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function formatDate(dateStr) {
   if (!dateStr) return '-';
-  return new Date(dateStr).toLocaleString('en-US', {
+  return parseDbDate(dateStr).toLocaleString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit',
   });
