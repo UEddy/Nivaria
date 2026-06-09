@@ -79,7 +79,7 @@ function buildHtml(code, purpose) {
 
         <tr><td style="padding:28px 36px 24px;border-bottom:1px solid #1A1A1A">
           <table cellpadding="0" cellspacing="0"><tr>
-            <td style="background:#A16207;border-radius:9px;width:34px;height:34px;text-align:center;vertical-align:middle;font-size:17px">
+            <td style="background:#6366F1;border-radius:9px;width:34px;height:34px;text-align:center;vertical-align:middle;font-size:17px">
               🔍
             </td>
             <td style="padding-left:11px;font-size:15px;font-weight:700;color:#F1F5F9;letter-spacing:-0.3px">
@@ -97,7 +97,7 @@ function buildHtml(code, purpose) {
           </p>
 
           <div style="background:#000000;border:1px solid #222222;border-radius:12px;padding:30px 20px;text-align:center;margin-bottom:28px">
-            <span style="font-size:46px;font-weight:800;letter-spacing:14px;color:#CA8A04;font-family:'Courier New',Courier,monospace">
+            <span style="font-size:46px;font-weight:800;letter-spacing:14px;color:#6366F1;font-family:'Courier New',Courier,monospace">
               ${code}
             </span>
           </div>
@@ -141,7 +141,7 @@ async function sendAccountDeletionEmail(toEmail, cancelUrl, scheduledDate) {
         <p style="margin:0 0 24px;font-size:14px;color:#94A3B8;line-height:1.65">
           If you did not request this, or you changed your mind, click below to cancel and keep your account.
         </p>
-        <a href="${cancelUrl}" style="display:inline-block;background:#A16207;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:13px 22px;border-radius:10px">Cancel deletion &amp; keep my account</a>
+        <a href="${cancelUrl}" style="display:inline-block;background:#6366F1;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:13px 22px;border-radius:10px">Cancel deletion &amp; keep my account</a>
         <p style="margin:24px 0 0;font-size:12px;color:#4B5563;line-height:1.6">If the button doesn't work, paste this link into your browser:<br>${cancelUrl}</p>
       </td></tr>
       <tr><td style="padding:18px 36px;border-top:1px solid #1A1A1A"><p style="margin:0;font-size:11.5px;color:#374151">Nivaria: Competitor Intelligence Platform</p></td></tr>

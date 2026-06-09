@@ -1,13 +1,14 @@
-// Brand refresh verification shots — refined gold accent across key surfaces.
-// Captures landing, signup, dashboard, settings, plans, brief detail, waitlist
-// modal (desktop 1440) + landing & dashboard at 375px mobile.
-// Usage: node screenshots/take-brand-gold-shots.js  (server must be on :3000)
+// Brand revert verification shots — deeper indigo (#4338CA) across key surfaces.
+// Replaces the now-stale screenshots/brand-gold/ set. Captures landing, signup,
+// dashboard, plans & pricing, brief detail, waitlist modal (desktop 1440) +
+// landing & dashboard at 375px mobile.
+// Usage: node screenshots/take-brand-indigo-shots.js  (server must be on :3000)
 const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
 
 const BASE = 'http://localhost:3000';
-const OUT = path.join(__dirname, 'brand-gold');
+const OUT = path.join(__dirname, 'brand-indigo');
 fs.mkdirSync(OUT, { recursive: true });
 
 const shot = async (page, name) => {
@@ -35,7 +36,6 @@ const shot = async (page, name) => {
   });
 
   await safe('landing-pricing', async () => {
-    // Scroll to the pricing section so the Pro "Most Popular" card is in frame.
     await p.evaluate(() => {
       const el = [...document.querySelectorAll('*')].find(e => /most popular/i.test(e.textContent || '') && e.children.length < 5);
       (el || document.querySelector('[class*=pricing]') || document.body).scrollIntoView({ block: 'center' });
@@ -47,7 +47,6 @@ const shot = async (page, name) => {
   await safe('waitlist-modal', async () => {
     await p.goto(BASE + '/', { waitUntil: 'networkidle' });
     await p.waitForTimeout(400);
-    // Click the first visible Join Waitlist CTA.
     const btn = p.getByRole('button', { name: /waitlist/i }).first();
     if (await btn.count()) await btn.click({ timeout: 3000 }).catch(() => {});
     else await p.getByText(/join.*waitlist|waitlist/i).first().click({ timeout: 3000 }).catch(() => {});
@@ -87,7 +86,6 @@ const shot = async (page, name) => {
   await safe('settings', async () => { await go('settings'); await shot(a, '07-settings'); });
   await safe('plans', async () => { await go('plans'); await shot(a, '08-plans'); });
   await safe('brief-detail', async () => {
-    // Find a brief id from the history feed, then open it.
     await go('history');
     const id = await a.evaluate(() => {
       const link = document.querySelector('a[href*="#/history/"]');

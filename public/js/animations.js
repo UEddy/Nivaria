@@ -45,7 +45,7 @@ class ConstellationSystem {
 
   rgb() {
     return document.documentElement.getAttribute('data-theme') === 'light'
-      ? '161,98,7' : '202,138,4';
+      ? '79,70,229' : '99,102,241';
   }
 
   tick() {
