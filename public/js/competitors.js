@@ -400,15 +400,13 @@ const Competitors = {
       App.stats = stats;
       App.updateBadges();
     } catch (e) {
+      // A 402 upgrade_required is surfaced centrally by api.js, which opens the
+      // tier-aware upgrade-gate modal in place of this add-modal. Don't also
+      // toast/redirect — just defer to that modal.
+      if (e.error === 'upgrade_required') return;
       btn.disabled = false;
       btn.textContent = 'Add Competitor';
-      if (e.upgrade_required) {
-        closeModal();
-        toast(e.message, 'error');
-        navigate('/pricing');
-      } else {
-        toast(e.message, 'error');
-      }
+      toast(e.message, 'error');
     }
   },
 

@@ -5,13 +5,6 @@
 
 const X_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
 
-const PRO_INCLUDES = [
-  '10 competitors with automatic daily monitoring',
-  'Slack & Discord alerts and calendar briefings',
-  'AI outreach playbooks',
-  'Win/loss correlation & historical pattern analysis',
-];
-
 // ── Lemon Squeezy overlay ──────────────────────────────────────────────────────
 function initLemon() {
   if (window.__lemonInited) return;
@@ -243,21 +236,105 @@ const Billing = {
 };
 window.Billing = Billing;
 
+// ── Tier-aware upgrade-gate content ───────────────────────────────────────────
+// Pure map: a workspace's CURRENT tier → the modal that pitches the NEXT step up
+// the ladder (Free→Pro purchase, Pro→Team waitlist, Team→Business waitlist,
+// Business→contact). Kept as a plain object + pure resolver so the tier logic is
+// unit-testable without a DOM (see test-upgrade-gate.js). is_developer users
+// bypass every cap server-side, so this modal never renders for them.
+const GATE_BY_TIER = {
+  free: {
+    title: 'Upgrade to Pro',
+    desc: "You’ve reached your Free plan’s limit. Upgrade to Pro to track up to 10 competitors with automatic daily monitoring.",
+    features: [
+      '10 competitors',
+      'Automatic daily monitoring',
+      'Slack & Discord alerts',
+      'Calendar briefings',
+      'AI outreach playbooks',
+      'Win/loss correlation',
+    ],
+    price: '$20/month',
+    cta: { label: 'Upgrade ($20/month)', onclick: 'Billing.upgradeFromGate()' },
+  },
+  pro: {
+    title: 'Join the Team Waitlist',
+    desc: "You’ve reached your Pro plan’s limit. Join the Team waitlist to be notified when team features launch.",
+    features: [
+      'Unlimited competitors within team scope',
+      'Multi-user workspace',
+      'Shared business context & voice profiles',
+      'Role permissions',
+      'Team collaboration',
+    ],
+    price: '$49/month (waitlist)',
+    cta: { label: 'Join Waitlist', onclick: "Billing.openWaitlist('team')" },
+  },
+  team: {
+    title: 'Join the Business Waitlist',
+    desc: "You’ve reached your Team plan’s limit. Join the Business waitlist for fortress-protected site monitoring and dedicated support.",
+    features: [
+      'Unlimited competitors',
+      'Fortress site monitoring (Cloudflare / anti-bot defended sites)',
+      'Custom integrations',
+      'Dedicated support',
+      'Audit logs',
+    ],
+    price: '$149/month (waitlist)',
+    cta: { label: 'Join Waitlist', onclick: "Billing.openWaitlist('business')" },
+  },
+  business: {
+    title: 'Contact Us About Enterprise',
+    desc: "You’re on our highest tier. For larger needs, please contact us about enterprise options.",
+    features: [],
+    price: null,
+    cta: { label: 'Contact us', href: 'mailto:support@nivaria.app' },
+  },
+};
+
+// Resolve a tier string to its gate config. Unknown/missing tiers fall back to
+// the Free pitch (safest default — points to the only purchasable tier).
+function gateConfigForTier(tier) {
+  return GATE_BY_TIER[tier] || GATE_BY_TIER.free;
+}
+window.gateConfigForTier = gateConfigForTier;
+
 // Central upgrade-gate modal — invoked by api.js on any 402 upgrade_required.
+// Tier-aware: a Pro user who hits the 10-competitor cap sees the Team waitlist,
+// not a nonsensical "Upgrade to Pro".
 function showUpgradeModal(info) {
-  const message = (info && info.message) || 'This is a Pro feature.';
+  // Authoritative tier is workspace-driven (App.subscription.effectiveTier), not
+  // the deprecated App.user.tier.
+  const tier = (window.App && App.subscription && App.subscription.effectiveTier) || 'free';
+  const cfg = gateConfigForTier(tier);
+
+  // Free gates are feature-specific (webhooks, calendar, playbooks, …) and the
+  // backend message correctly points to Pro, so prefer it. For paid tiers the
+  // backend message wrongly says "upgrade to Pro" (the reported bug), so we use
+  // the tier-aware copy instead.
+  const desc = (tier === 'free' && info && info.message) ? info.message : cfg.desc;
+
+  const features = cfg.features.length
+    ? `<ul class="upgrade-list">${cfg.features.map(f => `<li>${esc(f)}</li>`).join('')}</ul>`
+    : '';
+  const price = cfg.price
+    ? `<p style="margin-top:14px;color:var(--txt-2);font-size:13px;font-weight:600">${esc(cfg.price)}</p>`
+    : '';
+  const cta = cfg.cta.href
+    ? `<a class="btn btn-primary" href="${cfg.cta.href}">${esc(cfg.cta.label)}</a>`
+    : `<button class="btn btn-primary" onclick="${cfg.cta.onclick}">${esc(cfg.cta.label)}</button>`;
+
   openModal(`
-    <div class="modal-header"><div class="modal-title">Upgrade to Pro</div>
+    <div class="modal-header"><div class="modal-title">${esc(cfg.title)}</div>
       <button class="modal-close" onclick="closeModal()">${X_ICON}</button></div>
     <div class="modal-body">
-      <p style="color:var(--txt);font-size:14.5px;font-weight:600;margin-bottom:10px">${esc(message)}</p>
-      <ul class="upgrade-list">
-        ${PRO_INCLUDES.map(f => `<li>${esc(f)}</li>`).join('')}
-      </ul>
+      <p style="color:var(--txt);font-size:14.5px;font-weight:600;margin-bottom:10px">${esc(desc)}</p>
+      ${features}
+      ${price}
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Maybe later</button>
-      <button class="btn btn-primary" onclick="Billing.upgradeFromGate()">Upgrade ($20/month)</button>
+      ${cta}
     </div>`);
 }
 window.showUpgradeModal = showUpgradeModal;
