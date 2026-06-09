@@ -104,7 +104,7 @@ const Dashboard = {
             const when  = new Date(m.start_time);
             const whenStr = when.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
             const matchBadge = m.matched_competitor_id
-              ? `<span class="pattern-tag pattern-tag-sm" style="background:rgba(99,102,241,0.15);color:var(--accent)">${esc(m.competitor_name)} · ${esc(m.match_reason)}</span>`
+              ? `<span class="pattern-tag pattern-tag-sm" style="background:rgba(202,138,4,0.15);color:var(--accent)">${esc(m.competitor_name)} · ${esc(m.match_reason)}</span>`
               : `<span class="pattern-tag pattern-tag-sm" style="background:var(--bg-hover);color:var(--txt-3)">unmatched</span>`;
             const statusBadge = m.matched_competitor_id
               ? `<span class="text-sm" style="color:${m.briefing_status === 'sent' ? 'var(--green)' : m.briefing_status === 'failed' ? 'var(--red)' : 'var(--txt-3)'}">${esc(m.briefing_status)}</span>`

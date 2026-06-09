@@ -90,7 +90,7 @@ function renderShell(title, bodyHtml) {
     :root {
       --bg: #000000; --bg-2: #0A0A0A; --bg-card: rgba(255,255,255,0.04);
       --border: rgba(255,255,255,0.10); --txt: #F0F0F8; --txt-2: #888899;
-      --txt-3: #555566; --accent: #818CF8;
+      --txt-3: #555566; --accent: #A16207;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -117,7 +117,7 @@ function renderShell(title, bodyHtml) {
     tbody tr:last-child td { border-bottom: none; }
     tbody tr:hover { background: rgba(255,255,255,0.02); }
     .pill { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
-    .pill-team { background: rgba(129,140,248,0.16); color: #A5B4FC; }
+    .pill-team { background: rgba(202,138,4,0.16); color: #FCD34D; }
     .pill-business { background: rgba(16,185,129,0.16); color: #34D399; }
     .pill-dev { background: rgba(245,158,11,0.18); color: #FBBF24; }
     .pill-off { background: rgba(255,255,255,0.06); color: var(--txt-3); }
