@@ -36,6 +36,68 @@ function passwordOk(req) {
   try { return bcrypt.compareSync(String(pw), req.user.password_hash); } catch { return false; }
 }
 
+// Privacy-preserving email hash for the retained audit record — the raw address
+// is never logged. Same salted-SHA-256 construction as lib/audit.hashIp.
+function hashEmail(email) {
+  const salt = process.env.SESSION_SECRET || 'cs-audit-salt';
+  return crypto.createHash('sha256').update(String(email) + salt).digest('hex');
+}
+
+// Validation for the friendly display name. Returns null when valid, else an
+// error string. Allows letters (incl. accented), spaces, and the few name
+// punctuation marks (. ' -); rejects digits and any character that could act as
+// an XSS vector (< > & " / \ { } …). Output is still HTML-escaped at render time.
+const NAME_RE = /^[\p{L}\p{M} .'\-]{1,50}$/u;
+function validateFirstName(raw) {
+  const name = String(raw == null ? '' : raw).trim();
+  if (!name) return 'Name is required.';
+  if (name.length > 50) return 'Name must be 50 characters or fewer.';
+  if (!NAME_RE.test(name)) return 'Name can only contain letters, spaces, hyphens, apostrophes, and periods.';
+  return null;
+}
+
+// Normalize a client-supplied IANA timezone. Verifies it against the host's
+// timezone database via Intl; anything unknown/garbage falls back to 'UTC'.
+function sanitizeTimezone(raw) {
+  const tz = String(raw == null ? '' : raw).trim();
+  if (!tz || tz.length > 64) return 'UTC';
+  try {
+    // Throws RangeError for an invalid zone.
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return tz;
+  } catch { return 'UTC'; }
+}
+
+// Hard-delete one user and all data in the workspace(s) they own, atomically
+// (savepoint suppresses mid-transaction export()). payment_events are RETAINED
+// but anonymized (workspace_id → NULL) for accounting. Shared by the immediate
+// account-deletion route and the legacy 30-day grace-period sweep below.
+// Returns the number of owned workspaces removed.
+function purgeUser(db, userId, email) {
+  const wsIds = ownedWorkspaceIds(db, userId);
+  const ph = wsIds.length ? wsIds.map(() => '?').join(',') : 'NULL';
+  db.savepoint(() => {
+    if (wsIds.length) {
+      // Retain payment_events for accounting — anonymize the workspace link.
+      db.prepare(`UPDATE payment_events SET workspace_id = NULL WHERE workspace_id IN (${ph})`).run(...wsIds);
+      // Children first (changes via competitors), then the rest.
+      db.prepare(`DELETE FROM changes WHERE competitor_id IN (SELECT id FROM competitors WHERE workspace_id IN (${ph}))`).run(...wsIds);
+      for (const t of ['generated_playbooks', 'deals', 'tracked_meetings', 'calendar_connections', 'slack_installations', 'correlations', 'pattern_alerts', 'competitors', 'workspace_members']) {
+        db.prepare(`DELETE FROM ${t} WHERE workspace_id IN (${ph})`).run(...wsIds);
+      }
+      db.prepare(`DELETE FROM workspaces WHERE id IN (${ph})`).run(...wsIds);
+    }
+    // Personal, user-scoped data.
+    db.prepare('DELETE FROM user_context WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM user_voice_profile WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM settings WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM otp_codes WHERE email = ?').run(email);
+    db.prepare('DELETE FROM login_attempts WHERE email = ?').run(email);
+    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  });
+  return wsIds.length;
+}
+
 // ── GET /api/account/export ───────────────────────────────────────────────────
 router.get('/export', (req, res) => {
   const db = getDb();
@@ -92,37 +154,91 @@ router.get('/export', (req, res) => {
 });
 
 // ── POST /api/account/delete ──────────────────────────────────────────────────
+// IMMEDIATE, irreversible hard delete — no soft delete, no recovery. Requires
+// BOTH fresh-auth (the account password) and a typed-email confirmation that
+// matches the account email, so neither a hijacked session nor a stray click can
+// destroy the account on its own. Any active Lemon Squeezy subscription is
+// cancelled (at period end) BEFORE the data is removed. The session is destroyed
+// so the user is logged out, and the client is told to land on the landing page.
 router.post('/delete', limits.accountDelete, async (req, res) => {
   if (!passwordOk(req)) return res.status(401).json({ error: 'Password is incorrect.' });
+
   const db = getDb();
   const userId = req.userId;
+  const accountEmail = String(req.user.email || '');
 
-  const now = new Date();
-  const scheduled = new Date(now.getTime() + GRACE_DAYS * 24 * 60 * 60 * 1000);
-  const token = crypto.randomBytes(32).toString('hex');
-  const ts = (d) => d.toISOString().replace('T', ' ').slice(0, 19);
+  // Type-to-confirm: the submitted email must match the account email exactly
+  // (case-insensitively). Guards against an accidental, unintended deletion.
+  const confirmEmail = String(req.body?.confirmEmail || '').trim().toLowerCase();
+  if (!confirmEmail || confirmEmail !== accountEmail.toLowerCase()) {
+    return res.status(400).json({ error: 'The email you typed does not match your account email.' });
+  }
 
-  db.prepare(`UPDATE users SET deletion_requested_at = ?, deletion_scheduled_at = ?, deletion_cancel_token = ? WHERE id = ?`)
-    .run(ts(now), ts(scheduled), token, userId);
-
-  // Best-effort: cancel any active Lemon Squeezy subscription on owned workspaces.
+  // 1. Cancel any active Lemon Squeezy subscription FIRST (best-effort). Cancel
+  //    at period end so the user keeps the Pro access they already paid for.
   try {
     const subs = db.prepare('SELECT subscription_id FROM workspaces WHERE owner_user_id = ? AND subscription_id IS NOT NULL').all(userId);
     for (const s of subs) { try { await ls.cancelAtPeriodEnd(s.subscription_id); } catch (_) {} }
   } catch (_) {}
 
-  // Confirmation email with cancellation link (best-effort).
+  // 2. Hard-delete every trace. Capture a privacy-preserving email hash for the
+  //    retained audit record BEFORE the row is gone (raw email is never logged).
+  const emailHash = hashEmail(accountEmail);
+  let workspaces = 0;
   try {
-    const { sendAccountDeletionEmail } = require('../email');
-    const appUrl = process.env.APP_URL || 'http://localhost:3000';
-    const cancelUrl = `${appUrl}/api/account/delete/cancel?token=${token}`;
-    await sendAccountDeletionEmail(req.user.email, cancelUrl, scheduled);
+    workspaces = purgeUser(db, userId, accountEmail);
   } catch (e) {
-    console.warn('deletion email failed (non-fatal):', e.message);
+    console.error(`account hard-delete failed for user ${userId} (rolled back):`, e.message);
+    return res.status(500).json({ error: 'Could not delete your account. Please try again or contact support.' });
   }
 
-  logAudit({ workspaceId: req.workspaceId, userId, eventType: 'account_deletion_requested', eventData: { scheduledAt: ts(scheduled) }, req });
-  res.json({ ok: true, scheduledAt: ts(scheduled), message: `Your account is scheduled for deletion on ${ts(scheduled)}. Check your email for a cancellation link.` });
+  // 3. Append-only "Account deleted" audit entry (retained; user_id kept as an
+  //    integer ref, email stored only as a salted hash).
+  logAudit({ workspaceId: req.workspaceId, userId, eventType: 'account_deletion_completed', eventData: { emailHash, workspaces, immediate: true }, req });
+
+  // 4. Log the user out and point the client at the landing page.
+  req.session.destroy(() => {
+    res.clearCookie('cs.sid');
+    res.json({ ok: true, deleted: true, redirect: '/', message: 'Your account and all associated data have been permanently deleted.' });
+  });
+});
+
+// ── PUT /api/account/profile ──────────────────────────────────────────────────
+// Update the friendly display name and/or timezone. Backs both the settings
+// "Profile" card and the dashboard one-time "add your name" prompt shown to
+// pre-existing users who signed up before the name field existed. Partial:
+// each field is only written when supplied.
+router.put('/profile', (req, res) => {
+  const db = getDb();
+  const sets = [];
+  const args = [];
+
+  if (req.body?.firstName !== undefined) {
+    const err = validateFirstName(req.body.firstName);
+    if (err) return res.status(400).json({ error: err });
+    const name = String(req.body.firstName).trim();
+    // Keep the legacy required `name` column in step with the friendly name.
+    sets.push('first_name = ?', 'name = ?');
+    args.push(name, name);
+  }
+  if (req.body?.timezone !== undefined) {
+    sets.push('timezone = ?');
+    args.push(sanitizeTimezone(req.body.timezone));
+  }
+  if (!sets.length) return res.status(400).json({ error: 'Nothing to update.' });
+
+  args.push(req.userId);
+  db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...args);
+  const user = db.prepare('SELECT id, email, name, first_name, timezone FROM users WHERE id = ?').get(req.userId);
+  res.json({ ok: true, user });
+});
+
+// ── POST /api/account/dashboard-visited ─────────────────────────────────────────
+// Idempotently records that the user has opened the dashboard at least once,
+// which flips future greetings from a "welcome" variant to "welcome back".
+router.post('/dashboard-visited', (req, res) => {
+  getDb().prepare('UPDATE users SET has_visited_dashboard = 1 WHERE id = ?').run(req.userId);
+  res.json({ ok: true });
 });
 
 // ── POST /api/account/delete/cancel (in-app, fresh auth) ────────────────────────
@@ -161,33 +277,10 @@ function processScheduledDeletions() {
   let deleted = 0;
 
   for (const u of due) {
-    const wsIds = ownedWorkspaceIds(db, u.id);
-    const ph = wsIds.length ? wsIds.map(() => '?').join(',') : 'NULL';
     try {
-      // Atomic + save-safe (savepoint suppresses mid-transaction export()).
-      db.savepoint(() => {
-        if (wsIds.length) {
-          // Retain payment_events for accounting — anonymize the workspace link.
-          db.prepare(`UPDATE payment_events SET workspace_id = NULL WHERE workspace_id IN (${ph})`).run(...wsIds);
-          // Children first (changes via competitors), then the rest.
-          db.prepare(`DELETE FROM changes WHERE competitor_id IN (SELECT id FROM competitors WHERE workspace_id IN (${ph}))`).run(...wsIds);
-          // Tables scoped by a workspace_id column.
-          for (const t of ['generated_playbooks', 'deals', 'tracked_meetings', 'calendar_connections', 'slack_installations', 'correlations', 'pattern_alerts', 'competitors', 'workspace_members']) {
-            db.prepare(`DELETE FROM ${t} WHERE workspace_id IN (${ph})`).run(...wsIds);
-          }
-          // The workspaces table itself is keyed by `id`, not `workspace_id`.
-          db.prepare(`DELETE FROM workspaces WHERE id IN (${ph})`).run(...wsIds);
-        }
-        // Personal, user-scoped data.
-        db.prepare('DELETE FROM user_context WHERE user_id = ?').run(u.id);
-        db.prepare('DELETE FROM user_voice_profile WHERE user_id = ?').run(u.id);
-        db.prepare('DELETE FROM settings WHERE user_id = ?').run(u.id);
-        db.prepare('DELETE FROM otp_codes WHERE email = ?').run(u.email);
-        db.prepare('DELETE FROM login_attempts WHERE email = ?').run(u.email);
-        db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
-      });
+      const workspaces = purgeUser(db, u.id, u.email);
       // audit_log is append-only and retained (user_id kept as an integer ref).
-      logAudit({ userId: u.id, eventType: 'account_deletion_completed', eventData: { workspaces: wsIds.length } });
+      logAudit({ userId: u.id, eventType: 'account_deletion_completed', eventData: { workspaces } });
       deleted++;
     } catch (e) {
       console.error(`account deletion failed for user ${u.id} (rolled back):`, e.message);

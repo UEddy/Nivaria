@@ -28,6 +28,70 @@ const Dashboard = {
     }
   },
 
+  // ── Time-aware greeting ─────────────────────────────────────────────────────
+  // Greets the user by name, banded by the local time in THEIR timezone. A
+  // first-ever dashboard visit gets a "welcome" variant; every later session
+  // gets a returning-user pool (which includes "welcome back"). The chosen
+  // greeting is picked once per browser session and cached in sessionStorage so
+  // it stays stable across in-app navigation (doesn't re-roll on every render).
+  GREETING_KEY: 'cs-greeting',
+
+  greetingPools(name) {
+    const n = name ? `, ${name}` : '';
+    return {
+      welcome:   [`Welcome${n}`, `Welcome to Nivaria${n}`, `Glad you're here${n}`],
+      morning:   [`Good morning${n}`, `Morning${n}`, `Hello${n}`, `Welcome back${n}`, `Good to see you${n}`],
+      afternoon: [`Good afternoon${n}`, `Hello${n}`, `Welcome back${n}`, `Hey${n}`],
+      evening:   [`Good evening${n}`, `Hello${n}`, `Welcome back${n}`, `Hey${n}`],
+      night:     [`Hello${n}`, `Welcome back${n}`, `Hey${n}`],
+    };
+  },
+
+  // Map the current hour in the user's timezone to a time band.
+  //   Morning 05:00–11:59 · Afternoon 12:00–16:59 · Evening 17:00–20:59 · Night 21:00–04:59
+  greetingBand(tz) {
+    let hour;
+    try {
+      hour = parseInt(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz }).format(new Date()), 10);
+    } catch (_) {
+      hour = new Date().getHours(); // invalid tz — fall back to device-local time
+    }
+    if (!Number.isFinite(hour)) hour = new Date().getHours();
+    if (hour === 24) hour = 0; // some engines render midnight as "24" under hour12:false
+    if (hour >= 5  && hour < 12) return 'morning';
+    if (hour >= 12 && hour < 17) return 'afternoon';
+    if (hour >= 17 && hour < 21) return 'evening';
+    return 'night';
+  },
+
+  resolveGreeting() {
+    try {
+      const cached = sessionStorage.getItem(Dashboard.GREETING_KEY);
+      if (cached) return cached;
+    } catch (_) { /* sessionStorage unavailable — recompute each render */ }
+
+    const u = App.user || {};
+    const name = (u.first_name || '').trim();
+    const firstTime = !u.has_visited_dashboard;
+    const pools = Dashboard.greetingPools(name);
+    const pool = firstTime ? pools.welcome : pools[Dashboard.greetingBand(u.timezone || 'UTC')];
+    const greeting = pool[Math.floor(Math.random() * pool.length)];
+
+    try { sessionStorage.setItem(Dashboard.GREETING_KEY, greeting); } catch (_) {}
+
+    if (firstTime) {
+      // Optimistically flip locally so a same-session re-render is "returning",
+      // and persist server-side for future sessions (best-effort).
+      u.has_visited_dashboard = 1;
+      try { API.markDashboardVisited().catch(() => {}); } catch (_) {}
+    }
+    return greeting;
+  },
+
+  greetingHtml() {
+    return `<div class="dash-greeting">${esc(Dashboard.resolveGreeting())}</div>`;
+  },
+
   // Phase 6: soft, dismissible banner that nudges users who haven't filled in
   // their business context. Reappears every 14 days. Stored in localStorage
   // — never sent to the server.
@@ -72,6 +136,39 @@ const Dashboard = {
   dismissContextBanner() {
     try { localStorage.setItem(Dashboard.CTX_BANNER_KEY, String(Date.now())); } catch (_) {}
     const node = document.getElementById('ctx-banner');
+    if (node) node.remove();
+  },
+
+  // One-time, dismissible nudge for accounts that pre-date the signup name field
+  // (first_name empty). Lets them add a name so greetings get personal. Unlike
+  // the context banner this does NOT reappear once dismissed — it's a one-off.
+  NAME_PROMPT_KEY: 'cs-name-prompt-dismissed',
+
+  namePromptHtml() {
+    const name = (App.user?.first_name || '').trim();
+    if (name) return ''; // already have a name — nothing to prompt
+    try { if (localStorage.getItem(Dashboard.NAME_PROMPT_KEY)) return ''; } catch (_) {}
+
+    return `
+      <div class="ctx-banner" id="name-prompt">
+        <span class="ctx-banner-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </span>
+        <span class="ctx-banner-text">
+          <strong>What should we call you?</strong> Add your name so Nivaria can greet you properly.
+        </span>
+        <span class="ctx-banner-actions">
+          <a href="#/settings" class="btn btn-primary btn-sm">Add name</a>
+          <button class="btn btn-ghost btn-sm" onclick="Dashboard.dismissNamePrompt()" title="Dismiss">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </span>
+      </div>`;
+  },
+
+  dismissNamePrompt() {
+    try { localStorage.setItem(Dashboard.NAME_PROMPT_KEY, '1'); } catch (_) {}
+    const node = document.getElementById('name-prompt');
     if (node) node.remove();
   },
 
@@ -248,6 +345,8 @@ const Dashboard = {
     const slotWarn = slotMax && stats.total_competitors / slotMax > 0.8;
 
     return `
+      ${Dashboard.greetingHtml()}
+      ${Dashboard.namePromptHtml()}
       ${Dashboard.contextBannerHtml(ctxData)}
       <!-- Hero Stats -->
       <div class="hero-stats">

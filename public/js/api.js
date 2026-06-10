@@ -63,9 +63,14 @@ const API = (() => {
     joinWaitlist: (data) => API.post('/waitlist', data),
 
     // Phase 10 — GDPR account rights. delete/cancel use fresh-auth (password),
-    // so a wrong password must NOT redirect to /login (silent401).
-    deleteAccount:  (password) => request('POST', '/account/delete',        { password }, { silent401: true }),
+    // so a wrong password must NOT redirect to /login (silent401). Delete is an
+    // immediate hard delete and additionally requires a typed-email confirmation.
+    deleteAccount:  (password, confirmEmail) => request('POST', '/account/delete', { password, confirmEmail }, { silent401: true }),
     cancelDeletion: (password) => request('POST', '/account/delete/cancel', { password }, { silent401: true }),
+
+    // Profile (friendly name + timezone) + first-visit flag.
+    updateProfile:        (data) => API.put('/account/profile', data),
+    markDashboardVisited: ()     => API.post('/account/dashboard-visited'),
 
     // Stats
     getStats: () => API.get('/changes/stats'),

@@ -70,6 +70,30 @@ function validatePassword(pw, email) {
   return null;
 }
 
+// Friendly display name ("What should we call you?"). Returns null when valid,
+// else an error string. Allows letters (incl. accented), spaces, and the few
+// name punctuation marks (. ' -); rejects digits and any character that could
+// act as an XSS vector (< > & " / …). Output is still HTML-escaped at render.
+const FIRST_NAME_RE = /^[\p{L}\p{M} .'\-]{1,50}$/u;
+function validateFirstName(raw) {
+  const name = String(raw == null ? '' : raw).trim();
+  if (!name) return 'Please tell us what to call you';
+  if (name.length > 50) return 'Name must be 50 characters or fewer';
+  if (!FIRST_NAME_RE.test(name)) return 'Name can only contain letters, spaces, hyphens, apostrophes, and periods';
+  return null;
+}
+
+// Normalize a client-supplied IANA timezone. Verified against the host's
+// timezone database via Intl; anything unknown/garbage falls back to 'UTC'.
+function sanitizeTimezone(raw) {
+  const tz = String(raw == null ? '' : raw).trim();
+  if (!tz || tz.length > 64) return 'UTC';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz }); // throws on invalid zone
+    return tz;
+  } catch { return 'UTC'; }
+}
+
 // Cryptographically secure 6-digit code (100000-999999). crypto.randomInt is
 // unbiased over the half-open range and pulls from the CSPRNG, unlike
 // Math.random() whose internal state is recoverable from observed outputs.
@@ -248,6 +272,12 @@ router.post('/register/complete', async (req, res) => {
 
   if (!email || !token || !password) return res.status(400).json({ error: 'Missing required fields' });
 
+  // Required friendly name + browser timezone captured on the password step.
+  const nameError = validateFirstName(req.body.firstName);
+  if (nameError) return res.status(400).json({ error: nameError });
+  const firstName = String(req.body.firstName).trim();
+  const timezone  = sanitizeTimezone(req.body.timezone);
+
   const pwError = validatePassword(password, email);
   if (pwError) return res.status(400).json({ error: pwError });
 
@@ -266,13 +296,15 @@ router.post('/register/complete', async (req, res) => {
   let userId;
 
   if (existing) {
-    db.prepare('UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = ?').run(passwordHash, existing.id);
+    // Re-completing a pending signup — capture the name/timezone too (the row may
+    // predate them) so the greeting and profile are populated from the start.
+    db.prepare('UPDATE users SET password_hash = ?, email_verified = 1, first_name = ?, name = ?, timezone = ? WHERE id = ?')
+      .run(passwordHash, firstName, firstName, timezone, existing.id);
     userId = existing.id;
   } else {
-    const name = email.split('@')[0].slice(0, 60);
-    const r    = db.prepare(
-      'INSERT INTO users (email, name, tier, api_key, password_hash, email_verified) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(email, name, 'free', apiKey, passwordHash, 1);
+    const r = db.prepare(
+      'INSERT INTO users (email, name, first_name, timezone, tier, api_key, password_hash, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(email, firstName, firstName, timezone, 'free', apiKey, passwordHash, 1);
     userId = r.lastInsertRowid;
     db.prepare('INSERT INTO settings (user_id) VALUES (?)').run(userId);
   }
@@ -280,7 +312,7 @@ router.post('/register/complete', async (req, res) => {
   // Phase 10: every account owns a personal workspace. The startup migration
   // only backfills users that exist at boot, so new signups must bootstrap their
   // own workspace here or they'd be workspace-less until a restart. Idempotent.
-  createPersonalWorkspace(userId, db.prepare('SELECT name FROM users WHERE id = ?').get(userId)?.name, email);
+  createPersonalWorkspace(userId, firstName, email);
 
   db.prepare('UPDATE otp_codes SET verified_token = NULL WHERE id = ?').run(otp.id);
 
@@ -364,7 +396,7 @@ router.post('/logout', (req, res) => {
 router.get('/me', (req, res) => {
   if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
   const db   = getDb();
-  const user = db.prepare('SELECT id, email, name, tier, api_key, created_at FROM users WHERE id = ?').get(req.session.userId);
+  const user = db.prepare('SELECT id, email, name, first_name, timezone, has_visited_dashboard, tier, api_key, created_at FROM users WHERE id = ?').get(req.session.userId);
   if (!user) return res.status(401).json({ error: 'User not found' });
 
   // Return CSRF token so the SPA can attach it to all mutation requests.

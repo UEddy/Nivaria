@@ -107,6 +107,19 @@ const SCHEMA = `
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
+    -- Friendly display name captured at signup ("What should we call you?").
+    -- Required at the application layer for new signups (1-50 chars, no XSS
+    -- vectors); nullable here so the additive migration on an existing DB can
+    -- backfill it on next login. Drives the time-aware dashboard greeting.
+    first_name TEXT,
+    -- IANA timezone captured from the browser at signup
+    -- (Intl.DateTimeFormat().resolvedOptions().timeZone). Used to band the
+    -- dashboard greeting (morning/afternoon/evening/night) in the user's local
+    -- time. Existing users without one fall back to 'UTC'; editable in settings.
+    timezone TEXT DEFAULT 'UTC',
+    -- First-visit flag: 0 until the user opens the dashboard for the first time,
+    -- which switches the greeting from a "welcome" variant to "welcome back".
+    has_visited_dashboard INTEGER DEFAULT 0,
     -- DEPRECATED (Phase 10): tier is now workspace-driven. The source of truth
     -- for all gating is workspaces.subscription_tier (see src/lib/tierLimits.js).
     -- Retained for backward-compatible reads only; no Phase 10+ code path writes
@@ -537,6 +550,12 @@ async function initDb() {
   // Phase 12: emergency per-user override granting unlimited Pro feature access
   // regardless of subscription state (see src/lib/tierLimits.js). Admin-set only.
   if (!userCols.includes('is_developer'))    sqlDb.run('ALTER TABLE users ADD COLUMN is_developer INTEGER DEFAULT 0');
+  // Friendly name + timezone + first-visit flag (signup personalization). Added
+  // nullable/defaulted so existing rows migrate cleanly; first_name is enforced
+  // NOT NULL at the application layer for new signups only.
+  if (!userCols.includes('first_name'))            sqlDb.run('ALTER TABLE users ADD COLUMN first_name TEXT');
+  if (!userCols.includes('timezone'))              sqlDb.run("ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT 'UTC'");
+  if (!userCols.includes('has_visited_dashboard')) sqlDb.run('ALTER TABLE users ADD COLUMN has_visited_dashboard INTEGER DEFAULT 0');
 
   // Security: per-email OTP verification lockout counter (additive; existing DBs
   // created the otp_codes table before this column existed).

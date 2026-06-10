@@ -48,6 +48,8 @@ const Settings = {
 
         <div class="settings-stack">
 
+          ${Settings.profileHtml(user)}
+
           ${Settings.businessContextHtml(c)}
 
           ${Settings.voiceProfileHtml(voiceData)}
@@ -99,6 +101,88 @@ const Settings = {
         </div>
       </div>
     `;
+  },
+
+  // ── Profile (name + timezone) ───────────────────────────────────────────────
+
+  profileHtml(user) {
+    const name = user?.first_name || '';
+    const tz   = user?.timezone || 'UTC';
+    return `
+      <div class="set-card">
+        <div class="set-card__head">
+          <div class="set-card__title">Your profile</div>
+          <div class="set-card__desc">We greet you by name on the dashboard, and use your timezone to time that greeting to your local morning, afternoon, and evening.</div>
+        </div>
+        <div class="set-card__body" data-dirty-group>
+          <div class="set-row-2">
+            <div class="form-group">
+              <label class="form-label" for="profile-name">Name</label>
+              <input class="form-input" id="profile-name" maxlength="50"
+                placeholder="What should we call you?" value="${esc(name)}" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="profile-tz">Timezone</label>
+              <select class="form-input" id="profile-tz">${Settings.timezoneOptions(tz)}</select>
+            </div>
+          </div>
+          <div class="set-card__footer">
+            <button class="btn btn-primary btn-sm" data-save-btn onclick="Settings.saveProfile(this)">Save changes</button>
+          </div>
+        </div>
+      </div>`;
+  },
+
+  // Build the timezone <option> list. Prefers the full IANA set via
+  // Intl.supportedValuesOf (all modern engines), falling back to a curated
+  // shortlist. Guarantees 'UTC' and the user's current value are present.
+  timezoneOptions(current) {
+    let zones = [];
+    try { if (typeof Intl.supportedValuesOf === 'function') zones = Intl.supportedValuesOf('timeZone'); } catch (_) {}
+    if (!zones || !zones.length) {
+      zones = ['UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+        'America/Sao_Paulo', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Africa/Lagos',
+        'Africa/Johannesburg', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Singapore', 'Asia/Shanghai',
+        'Asia/Tokyo', 'Australia/Sydney', 'Pacific/Auckland'];
+    }
+    if (!zones.includes('UTC')) zones = ['UTC', ...zones];
+    if (current && !zones.includes(current)) zones = [current, ...zones];
+    return zones.map(z => `<option value="${esc(z)}" ${z === current ? 'selected' : ''}>${esc(z)}</option>`).join('');
+  },
+
+  async saveProfile(btn) {
+    const firstName = document.getElementById('profile-name').value.trim();
+    const timezone  = document.getElementById('profile-tz').value;
+
+    // Only send the name when non-empty so a timezone-only change can't trip the
+    // server's "name is required" validation for accounts that have no name yet.
+    const payload = { timezone };
+    if (firstName) payload.firstName = firstName;
+
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = 'Saving…';
+    try {
+      const r = await API.updateProfile(payload);
+      if (window.App && App.user && r.user) {
+        App.user.first_name = r.user.first_name;
+        App.user.name       = r.user.name;
+        App.user.timezone   = r.user.timezone;
+        App.updateUserUI?.();
+      }
+      // The greeting is cached per session; clear it so the new name/timezone
+      // takes effect on the next dashboard render.
+      try { sessionStorage.removeItem('cs-greeting'); } catch (_) {}
+      // A saved name means the dashboard "add your name" prompt is done for good.
+      if (firstName) { try { localStorage.setItem('cs-name-prompt-dismissed', '1'); } catch (_) {} }
+      btn.textContent = original;
+      Settings._flashSaved(btn);
+      toast('Profile saved.', 'success');
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = original;
+      toast(e.message, 'error');
+    }
   },
 
   // ── Plan & billing (Phase 10) ───────────────────────────────────────────────
@@ -188,8 +272,8 @@ const Settings = {
             <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="Billing.exportData(this)">Export my data</button>
           </div>
           <div class="set-plan-row">
-            <span class="set-plan-meta">Delete your account and all data (30-day grace period).</span>
-            <button class="set-linkbtn set-linkbtn--danger" style="margin-left:auto" onclick="Billing.confirmDeleteAccount()">Delete account</button>
+            <span class="set-plan-meta">Permanently delete your account and all data. This is immediate and cannot be undone.</span>
+            <button class="btn-delete-account" style="margin-left:auto" onclick="Billing.confirmDeleteAccount()">DELETE ACCOUNT</button>
           </div>
         </div>
       </div>`;

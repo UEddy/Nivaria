@@ -756,6 +756,11 @@ function renderPassword(flow) {
     <p class="auth-sub">${sub}</p>
     <div class="msg msg-error" id="msg"></div>
     <form id="password-form" novalidate>
+      ${flow === 'register' ? `
+      <div class="form-group">
+        <label class="form-label">What should we call you?</label>
+        <input id="inp-firstname" class="form-input" type="text" placeholder="First name" maxlength="50" autocomplete="given-name" autocapitalize="words" />
+      </div>` : ''}
       <div class="form-group">
         <label class="form-label">Password</label>
         <div class="input-wrap">
@@ -879,13 +884,19 @@ function wirePasswordForm(flow) {
   const form = document.getElementById('password-form');
   if (form) form.addEventListener('submit', async e => {
     e.preventDefault();
+    if (flow === 'register') {
+      const fn = val('inp-firstname');
+      if (!fn) return showMsg('Please tell us what to call you.');
+      if (!isValidName(fn)) return showMsg('Name can only contain letters, spaces, hyphens, apostrophes, and periods.');
+    }
     const pw  = val('inp-password');
     const pw2 = val('inp-password2');
     if (pw !== pw2) return showMsg('Passwords do not match.');
     if (flow === 'register') await doRegisterComplete(pw);
     else await doForgotReset(pw);
   });
-  document.getElementById('inp-password')?.focus();
+  // Land the cursor on the first field of the step (name on register, else password).
+  (document.getElementById('inp-firstname') || document.getElementById('inp-password'))?.focus();
 }
 
 // ── API calls ──────────────────────────────────────────────────────────────────
@@ -936,7 +947,12 @@ async function submitOtp(flow) {
 async function doRegisterComplete(password) {
   setLoading(true);
   try {
-    await post('/api/auth/register/complete', { email: State.email, token: State.verifiedToken, password });
+    const firstName = val('inp-firstname');
+    // Capture the browser's IANA timezone so the dashboard greeting bands by the
+    // user's local time. Falls back to UTC if the browser doesn't expose it.
+    let timezone = 'UTC';
+    try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (_) {}
+    await post('/api/auth/register/complete', { email: State.email, token: State.verifiedToken, password, firstName, timezone });
     // Phase 6: new accounts land on the business-context onboarding form
     // before the dashboard. Skipping is allowed and still gets them in.
     window.location.href = '/app#/onboarding';
@@ -1010,6 +1026,8 @@ async function post(url, body) {
 
 function val(id)     { return (document.getElementById(id)?.value || '').trim(); }
 function isEmail(e)  { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
+// Mirrors the server's FIRST_NAME_RE (letters/marks, spaces, . ' -, 1-50 chars).
+function isValidName(n) { return /^[\p{L}\p{M} .'\-]{1,50}$/u.test(n); }
 function esc(str)    { return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function showMsg(text, type = 'error') {

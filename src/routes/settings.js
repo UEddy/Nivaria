@@ -41,7 +41,7 @@ function isValidEmail(str) {
 router.get('/', (req, res) => {
   const db       = getDb();
   const settings = db.prepare('SELECT * FROM settings WHERE user_id = ?').get(req.userId);
-  const user     = db.prepare('SELECT id, email, name, tier, api_key, created_at FROM users WHERE id = ?').get(req.userId);
+  const user     = db.prepare('SELECT id, email, name, first_name, timezone, tier, api_key, created_at FROM users WHERE id = ?').get(req.userId);
   res.json({ settings: settings || {}, user });
 });
 

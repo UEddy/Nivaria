@@ -2243,6 +2243,14 @@ tbody tr:hover td { background: var(--bg-hover); }
 }
 
 /* Dashboard banner reminding users to complete their context */
+/* Personalized, time-aware dashboard greeting */
+.dash-greeting {
+  font-size: 22px; font-weight: 700; letter-spacing: -0.4px;
+  color: var(--txt);
+  margin-bottom: 18px;
+}
+@media (max-width: 480px) { .dash-greeting { font-size: 19px; margin-bottom: 14px; } }
+
 .ctx-banner {
   display: flex; align-items: center; gap: 14px;
   padding: 12px 16px;
@@ -2647,6 +2655,40 @@ tbody tr:hover td { background: var(--bg-hover); }
 .set-linkbtn:hover { color: var(--txt); background: var(--bg-hover); }
 .set-linkbtn--danger:hover { color: var(--red-2); }
 .set-linkbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── Destructive "DELETE ACCOUNT" button ─────────────────────────
+   Deliberately distinct + harder to click by accident: deep red (#DC2626,
+   meets WCAG AA on the dark surface), bold all-caps label, red 1px border,
+   and only a faint red tint at rest so it reads as a serious, deliberate
+   action rather than a routine link. */
+.btn-delete-account {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: var(--font);
+  font-size: 12.5px; font-weight: 700; letter-spacing: 0.04em;
+  color: #DC2626;
+  background: rgba(220, 38, 38, 0.06);
+  border: 1px solid #DC2626;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-delete-account:hover {
+  background: #DC2626; color: #fff;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.30);
+}
+.btn-delete-account:focus-visible { outline: 2px solid #DC2626; outline-offset: 2px; }
+
+/* "What gets deleted" list inside the delete-account confirmation modal */
+.del-list {
+  margin: 0 0 16px; padding: 12px 14px 12px 30px;
+  list-style: disc;
+  background: var(--red-dim);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  border-radius: 10px;
+}
+.del-list li { font-size: 13px; color: var(--txt-2); line-height: 1.65; }
+.del-list li::marker { color: var(--red); }
 
 /* Inline disconnect confirmation (no modal) */
 .set-inline-confirm {

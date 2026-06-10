@@ -197,37 +197,64 @@ const Billing = {
   },
 
   confirmDeleteAccount() {
+    const email = (window.App && App.user && App.user.email) || '';
     openModal(`
-      <div class="modal-header"><div class="modal-title">Delete account</div>
+      <div class="modal-header"><div class="modal-title">Delete your Nivaria account?</div>
         <button class="modal-close" onclick="closeModal()">${X_ICON}</button></div>
       <div class="modal-body" id="del-body">
-        <p style="color:var(--txt-2);line-height:1.7">This schedules permanent deletion of your account and all workspace data in <strong>30 days</strong>. We’ll email you a cancellation link. You can undo it any time before then.</p>
+        <p style="color:var(--txt-2);line-height:1.6;margin-bottom:10px">This is <strong style="color:var(--red-2)">immediate and permanent</strong>. There is no recovery. The following are erased:</p>
+        <ul class="del-list">
+          <li>Your account and login credentials</li>
+          <li>All competitors and briefs you've created</li>
+          <li>Your workspace and all associated data</li>
+          <li>Any active subscription (cancelled at the end of the current billing period)</li>
+          <li>Calendar and Slack integrations</li>
+        </ul>
         <div class="form-group">
-          <label class="form-label" for="del-pw">Confirm your password to continue</label>
-          <input class="form-input" id="del-pw" type="password" autocomplete="current-password" placeholder="Your password" />
+          <label class="form-label" for="del-email">Type your email address to confirm</label>
+          <input class="form-input" id="del-email" type="email" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${esc(email)}" oninput="Billing._syncDeleteBtn()" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="del-pw">Confirm your password</label>
+          <input class="form-input" id="del-pw" type="password" autocomplete="current-password" placeholder="Your password" oninput="Billing._syncDeleteBtn()" />
           <span class="form-hint" id="del-err" style="color:var(--red)"></span>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-ghost" onclick="closeModal()">Keep my account</button>
-        <button class="btn btn-danger" onclick="Billing.doDeleteAccount(this)">Delete my account</button>
+        <button class="btn btn-primary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-danger" id="del-confirm-btn" onclick="Billing.doDeleteAccount(this)" disabled>Delete Account Permanently</button>
       </div>`);
   },
+
+  // The confirm button stays disabled until the typed email matches the account
+  // email (case-insensitive) AND a password has been entered.
+  _syncDeleteBtn() {
+    const btn = el('del-confirm-btn');
+    if (!btn) return;
+    const accountEmail = ((window.App && App.user && App.user.email) || '').trim().toLowerCase();
+    const typed = (el('del-email')?.value || '').trim().toLowerCase();
+    const pw    = el('del-pw')?.value || '';
+    btn.disabled = !(accountEmail && typed === accountEmail && pw.length > 0);
+  },
+
   async doDeleteAccount(btn) {
+    const confirmEmail = (el('del-email')?.value || '').trim();
     const pw = el('del-pw')?.value || '';
     const errEl = el('del-err');
     if (errEl) errEl.textContent = '';
-    if (!pw) { if (errEl) errEl.textContent = 'Password is required.'; return; }
-    const restore = startBtn(btn, 'Processing…');
+    if (!confirmEmail || !pw) { if (errEl) errEl.textContent = 'Type your email and password to continue.'; return; }
+    const restore = startBtn(btn, 'Deleting…');
     try {
-      const r = await API.deleteAccount(pw);
+      const r = await API.deleteAccount(pw, confirmEmail);
       el('del-body').innerHTML = `
         <div class="wl-success">
           <div class="wl-success__icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
-          <div class="wl-success__text">${esc(r.message || 'Deletion scheduled.')} Check your email for the cancellation link.</div>
+          <div class="wl-success__text">${esc(r.message || 'Your account has been permanently deleted.')}</div>
         </div>`;
       const f = btn.closest('.modal-footer');
-      if (f) f.innerHTML = `<button class="btn btn-primary" onclick="closeModal()">Done</button>`;
+      if (f) f.innerHTML = '';
+      // The session is already destroyed server-side; land on the landing page.
+      setTimeout(() => { window.location.href = (r && r.redirect) || '/'; }, 1400);
     } catch (e) {
       if (errEl) errEl.textContent = e.message || 'Could not process the request.';
       restore();
