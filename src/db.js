@@ -130,6 +130,9 @@ const SCHEMA = `
     expires_at DATETIME NOT NULL,
     used INTEGER DEFAULT 0,
     verified_token TEXT,
+    -- Wrong-guess counter for the per-email verification lockout. The code is
+    -- burned (used=1) once this reaches the cap; see routes/auth.verifyOtp.
+    failed_attempts INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -534,6 +537,13 @@ async function initDb() {
   // Phase 12: emergency per-user override granting unlimited Pro feature access
   // regardless of subscription state (see src/lib/tierLimits.js). Admin-set only.
   if (!userCols.includes('is_developer'))    sqlDb.run('ALTER TABLE users ADD COLUMN is_developer INTEGER DEFAULT 0');
+
+  // Security: per-email OTP verification lockout counter (additive; existing DBs
+  // created the otp_codes table before this column existed).
+  const otpCols = (sqlDb.exec('PRAGMA table_info(otp_codes)')[0]?.values || []).map(v => v[1]);
+  if (otpCols.length && !otpCols.includes('failed_attempts')) {
+    sqlDb.run('ALTER TABLE otp_codes ADD COLUMN failed_attempts INTEGER DEFAULT 0');
+  }
 
   // Migrate competitors table for P0 check-status tracking
   const compCols = (sqlDb.exec('PRAGMA table_info(competitors)')[0]?.values || []).map(v => v[1]);
