@@ -18,8 +18,6 @@ router.get('/', (req, res) => {
   const offset = (page - 1) * limit;
   const threat = req.query.threat;
   const competitorId = req.query.competitor_id;
-  // meaningful filter: 'meaningful' (default) | 'trivial' | 'all'
-  const meaningful = String(req.query.meaningful || 'meaningful').toLowerCase();
 
   const conditions = ['c.user_id = ?'];
   const params = [req.userId];
@@ -32,14 +30,11 @@ router.get('/', (req, res) => {
     conditions.push('ch.competitor_id = ?');
     params.push(competitorId);
   }
-  if (meaningful === 'meaningful') {
-    // Treat legacy NULL rows (pre-Phase 4) as meaningful so existing history
-    // isn't hidden after the migration.
-    conditions.push('(ch.is_meaningful IS NULL OR ch.is_meaningful = 1)');
-  } else if (meaningful === 'trivial') {
-    conditions.push('ch.is_meaningful = 0');
-  }
-  // 'all' adds nothing
+  // Trivial (AI-downgraded / pre-AI-gated) changes are hidden from every
+  // customer-facing view. They stay in the table for audit but are NEVER
+  // returned here, regardless of query params. Legacy NULL rows (pre-Phase 4)
+  // count as meaningful so existing history isn't hidden.
+  conditions.push('(ch.is_meaningful IS NULL OR ch.is_meaningful = 1)');
 
   const where = conditions.join(' AND ');
 

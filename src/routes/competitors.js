@@ -46,12 +46,17 @@ function validateCssSelector(raw) {
 
 router.get('/', (req, res) => {
   const db   = getDb();
+  // change_count and the "last change" fields feed customer-facing counts and
+  // badges, so they exclude trivial (AI-downgraded / pre-AI-gated) changes.
+  // Those rows are retained in the table for audit but never surfaced to users.
+  // (MEANINGFUL is a fixed literal, not user input — no injection surface.)
+  const MEANINGFUL = '(is_meaningful IS NULL OR is_meaningful = 1)';
   const rows = db.prepare(`
     SELECT c.*,
-      (SELECT COUNT(*) FROM changes WHERE competitor_id = c.id) AS change_count,
-      (SELECT headline   FROM changes WHERE competitor_id = c.id ORDER BY detected_at DESC LIMIT 1) AS last_headline,
-      (SELECT threat_level FROM changes WHERE competitor_id = c.id ORDER BY detected_at DESC LIMIT 1) AS last_threat,
-      (SELECT detected_at  FROM changes WHERE competitor_id = c.id ORDER BY detected_at DESC LIMIT 1) AS last_change_at
+      (SELECT COUNT(*) FROM changes WHERE competitor_id = c.id AND ${MEANINGFUL}) AS change_count,
+      (SELECT headline     FROM changes WHERE competitor_id = c.id AND ${MEANINGFUL} ORDER BY detected_at DESC LIMIT 1) AS last_headline,
+      (SELECT threat_level FROM changes WHERE competitor_id = c.id AND ${MEANINGFUL} ORDER BY detected_at DESC LIMIT 1) AS last_threat,
+      (SELECT detected_at  FROM changes WHERE competitor_id = c.id AND ${MEANINGFUL} ORDER BY detected_at DESC LIMIT 1) AS last_change_at
     FROM competitors c
     WHERE c.user_id = ?
     ORDER BY c.created_at DESC

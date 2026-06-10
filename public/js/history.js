@@ -1,15 +1,16 @@
 const History = {
   currentFilter: 'all',         // threat filter: all | low | medium | high
-  currentMeaningful: 'meaningful', // gate filter: meaningful | trivial | all
   currentPage: 1,
 
-  async render(filter, page, meaningful) {
+  async render(filter, page) {
     History.currentFilter = filter || new URLSearchParams(window.location.hash.split('?')[1]).get('threat') || 'all';
-    History.currentMeaningful = meaningful || History.currentMeaningful || 'meaningful';
     History.currentPage = page || 1;
 
     try {
-      const params = { page: History.currentPage, limit: 15, meaningful: History.currentMeaningful };
+      // Trivial (AI-downgraded / pre-AI-gated) changes are never requested here
+      // — they're hidden from customer-facing views. The server also excludes
+      // them by default, so this is defense in depth.
+      const params = { page: History.currentPage, limit: 15 };
       if (History.currentFilter !== 'all') params.threat = History.currentFilter;
 
       const data = await API.getChanges(params);
@@ -32,24 +33,11 @@ const History = {
       { val: 'medium', label: 'Medium' },
       { val: 'low', label: 'Low' },
     ];
-    const gateFilters = [
-      { val: 'meaningful', label: 'Meaningful' },
-      { val: 'trivial',    label: 'Trivial' },
-      { val: 'all',        label: 'All' },
-    ];
 
     return `
-      <div class="filter-row" style="margin-bottom:8px">
-        ${gateFilters.map(f => `
-          <button class="filter-btn ${History.currentMeaningful === f.val ? 'active' : ''}" onclick="History.render(History.currentFilter, 1, '${f.val}')">
-            ${f.label}
-          </button>
-        `).join('')}
-        <span class="text-muted text-sm" style="margin-left:auto;align-self:center" title="Trivial changes are gated before reaching the AI: no brief, no alert, no token spend.">Pre-AI gate</span>
-      </div>
       <div class="filter-row">
         ${filters.map(f => `
-          <button class="filter-btn ${History.currentFilter === f.val ? 'active' : ''}" onclick="History.render('${f.val}', 1, History.currentMeaningful)">
+          <button class="filter-btn ${History.currentFilter === f.val ? 'active' : ''}" onclick="History.render('${f.val}', 1)">
             ${f.val !== 'all' ? `<span class="filter-dot filter-dot-${f.val}"></span>` : ''}
             ${f.label}
           </button>
@@ -84,9 +72,8 @@ const History = {
 
   changeCard(c) {
     const analysis = c.analysis || {};
-    const trivial = c.is_meaningful === 0;
     return `
-      <div class="change-card" onclick="navigate('/history/${c.id}')" style="${trivial ? 'opacity:.72' : ''}">
+      <div class="change-card" onclick="navigate('/history/${c.id}')">
         <div class="change-threat-stripe ${c.threat_level || 'low'}"></div>
         <div class="change-main">
           <div class="change-top">
@@ -95,7 +82,6 @@ const History = {
               <span>${esc(c.competitor_name)}</span>
             </div>
             ${threatBadge(c.threat_level)}
-            ${trivial ? `<span class="scoped-badge" title="${esc(c.gate_reason || 'gated as trivial')}">trivial · ${esc(c.gate_category || 'gated')}</span>` : ''}
             <span class="change-date">${timeAgo(c.detected_at)}</span>
           </div>
           <div class="change-headline">${esc(c.headline || 'Change detected')}</div>
@@ -122,12 +108,12 @@ const History = {
   pagination(page, pages) {
     return `
       <div class="pagination">
-        <button class="btn btn-secondary btn-sm" ${page <= 1 ? 'disabled' : ''} onclick="History.render(History.currentFilter, ${page - 1}, History.currentMeaningful)">
+        <button class="btn btn-secondary btn-sm" ${page <= 1 ? 'disabled' : ''} onclick="History.render(History.currentFilter, ${page - 1})">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
           Prev
         </button>
         <span class="text-muted text-sm">Page ${page} of ${pages}</span>
-        <button class="btn btn-secondary btn-sm" ${page >= pages ? 'disabled' : ''} onclick="History.render(History.currentFilter, ${page + 1}, History.currentMeaningful)">
+        <button class="btn btn-secondary btn-sm" ${page >= pages ? 'disabled' : ''} onclick="History.render(History.currentFilter, ${page + 1})">
           Next
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
