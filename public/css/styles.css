@@ -2567,6 +2567,103 @@ tbody tr:hover td { background: var(--bg-hover); }
 .set-card__body .form-group { gap: 7px; }
 .set-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
+/* ── Pattern 2: sidebar layout (left nav + right panel) ──────────
+   The split view is wider than the single-column 720px stack so the panel
+   keeps a comfortable measure beside the 210px rail. */
+.settings-page--split { max-width: 980px; }
+
+.settings-shell {
+  display: grid;
+  grid-template-columns: 212px minmax(0, 1fr);
+  gap: 30px;
+  align-items: start;
+}
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 12px;
+}
+.settings-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 44px;            /* ≥44px touch target */
+  padding: 9px 12px;
+  border-radius: 10px;
+  box-sizing: border-box;
+  color: var(--txt-2);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.1px;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.settings-nav__item:hover { background: var(--bg-hover); color: var(--txt); }
+.settings-nav__item.is-active { background: var(--bg-hover); color: var(--txt); }
+.settings-nav__item.is-active .settings-nav__icon { color: var(--accent); }
+.settings-nav__icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; flex-shrink: 0; color: var(--txt-3);
+  transition: color 0.14s ease;
+}
+.settings-nav__icon svg { width: 18px; height: 18px; }
+.settings-nav__item:hover .settings-nav__icon { color: var(--txt-2); }
+.settings-nav__label { min-width: 0; }
+
+.settings-panel { min-width: 0; }   /* let the panel shrink instead of overflowing */
+
+/* Danger zone: a restrained red border so destructive actions read as a
+   distinct, deliberate region (the DELETE button keeps its own styling). */
+.set-card--danger { border-color: rgba(239, 68, 68, 0.26); }
+.set-card--danger .set-card__title { color: var(--red-2, var(--red)); }
+
+/* Inline label qualifier, e.g. "Timezone (detected automatically)". */
+.form-label-note { font-weight: 400; color: var(--txt-3); font-size: 12px; }
+
+/* ── Mobile: sidebar collapses to a horizontal, scrollable tab bar ──
+   Consistent with the app's single-column phone layout. The bar scrolls
+   internally (overflow-x:auto) so a long tab list never widens the page; the
+   panel's min-width:0 keeps card content inside the viewport at 375px. */
+@media (max-width: 767px) {
+  .settings-page--split { max-width: none; }
+
+  .settings-shell {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .settings-nav {
+    position: static;
+    flex-direction: row;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+    margin: 0 -2px;            /* let the first/last chip sit flush to the edge */
+    scroll-snap-type: x proximity;
+  }
+  .settings-nav::-webkit-scrollbar { display: none; }
+
+  .settings-nav__item {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    scroll-snap-align: start;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    padding: 0 14px;
+    min-height: 44px;
+  }
+  .settings-nav__item.is-active {
+    border-color: var(--accent);
+    color: var(--txt);
+  }
+}
+
 /* ── Staggered card reveal (subtle, 200ms + 8px rise) ────────── */
 @keyframes setCardIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .settings-page-header,

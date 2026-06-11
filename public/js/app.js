@@ -390,9 +390,18 @@ const App = {
       Deals.render(routeQuery).then(transition);
     } else if (page === 'settings') {
       el('page-title').textContent = 'Settings';
-      el('page-sub').textContent = 'Webhooks, notifications, and account';
-      root.innerHTML = Skeleton.cards(4);
-      Settings.render(routeQuery).then(transition);
+      el('page-sub').textContent = 'Workspace, integrations, notifications, and account';
+      // rest[0] is the section (#/settings/integrations). Only show the skeleton
+      // on a fresh entry — when the settings shell is already mounted we're just
+      // switching sections, and Settings.render() re-paints from cache without a
+      // flash.
+      if (!document.getElementById('settings-shell')) root.innerHTML = Skeleton.cards(4);
+      Settings.render(routeQuery, id).then(transition);
+    } else if (page === 'profile') {
+      el('page-title').textContent = 'Profile';
+      el('page-sub').textContent = 'Your personal details and voice';
+      root.innerHTML = Skeleton.cards(3);
+      Profile.render().then(transition);
     } else if (page === 'pricing' || page === 'plans') {
       el('page-title').textContent = 'Plans & Pricing';
       el('page-sub').textContent = 'Choose the plan that fits your team';
@@ -696,7 +705,7 @@ const Pricing = {
       }
       if (p.id === 'pro') {
         return current === 'pro'
-          ? `<button class="btn btn-secondary w-full" onclick="navigate('/settings')">Current plan · Manage</button>`
+          ? `<button class="btn btn-secondary w-full" onclick="navigate('/settings/billing')">Current plan · Manage</button>`
           : `<button class="btn btn-primary w-full" onclick="Billing.subscribe(this)">Subscribe</button>`;
       }
       // team / business → waitlist

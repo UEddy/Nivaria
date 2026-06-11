@@ -259,7 +259,7 @@ async function sendReauthEmail(userId, provider, accountEmail) {
              <p>Your ${provider === 'google' ? 'Google' : 'Microsoft'} Calendar connection
              (${accountEmail || 'unknown account'}) expired and could not be refreshed automatically.</p>
              <p>Pre-meeting briefings will stop firing until you re-connect.
-             <a href="${appUrl}/app#/settings">Re-connect now</a>.</p>`,
+             <a href="${appUrl}/app#/settings/integrations">Re-connect now</a>.</p>`,
     },
     { headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, timeout: 10000 }
   );

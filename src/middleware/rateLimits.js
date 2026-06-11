@@ -35,8 +35,10 @@ function makeUserLimiter(windowMs, max, windowMinutes) {
 }
 
 module.exports = {
-  // General API: 100 req / IP / 15 min
-  api: makeLimiter(15 * 60 * 1000, 100, 15),
+  // General API: 100 req / IP / 15 min. The cap is env-overridable (default
+  // unchanged) so local end-to-end test harnesses, which fan out far more than a
+  // human ever would, don't trip the limiter; production omits the var and keeps 100.
+  api: makeLimiter(15 * 60 * 1000, parseInt(process.env.RATE_LIMIT_API_MAX, 10) || 100, 15),
 
   // ── Phase 10: payment + account endpoints (per-user unless noted) ───────────
   billingCheckout: makeUserLimiter(60 * 60 * 1000, 10, 60), // 10 / user / hour

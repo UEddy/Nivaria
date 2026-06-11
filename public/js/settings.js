@@ -1,38 +1,106 @@
+// Settings — Pattern 2 sidebar layout. A left vertical nav switches between five
+// independent section panels (no long-scroll single page). Sections:
+//   workspace · integrations · notifications · billing · account
+// Per-user identity (name, timezone, password, voice profile) lives on the
+// separate Profile page (public/js/profile.js), NOT here.
+//
+// Each section is a real hash sub-route (#/settings/<section>) so deep links,
+// browser back/forward, and the OAuth return redirects all work. The fetched
+// data bundle is cached on Settings._ctx; tab switches re-render the active
+// panel from cache (no skeleton flash), while a bare Settings.render() call
+// (e.g. after a billing mutation) refetches fresh data and stays on the
+// current section.
+
 const Settings = {
-  async render(routeQuery) {
-    try {
-      const [{ settings, user }, ctxData, voiceData, calData, slackData, subData] = await Promise.all([
-        API.getSettings(),
-        API.getUserContext().catch(() => null), // never block settings on context fetch
-        API.getVoiceProfile().catch(() => null), // never block settings on voice profile fetch
-        API.getCalendarConnections().catch(() => ({ encryption_configured: false, connections: [] })),
-        API.getSlackConnection().catch(() => ({ oauth_configured: false, signing_configured: false, connected: false })),
-        API.getSubscription().catch(() => null), // Phase 10: workspace subscription state
-      ]);
-      el('page-root').innerHTML = Settings.html(settings || {}, user, ctxData, voiceData, calData, slackData, subData);
-      Settings._wireDirty();
-      Settings.handleCalendarReturnParams(routeQuery);
-      Settings.handleSlackReturnParams(routeQuery);
-    } catch (e) {
-      el('page-root').innerHTML = `
-        <div class="empty-state">
-          <div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
-          <div class="empty-title">Error loading settings</div>
-          <div class="empty-desc">${esc(e.message)}</div>
-        </div>`;
+  _ctx: null,            // cached { settings, user, ctxData, voiceData, calData, slackData, subData }
+  _activeSection: 'workspace',
+
+  SECTIONS: [
+    { id: 'workspace',     label: 'Workspace',     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg>` },
+    { id: 'integrations',  label: 'Integrations',  icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7H6a3 3 0 0 0 0 6h3"/><path d="M15 17h3a3 3 0 0 0 0-6h-3"/><line x1="8" y1="12" x2="16" y2="12"/></svg>` },
+    { id: 'notifications', label: 'Notifications',  icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>` },
+    { id: 'billing',       label: 'Billing',        icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>` },
+    { id: 'account',       label: 'Account',        icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>` },
+  ],
+
+  _RETURN_PARAMS: ['calendar_connected', 'calendar_error', 'slack_connected', 'slack_error'],
+
+  // Resolve which section to show from an explicit id, then from any OAuth/upgrade
+  // return params (so old #/settings?calendar_connected=… links land on Integrations),
+  // then the last active section, then the workspace default.
+  _resolveSection(section, routeQuery) {
+    if (section) return section;
+    if (routeQuery instanceof URLSearchParams) {
+      if (Settings._RETURN_PARAMS.some(k => routeQuery.has(k))) return 'integrations';
+      if (routeQuery.has('upgraded')) return 'billing';
     }
+    return Settings._activeSection || 'workspace';
   },
 
-  html(s, user, ctxData, voiceData, calData, slackData, subData) {
-    // Phase 10: tier is workspace-driven (subData), not the deprecated user.tier.
+  async render(routeQuery, section) {
+    const fromRouter = arguments.length > 0; // bare Settings.render() == mutation re-render
+    const target = Settings._resolveSection(section, routeQuery);
+    Settings._activeSection = target;
+
+    const hasReturnParams = routeQuery instanceof URLSearchParams &&
+      Settings._RETURN_PARAMS.some(k => routeQuery.has(k));
+    const shellExists = !!document.getElementById('settings-shell');
+    // Refetch when: no cache, mutation re-render, OAuth return (state changed),
+    // or we're (re)entering settings fresh (no shell mounted).
+    const needFetch = !Settings._ctx || !fromRouter || hasReturnParams || !shellExists;
+
+    if (needFetch) {
+      try {
+        const [{ settings, user }, ctxData, voiceData, calData, slackData, subData] = await Promise.all([
+          API.getSettings(),
+          API.getUserContext().catch(() => null),
+          API.getVoiceProfile().catch(() => null),
+          API.getCalendarConnections().catch(() => ({ encryption_configured: false, connections: [] })),
+          API.getSlackConnection().catch(() => ({ oauth_configured: false, signing_configured: false, connected: false })),
+          API.getSubscription().catch(() => null),
+        ]);
+        Settings._ctx = { settings: settings || {}, user, ctxData, voiceData, calData, slackData, subData };
+      } catch (e) {
+        el('page-root').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+            <div class="empty-title">Error loading settings</div>
+            <div class="empty-desc">${esc(e.message)}</div>
+          </div>`;
+        return;
+      }
+    }
+
+    el('page-root').innerHTML = Settings.shellHtml(Settings._ctx, target);
+    Settings._wireDirty();
+    Settings.handleCalendarReturnParams(routeQuery);
+    Settings.handleSlackReturnParams(routeQuery);
+  },
+
+  // Navigate to a section. Anchors already carry the href; this is the keyboard/
+  // programmatic path and keeps the URL the single source of truth.
+  go(section) { navigate('/settings/' + section); },
+
+  // ── Shell: identity header + left nav + active panel ────────────────────────
+
+  shellHtml(ctx, active) {
+    const { user, subData } = ctx;
     const tier = (subData && subData.effectiveTier) || 'free';
     const tierLabel = { free: 'Free', pro: 'Pro', team: 'Team', business: 'Business' }[tier] || tier;
-    const isProPlus = tier === 'pro' || tier === 'team' || tier === 'business';
-    const c = ctxData?.context || {};
+    const section = Settings.SECTIONS.find(x => x.id === active) || Settings.SECTIONS[0];
+
+    const nav = Settings.SECTIONS.map(sx => {
+      const on = sx.id === active;
+      return `
+        <a href="#/settings/${sx.id}" class="settings-nav__item ${on ? 'is-active' : ''}"
+           data-section="${sx.id}" aria-current="${on ? 'page' : 'false'}">
+          <span class="settings-nav__icon">${sx.icon}</span>
+          <span class="settings-nav__label">${sx.label}</span>
+        </a>`;
+    }).join('');
 
     return `
-      <div class="settings-page">
-
+      <div class="settings-page settings-page--split">
         <div class="settings-page-header">
           <div>
             <div class="settings-page-title">Settings</div>
@@ -46,142 +114,34 @@ const Settings = {
         </div>
         <div class="settings-page-divider"></div>
 
-        <div class="settings-stack">
-
-          ${Settings.profileHtml(user)}
-
-          ${Settings.businessContextHtml(c)}
-
-          ${Settings.voiceProfileHtml(voiceData)}
-
-          ${Settings.calendarHtml(s, calData)}
-
-          ${Settings.slackHtml(slackData)}
-
-          ${Settings.notificationsHtml(s, isProPlus, user?.email)}
-
-          ${Settings.billingHtml(subData)}
-
-          <!-- Account -->
-          <div class="set-card">
-            <div class="set-card__head">
-              <div class="set-card__title">Account</div>
-              <div class="set-card__desc">Your account details and programmatic API access.</div>
-            </div>
-            <div class="set-card__body">
-              <div class="set-row-2">
-                <div class="form-group">
-                  <label class="form-label">Name</label>
-                  <div class="set-static">${esc(user?.name || '-')}</div>
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Email</label>
-                  <div class="set-static">
-                    ${esc(user?.email || '-')}
-                    <span class="set-pill set-pill--active" title="Verified">Verified</span>
-                  </div>
-                </div>
-              </div>
-              <div class="form-group">
-                <label class="form-label">API key</label>
-                <div class="api-key-row">
-                  <div class="api-key-value" id="api-key-display" data-full="${esc(user?.api_key || '')}">
-                    ${esc(user?.api_key?.substring(0, 8))}••••••••••••••••••••
-                  </div>
-                  <button class="btn btn-secondary btn-sm" onclick="Settings.toggleApiKey()">Show</button>
-                  <button class="btn btn-ghost btn-sm" onclick="Settings.copyApiKey('${esc(user?.api_key || '')}')">Copy</button>
-                </div>
-                <span class="form-hint">Include as <code class="code-inline">X-Api-Key</code> header in API requests.</span>
-              </div>
-            </div>
-          </div>
-
-          ${Settings.gdprHtml()}
-
-        </div>
-      </div>
-    `;
-  },
-
-  // ── Profile (name + timezone) ───────────────────────────────────────────────
-
-  profileHtml(user) {
-    const name = user?.first_name || '';
-    const tz   = user?.timezone || 'UTC';
-    return `
-      <div class="set-card">
-        <div class="set-card__head">
-          <div class="set-card__title">Your profile</div>
-          <div class="set-card__desc">We greet you by name on the dashboard, and use your timezone to time that greeting to your local morning, afternoon, and evening.</div>
-        </div>
-        <div class="set-card__body" data-dirty-group>
-          <div class="set-row-2">
-            <div class="form-group">
-              <label class="form-label" for="profile-name">Name</label>
-              <input class="form-input" id="profile-name" maxlength="50"
-                placeholder="What should we call you?" value="${esc(name)}" />
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="profile-tz">Timezone</label>
-              <select class="form-input" id="profile-tz">${Settings.timezoneOptions(tz)}</select>
-            </div>
-          </div>
-          <div class="set-card__footer">
-            <button class="btn btn-primary btn-sm" data-save-btn onclick="Settings.saveProfile(this)">Save changes</button>
+        <div class="settings-shell" id="settings-shell">
+          <nav class="settings-nav" aria-label="Settings sections">${nav}</nav>
+          <div class="settings-panel" id="settings-panel" role="region" aria-label="${esc(section.label)} settings">
+            <div class="settings-stack">${Settings.panelHtml(active, ctx)}</div>
           </div>
         </div>
       </div>`;
   },
 
-  // Build the timezone <option> list. Prefers the full IANA set via
-  // Intl.supportedValuesOf (all modern engines), falling back to a curated
-  // shortlist. Guarantees 'UTC' and the user's current value are present.
-  timezoneOptions(current) {
-    let zones = [];
-    try { if (typeof Intl.supportedValuesOf === 'function') zones = Intl.supportedValuesOf('timeZone'); } catch (_) {}
-    if (!zones || !zones.length) {
-      zones = ['UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
-        'America/Sao_Paulo', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Africa/Lagos',
-        'Africa/Johannesburg', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Singapore', 'Asia/Shanghai',
-        'Asia/Tokyo', 'Australia/Sydney', 'Pacific/Auckland'];
-    }
-    if (!zones.includes('UTC')) zones = ['UTC', ...zones];
-    if (current && !zones.includes(current)) zones = [current, ...zones];
-    return zones.map(z => `<option value="${esc(z)}" ${z === current ? 'selected' : ''}>${esc(z)}</option>`).join('');
-  },
+  panelHtml(section, ctx) {
+    const { settings: s, user, ctxData, calData, slackData, subData } = ctx;
+    const tier = (subData && subData.effectiveTier) || 'free';
+    const isProPlus = tier === 'pro' || tier === 'team' || tier === 'business';
+    const c = ctxData?.context || {};
 
-  async saveProfile(btn) {
-    const firstName = document.getElementById('profile-name').value.trim();
-    const timezone  = document.getElementById('profile-tz').value;
-
-    // Only send the name when non-empty so a timezone-only change can't trip the
-    // server's "name is required" validation for accounts that have no name yet.
-    const payload = { timezone };
-    if (firstName) payload.firstName = firstName;
-
-    btn.disabled = true;
-    const original = btn.textContent;
-    btn.textContent = 'Saving…';
-    try {
-      const r = await API.updateProfile(payload);
-      if (window.App && App.user && r.user) {
-        App.user.first_name = r.user.first_name;
-        App.user.name       = r.user.name;
-        App.user.timezone   = r.user.timezone;
-        App.updateUserUI?.();
-      }
-      // The greeting is cached per session; clear it so the new name/timezone
-      // takes effect on the next dashboard render.
-      try { sessionStorage.removeItem('cs-greeting'); } catch (_) {}
-      // A saved name means the dashboard "add your name" prompt is done for good.
-      if (firstName) { try { localStorage.setItem('cs-name-prompt-dismissed', '1'); } catch (_) {} }
-      btn.textContent = original;
-      Settings._flashSaved(btn);
-      toast('Profile saved.', 'success');
-    } catch (e) {
-      btn.disabled = false;
-      btn.textContent = original;
-      toast(e.message, 'error');
+    switch (section) {
+      case 'workspace':
+        return Settings.businessContextHtml(c);
+      case 'integrations':
+        return Settings.calendarHtml(s, calData) + Settings.slackHtml(slackData) + Settings.webhooksHtml(s, isProPlus);
+      case 'notifications':
+        return Settings.notificationsHtml(s, user?.email);
+      case 'billing':
+        return Settings.billingHtml(subData);
+      case 'account':
+        return Settings.accountHtml(user) + Settings.gdprHtml();
+      default:
+        return Settings.businessContextHtml(c);
     }
   },
 
@@ -254,13 +214,41 @@ const Settings = {
       </div>`;
   },
 
-  // ── Your data (Phase 10 GDPR) ─────────────────────────────────────────────────
+  // ── Account — programmatic API access ────────────────────────────────────────
+  // Name, email, password and voice live on the Profile page now. This card
+  // keeps account-level programmatic access; the danger zone (export + delete)
+  // follows it via gdprHtml().
 
-  gdprHtml() {
+  accountHtml(user) {
     return `
       <div class="set-card">
         <div class="set-card__head">
-          <div class="set-card__title">Your data</div>
+          <div class="set-card__title">API access</div>
+          <div class="set-card__desc">Your programmatic API key. Manage your name, email, and password on your <a href="#/profile" class="link-accent">Profile</a>.</div>
+        </div>
+        <div class="set-card__body">
+          <div class="form-group">
+            <label class="form-label">API key</label>
+            <div class="api-key-row">
+              <div class="api-key-value" id="api-key-display" data-full="${esc(user?.api_key || '')}">
+                ${esc(user?.api_key?.substring(0, 8))}••••••••••••••••••••
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="Settings.toggleApiKey()">Show</button>
+              <button class="btn btn-ghost btn-sm" onclick="Settings.copyApiKey('${esc(user?.api_key || '')}')">Copy</button>
+            </div>
+            <span class="form-hint">Include as <code class="code-inline">X-Api-Key</code> header in API requests.</span>
+          </div>
+        </div>
+      </div>`;
+  },
+
+  // ── Your data (Phase 10 GDPR) — danger zone ─────────────────────────────────
+
+  gdprHtml() {
+    return `
+      <div class="set-card set-card--danger">
+        <div class="set-card__head">
+          <div class="set-card__title">Danger zone</div>
           <div class="set-card__desc">Export everything we hold about you, or permanently delete your account.</div>
         </div>
         <div class="set-card__body">
@@ -279,7 +267,7 @@ const Settings = {
       </div>`;
   },
 
-  // ── Business context (Phase 6) ──────────────────────────────────────────────
+  // ── Business context (Phase 6) — Workspace section ──────────────────────────
 
   businessContextHtml(c) {
     return `
@@ -343,141 +331,7 @@ const Settings = {
     `;
   },
 
-  // ── Voice profile (Phase 8) ────────────────────────────────────────────────
-
-  voiceProfileHtml(voiceData) {
-    const v = voiceData?.profile || {};
-    const defaults = voiceData?.defaults || { formality: 'balanced', contraction_style: 'sometimes', opener_style: 'direct', sentence_rhythm: 'mixed' };
-    const isEmpty = !(v.formality || v.contraction_style || v.opener_style || v.sentence_rhythm ||
-                      v.sign_off_examples || v.voice_sample || v.avoid_phrases);
-
-    const editor = Settings.voiceEditorHtml(v, defaults);
-
-    return `
-      <div class="set-card">
-        <div class="set-card__head">
-          <div class="set-card__title">Voice profile</div>
-          <div class="set-card__desc">Drives the Outreach section on your briefs. Tune these so generated messages sound like you, not like a chatbot. Updates apply to future generations only. Already-generated outreach is unchanged until you regenerate it.</div>
-        </div>
-        ${isEmpty ? `
-          <div id="vp-empty" class="set-empty">
-            <div class="set-empty__icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-            </div>
-            <div class="set-empty__title">Your voice profile is empty</div>
-            <div class="set-empty__desc">Nivaria will use sensible defaults when generating outreach. Set it up to make every message sound like you.</div>
-            <button class="btn btn-primary btn-sm" onclick="Settings.expandVoiceProfile()">Set up voice profile</button>
-          </div>
-          <div id="vp-editor" class="set-card__body" data-dirty-group style="display:none;margin-top:20px">${editor}</div>
-        ` : `
-          <div id="vp-editor" class="set-card__body" data-dirty-group>${editor}</div>
-        `}
-      </div>
-    `;
-  },
-
-  voiceEditorHtml(v, defaults) {
-    const radio = (name, value, label, helper) => {
-      const isChecked = v[name] === value || (!v[name] && defaults[name] === value);
-      return `
-      <label class="voice-radio">
-        <input type="radio" name="vp-${name}" value="${value}" ${isChecked ? 'checked' : ''} />
-        <span class="voice-radio-body">
-          <span class="voice-radio-label">${label}</span>
-          ${helper ? `<span class="voice-radio-helper">${helper}</span>` : ''}
-        </span>
-      </label>`;
-    };
-
-    return `
-      <div class="form-group">
-        <label class="form-label">Formality</label>
-        <div class="voice-radio-group">
-          ${radio('formality', 'casual',   'Casual',   'Like texting a colleague')}
-          ${radio('formality', 'balanced', 'Balanced', 'Professional but human')}
-          ${radio('formality', 'formal',   'Formal',   'Buttoned-up enterprise')}
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Contractions</label>
-        <div class="voice-radio-group">
-          ${radio('contraction_style', 'always',    'Always use them', `"don't", "I'll", "we're"`)}
-          ${radio('contraction_style', 'sometimes', 'Sometimes',       'Natural mix')}
-          ${radio('contraction_style', 'never',     'Never',           `"do not", "I will", "we are"`)}
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Opener style</label>
-        <div class="voice-radio-group voice-radio-group--stack">
-          ${radio('opener_style', 'direct',
-            'Direct',
-            `<em>"Saw the BambooHR change. Wanted to flag it before our call"</em>`)}
-          ${radio('opener_style', 'warm',
-            'Warm',
-            `<em>"Hope your week's going well. Quick heads up on BambooHR"</em>`)}
-          ${radio('opener_style', 'context-first',
-            'Context-first',
-            `<em>"BambooHR just made a pricing change that affects how we should approach this deal"</em>`)}
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Sentence rhythm</label>
-        <div class="voice-radio-group voice-radio-group--stack">
-          ${radio('sentence_rhythm', 'short_punchy',
-            'Short and punchy',
-            `<em>"They dropped their price. Big deal."</em>`)}
-          ${radio('sentence_rhythm', 'mixed',
-            'Mixed lengths',
-            `<em>"Acme just cut their Pro plan. It's aggressive, and it changes how we should pitch."</em>`)}
-          ${radio('sentence_rhythm', 'measured',
-            'Longer measured sentences',
-            `<em>"Acme has reduced their Pro plan by 30%, which represents a substantive shift in market positioning."</em>`)}
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Sign-off examples</label>
-        <textarea class="form-input form-textarea" id="vp-signoff" rows="3" maxlength="1000"
-          placeholder="Cheers,&#10;Eddy">${esc(v.sign_off_examples || '')}</textarea>
-        <span class="form-hint">How do you usually sign off? Paste 2-3 examples. The AI will mirror these instead of inventing closers.</span>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Voice sample</label>
-        <textarea class="form-input form-textarea" id="vp-voice-sample" rows="6" maxlength="4000"
-          placeholder="Paste 1-2 short examples of emails you've written.">${esc(v.voice_sample || '')}</textarea>
-        <span class="form-hint">Optional but powerful. The AI studies your phrasing, rhythm, and word choice to write like you.</span>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Phrases to avoid</label>
-        <textarea class="form-input form-textarea" id="vp-avoid" rows="3" maxlength="1000"
-          placeholder="delve, leverage, synergy, circle back, I hope this email finds you well">${esc(v.avoid_phrases || '')}</textarea>
-        <span class="form-hint">Comma-separated. Anything you list here will never appear in your outreach.</span>
-      </div>
-
-      <div class="set-card__footer">
-        <button class="btn btn-primary btn-sm" data-save-btn onclick="Settings.saveVoiceProfile(this)">Save changes</button>
-      </div>
-    `;
-  },
-
-  expandVoiceProfile() {
-    const empty = document.getElementById('vp-empty');
-    const editor = document.getElementById('vp-editor');
-    if (empty) empty.style.display = 'none';
-    if (editor) {
-      editor.style.display = '';
-      // Editing the freshly revealed form should arm its Save button.
-      const btn = editor.querySelector('[data-save-btn]');
-      if (btn) btn.disabled = false;
-    }
-  },
-
-  // ── Calendar (Phase 7) — connection state only ──────────────────────────────
+  // ── Calendar (Phase 7) — Integrations section ───────────────────────────────
 
   calendarHtml(s, calData) {
     const conns = calData?.connections || [];
@@ -490,7 +344,7 @@ const Settings = {
       <div class="set-card">
         <div class="set-card__head">
           <div class="set-card__title">Calendar connection</div>
-          <div class="set-card__desc">Connect a calendar so Nivaria can match upcoming meetings to tracked competitors. Briefing delivery preferences live in the Notifications section below.</div>
+          <div class="set-card__desc">Connect a calendar so Nivaria can match upcoming meetings to tracked competitors. Briefing delivery preferences live in the Notifications section.</div>
         </div>
         <div class="set-card__body">
 
@@ -536,7 +390,7 @@ const Settings = {
     `;
   },
 
-  // ── Slack integration (Phase 9) ─────────────────────────────────────────────
+  // ── Slack deal logging (Phase 9) — Integrations section ─────────────────────
 
   slackHtml(slackData) {
     const d = slackData || {};
@@ -588,94 +442,17 @@ const Settings = {
       </div>`;
   },
 
-  confirmDisconnectSlack() {
-    openModal(`
-      <div class="modal-header">
-        <div class="modal-title">Disconnect Slack</div>
-        <button class="modal-close" onclick="closeModal()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-      </div>
-      <div class="modal-body"><p style="color:var(--txt-2);line-height:1.7">Disconnect Slack? The <code class="code-inline">/foresight</code> slash command will stop logging deals until you reconnect.</p></div>
-      <div class="modal-footer">
-        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-danger" onclick="Settings._doDisconnectSlack()">Disconnect</button>
-      </div>
-    `);
-  },
+  // ── Alert webhooks (Slack + Discord incoming) — Integrations section ─────────
+  // Saves slack_webhook + discord_webhook independently of the briefing prefs
+  // (which live in Notifications). The PUT /settings endpoint keeps any column
+  // whose key is absent from the body, so this save never touches briefings.
 
-  async _doDisconnectSlack() {
-    try {
-      await API.disconnectSlack();
-      closeModal();
-      toast('Slack disconnected.', 'success');
-      Settings.render();
-    } catch (e) { toast(e.message, 'error'); }
-  },
-
-  handleSlackReturnParams(routeQuery) {
-    let params = routeQuery instanceof URLSearchParams ? routeQuery : null;
-    if (!params) {
-      const hash = window.location.hash || '';
-      const qIdx = hash.indexOf('?');
-      if (qIdx === -1) return;
-      params = new URLSearchParams(hash.slice(qIdx + 1));
-    }
-    if (params.has('slack_connected')) {
-      toast('Slack connected. Try /foresight lost-deal in any channel.', 'success');
-    } else if (params.has('slack_error')) {
-      toast(`Slack connect failed: ${params.get('slack_error')}`, 'error');
-    } else {
-      return;
-    }
-    const hash = window.location.hash || '';
-    const qIdx = hash.indexOf('?');
-    if (qIdx !== -1) history.replaceState(null, '', hash.slice(0, qIdx));
-  },
-
-  promptDisconnect(provider, btn) {
-    const action = btn.closest('.set-integration__action');
-    if (!action) return Settings.confirmDisconnect(provider);
-    action.dataset.orig = action.innerHTML;
-    action.innerHTML = `
-      <span class="set-inline-confirm">
-        <span>Disconnect?</span>
-        <button class="set-linkbtn set-linkbtn--danger" onclick="Settings.confirmDisconnect('${provider}')">Yes, disconnect</button>
-        <button class="set-linkbtn" onclick="Settings.cancelDisconnect(this)">Cancel</button>
-      </span>`;
-  },
-
-  cancelDisconnect(btn) {
-    const action = btn.closest('.set-integration__action');
-    if (action && action.dataset.orig) {
-      action.innerHTML = action.dataset.orig;
-      delete action.dataset.orig;
-    }
-  },
-
-  async confirmDisconnect(provider) {
-    try {
-      await API.disconnectCalendar(provider);
-      toast('Calendar disconnected. Pre-meeting briefings will stop until you reconnect.', 'success');
-      Settings.render();
-    } catch (e) { toast(e.message, 'error'); }
-  },
-
-  // ── Notifications (Slack / Discord / Email + briefing prefs) ────────────────
-  // A single Save action persists all four fields (slack_webhook, discord_webhook,
-  // briefings_enabled, briefing_lead_minutes) together. This grouping is kept
-  // intact because the PUT /settings endpoint writes the webhook columns
-  // unconditionally; splitting the save would null them out.
-
-  notificationsHtml(s, isProPlus, accountEmail) {
+  webhooksHtml(s, isProPlus) {
     const slackUrl   = s.slack_webhook || '';
     const discordUrl = s.discord_webhook || '';
-    const emailAddr  = s.notification_email || accountEmail || '';
-    const briefOn    = (s?.briefings_enabled ?? 1) === 1;
-    const lead       = s?.briefing_lead_minutes ?? 30;
 
     const slackIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/><path d="M20.5 10H19V8.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/><path d="M9.5 14c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5S8 21.33 8 20.5v-5c0-.83.67-1.5 1.5-1.5z"/><path d="M3.5 14H5v1.5c0 .83-.67 1.5-1.5 1.5S2 16.33 2 15.5 2.67 14 3.5 14z"/><path d="M14 14.5c0-.83.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-5c-.83 0-1.5-.67-1.5-1.5z"/><path d="M15.5 19H14v1.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5-.67-1.5-1.5-1.5z"/><path d="M10 9.5C10 8.67 9.33 8 8.5 8h-5C2.67 8 2 8.67 2 9.5S2.67 11 3.5 11h5c.83 0 1.5-.67 1.5-1.5z"/><path d="M8.5 5H10V3.5C10 2.67 9.33 2 8.5 2S7 2.67 7 3.5 7.67 5 8.5 5z"/></svg>`;
     const discordIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.74 19.74 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>`;
-    const mailIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>`;
-    const checkIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 
     const statusPill = (connected) => connected
       ? `<span class="set-pill set-pill--active">Connected</span>`
@@ -687,10 +464,10 @@ const Settings = {
       <div class="set-card ${!isProPlus ? 'is-locked' : ''}">
         <div class="set-card__head">
           <div class="set-card__title">
-            Notifications
+            Alert webhooks
             ${!isProPlus ? `<span class="tier-badge">Pro+</span>` : ''}
           </div>
-          <div class="set-card__desc">Where Nivaria delivers briefings and change alerts.${!isProPlus ? ' Upgrade to Pro to enable webhook notifications.' : ''}</div>
+          <div class="set-card__desc">Push change alerts and briefings to Slack or Discord via incoming webhook.${!isProPlus ? ' Upgrade to Pro to enable webhook notifications.' : ''}</div>
         </div>
         <div class="set-card__body" data-dirty-group>
 
@@ -730,6 +507,36 @@ const Settings = {
             <span class="form-hint">Add a webhook in Discord: Channel Settings, then Integrations</span>
           </div>
 
+          <div class="set-card__footer">
+            <span id="webhook-save-feedback" class="set-feedback"></span>
+            <button class="btn btn-primary btn-sm" data-save-btn onclick="Settings.saveWebhooks(this)" ${disabledAttr}>Save changes</button>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  // ── Notifications — email + briefing prefs ──────────────────────────────────
+  // Webhooks moved to the Integrations section. This save only writes the
+  // briefing prefs (briefings_enabled, briefing_lead_minutes); webhook columns
+  // are omitted from the body so the server keeps them intact.
+
+  notificationsHtml(s, accountEmail) {
+    const emailAddr  = s.notification_email || accountEmail || '';
+    const briefOn    = (s?.briefings_enabled ?? 1) === 1;
+    const lead       = s?.briefing_lead_minutes ?? 30;
+
+    const mailIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>`;
+    const checkIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+    return `
+      <div class="set-card">
+        <div class="set-card__head">
+          <div class="set-card__title">Notifications</div>
+          <div class="set-card__desc">Where Nivaria delivers briefings and change alerts, and when.</div>
+        </div>
+        <div class="set-card__body" data-dirty-group>
+
           <!-- Email (notification address, read-only) -->
           <div class="set-integration-block">
             <div class="set-integration">
@@ -739,13 +546,14 @@ const Settings = {
                 <div class="set-integration__meta">${esc(emailAddr || 'Uses your account email')}</div>
               </div>
             </div>
+            <span class="form-hint">Email briefings go to your account address. Add Slack or Discord webhooks in <a href="#/settings/integrations" class="link-accent">Integrations</a>.</span>
           </div>
 
           <!-- Pre-meeting briefing preferences -->
           <label class="set-switch-row" for="briefings-enabled">
             <span class="set-switch-text">
               <span class="set-switch-label">Send pre-meeting briefings</span>
-              <span class="set-switch-help">When a meeting on your calendar mentions a tracked competitor, push a brief to your webhook(s) above. Requires a connected calendar.</span>
+              <span class="set-switch-help">When a meeting on your calendar mentions a tracked competitor, push a brief to your configured webhooks. Requires a connected calendar.</span>
             </span>
             <input type="checkbox" role="switch" id="briefings-enabled" class="set-switch"
               ${briefOn ? 'checked' : ''} aria-label="Send pre-meeting briefings" />
@@ -789,6 +597,7 @@ const Settings = {
       // The dashboard banner uses localStorage to gate visibility; a save
       // means the banner shouldn't reappear, so clear any prior dismissal.
       try { localStorage.removeItem('cs-ctx-banner-dismissed'); } catch (_) {}
+      if (Settings._ctx) Settings._ctx.ctxData = { context: payload };
       btn.textContent = original;
       Settings._flashSaved(btn);
       toast('Business context saved. Applies to future analyses.', 'success');
@@ -799,43 +608,12 @@ const Settings = {
     }
   },
 
-  async saveVoiceProfile(btn) {
-    const getRadio = (name) => {
-      const checked = document.querySelector(`input[name="vp-${name}"]:checked`);
-      return checked ? checked.value : null;
-    };
-
-    const payload = {
-      formality:         getRadio('formality'),
-      contraction_style: getRadio('contraction_style'),
-      opener_style:      getRadio('opener_style'),
-      sentence_rhythm:   getRadio('sentence_rhythm'),
-      sign_off_examples: el('vp-signoff').value.trim(),
-      voice_sample:      el('vp-voice-sample').value.trim(),
-      avoid_phrases:     el('vp-avoid').value.trim(),
-    };
-
-    btn.disabled = true;
-    const original = btn.textContent;
-    btn.textContent = 'Saving…';
-    try {
-      await API.saveVoiceProfile(payload);
-      btn.textContent = original;
-      Settings._flashSaved(btn);
-      toast('Voice profile saved. Applies to future outreach.', 'success');
-    } catch (e) {
-      btn.disabled = false;
-      btn.textContent = original;
-      toast(e.message, 'error');
-    }
-  },
-
-  async saveNotifications(btn) {
+  // Save Slack + Discord incoming webhooks. Sends only the webhook keys so the
+  // server leaves briefing prefs (Notifications) untouched.
+  async saveWebhooks(btn) {
     const slack    = document.getElementById('slack-url')?.value.trim() || '';
     const discord  = document.getElementById('discord-url')?.value.trim() || '';
-    const enabledEl = document.getElementById('briefings-enabled');
-    const leadEl    = document.getElementById('briefing-lead');
-    const feedback  = document.getElementById('notif-save-feedback');
+    const feedback  = document.getElementById('webhook-save-feedback');
 
     const setFeedback = (msg, isErr) => {
       if (!feedback) return;
@@ -855,8 +633,45 @@ const Settings = {
     }
 
     const payload = {
-      slack_webhook:         slack   || null,
-      discord_webhook:       discord || null,
+      slack_webhook:   slack   || null,
+      discord_webhook: discord || null,
+    };
+
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = 'Saving…';
+    setFeedback('', false);
+    try {
+      await API.saveSettings(payload);
+      if (Settings._ctx) {
+        Settings._ctx.settings = { ...Settings._ctx.settings, slack_webhook: payload.slack_webhook, discord_webhook: payload.discord_webhook };
+      }
+      btn.textContent = original;
+      Settings._flashSaved(btn);
+      toast('Webhooks saved', 'success');
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = original;
+      setFeedback(e.message, true);
+      toast(e.message, 'error');
+      if (e.upgrade_required) navigate('/pricing');
+    }
+  },
+
+  async saveNotifications(btn) {
+    const enabledEl = document.getElementById('briefings-enabled');
+    const leadEl    = document.getElementById('briefing-lead');
+    const feedback  = document.getElementById('notif-save-feedback');
+
+    const setFeedback = (msg, isErr) => {
+      if (!feedback) return;
+      feedback.textContent = msg;
+      feedback.style.color = isErr ? 'var(--red)' : 'var(--txt-3)';
+    };
+
+    // Only briefing prefs — webhooks live in Integrations and are omitted here so
+    // the partial-update-safe endpoint leaves them in place.
+    const payload = {
       briefings_enabled:     enabledEl ? (enabledEl.checked ? 1 : 0) : undefined,
       briefing_lead_minutes: leadEl    ? parseInt(leadEl.value, 10)  : undefined,
     };
@@ -867,20 +682,17 @@ const Settings = {
     setFeedback('', false);
     try {
       await API.saveSettings(payload);
+      if (Settings._ctx) {
+        Settings._ctx.settings = { ...Settings._ctx.settings, briefings_enabled: payload.briefings_enabled, briefing_lead_minutes: payload.briefing_lead_minutes };
+      }
       btn.textContent = original;
       Settings._flashSaved(btn);
       toast('Notification settings saved', 'success');
     } catch (e) {
       btn.disabled = false;
       btn.textContent = original;
-      if (e.upgrade_required) {
-        setFeedback(e.message, true);
-        toast(e.message, 'error');
-        navigate('/pricing');
-      } else {
-        setFeedback(e.message, true);
-        toast(e.message, 'error');
-      }
+      setFeedback(e.message, true);
+      toast(e.message, 'error');
     }
   },
 
@@ -908,9 +720,12 @@ const Settings = {
     document.querySelectorAll('[data-dirty-group]').forEach(group => {
       const btn = group.querySelector('[data-save-btn]');
       if (!btn) return;
+      // Start clean (disabled). A locked, free-tier webhook card has disabled
+      // fields, so the :not([disabled]) selector below attaches no listeners and
+      // its Save stays disabled — exactly the prior behavior.
       btn.disabled = true;
       const arm = () => { if (btn.disabled && !btn.classList.contains('is-saved')) btn.disabled = false; };
-      group.querySelectorAll('input, textarea, select').forEach(field => {
+      group.querySelectorAll('input:not([disabled]), textarea:not([disabled]), select:not([disabled])').forEach(field => {
         field.addEventListener('input', arm);
         field.addEventListener('change', arm);
       });
@@ -980,12 +795,67 @@ const Settings = {
     } catch { return false; }
   },
 
-  // ── Calendar OAuth return params ────────────────────────────────────────────
-  // Handle ?calendar_connected=google or ?calendar_error=... appended by the
-  // OAuth callback when redirecting back to the SPA. The router parses the
-  // hash's query string and passes a URLSearchParams object; for direct
-  // callers (re-render after disconnect, demoPlan, etc.) we fall back to
-  // parsing the live hash so the function stays usable standalone.
+  // ── Slack disconnect (deal logging) ─────────────────────────────────────────
+
+  confirmDisconnectSlack() {
+    openModal(`
+      <div class="modal-header">
+        <div class="modal-title">Disconnect Slack</div>
+        <button class="modal-close" onclick="closeModal()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div class="modal-body"><p style="color:var(--txt-2);line-height:1.7">Disconnect Slack? The <code class="code-inline">/foresight</code> slash command will stop logging deals until you reconnect.</p></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-danger" onclick="Settings._doDisconnectSlack()">Disconnect</button>
+      </div>
+    `);
+  },
+
+  async _doDisconnectSlack() {
+    try {
+      await API.disconnectSlack();
+      closeModal();
+      toast('Slack disconnected.', 'success');
+      Settings.render();
+    } catch (e) { toast(e.message, 'error'); }
+  },
+
+  // ── Calendar disconnect ─────────────────────────────────────────────────────
+
+  promptDisconnect(provider, btn) {
+    const action = btn.closest('.set-integration__action');
+    if (!action) return Settings.confirmDisconnect(provider);
+    action.dataset.orig = action.innerHTML;
+    action.innerHTML = `
+      <span class="set-inline-confirm">
+        <span>Disconnect?</span>
+        <button class="set-linkbtn set-linkbtn--danger" onclick="Settings.confirmDisconnect('${provider}')">Yes, disconnect</button>
+        <button class="set-linkbtn" onclick="Settings.cancelDisconnect(this)">Cancel</button>
+      </span>`;
+  },
+
+  cancelDisconnect(btn) {
+    const action = btn.closest('.set-integration__action');
+    if (action && action.dataset.orig) {
+      action.innerHTML = action.dataset.orig;
+      delete action.dataset.orig;
+    }
+  },
+
+  async confirmDisconnect(provider) {
+    try {
+      await API.disconnectCalendar(provider);
+      toast('Calendar disconnected. Pre-meeting briefings will stop until you reconnect.', 'success');
+      Settings.render();
+    } catch (e) { toast(e.message, 'error'); }
+  },
+
+  // ── OAuth return params ─────────────────────────────────────────────────────
+  // Handle ?calendar_connected / ?calendar_error / ?slack_connected / ?slack_error
+  // appended by the OAuth callbacks. The router parses the hash's query string
+  // and passes a URLSearchParams; direct callers (re-render after disconnect)
+  // fall back to parsing the live hash so these stay usable standalone.
+
   handleCalendarReturnParams(routeQuery) {
     let params = routeQuery instanceof URLSearchParams ? routeQuery : null;
     if (!params) {
@@ -1001,7 +871,30 @@ const Settings = {
     } else {
       return;
     }
-    // Strip the query params from the URL so a refresh doesn't re-toast.
+    Settings._stripReturnQuery();
+  },
+
+  handleSlackReturnParams(routeQuery) {
+    let params = routeQuery instanceof URLSearchParams ? routeQuery : null;
+    if (!params) {
+      const hash = window.location.hash || '';
+      const qIdx = hash.indexOf('?');
+      if (qIdx === -1) return;
+      params = new URLSearchParams(hash.slice(qIdx + 1));
+    }
+    if (params.has('slack_connected')) {
+      toast('Slack connected. Try /foresight lost-deal in any channel.', 'success');
+    } else if (params.has('slack_error')) {
+      toast(`Slack connect failed: ${params.get('slack_error')}`, 'error');
+    } else {
+      return;
+    }
+    Settings._stripReturnQuery();
+  },
+
+  // Strip the query params from the hash so a refresh doesn't re-toast, while
+  // keeping the section path (e.g. #/settings/integrations).
+  _stripReturnQuery() {
     const hash = window.location.hash || '';
     const qIdx = hash.indexOf('?');
     if (qIdx !== -1) history.replaceState(null, '', hash.slice(0, qIdx));

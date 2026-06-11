@@ -80,9 +80,24 @@ router.put('/', (req, res) => {
     return upgradeRequired(res, 'webhooks');
   }
 
-  // Resolve briefing prefs against existing row so partial updates don't blow
-  // away unrelated fields.
+  // Resolve every column against the existing row so a PARTIAL update never
+  // nulls a field the caller didn't touch. A key is only written when present
+  // in the body (an explicit null/'' still clears it); an absent key keeps the
+  // stored value. This lets the Integrations panel save webhooks and the
+  // Notifications panel save briefing prefs independently without clobbering
+  // each other — the previous "write every column from the body" behavior would
+  // null whichever group the current panel omitted. The legacy combined form
+  // sends all fields, so its behavior is unchanged.
   const existing = db.prepare('SELECT * FROM settings WHERE user_id = ?').get(req.userId) || {};
+  const finalSlack = slack_webhook === undefined
+    ? (existing.slack_webhook ?? null)
+    : (slack_webhook || null);
+  const finalDiscord = discord_webhook === undefined
+    ? (existing.discord_webhook ?? null)
+    : (discord_webhook || null);
+  const finalNotifEmail = notification_email === undefined
+    ? (existing.notification_email ?? null)
+    : (notification_email || null);
   const finalBriefingsEnabled = briefings_enabled === undefined
     ? (existing.briefings_enabled ?? 1)
     : (briefings_enabled ? 1 : 0);
@@ -102,9 +117,9 @@ router.put('/', (req, res) => {
       briefing_lead_minutes = excluded.briefing_lead_minutes
   `).run(
     req.userId,
-    slack_webhook || null,
-    discord_webhook || null,
-    notification_email || null,
+    finalSlack,
+    finalDiscord,
+    finalNotifEmail,
     finalBriefingsEnabled,
     finalBriefingLead,
   );

@@ -613,11 +613,22 @@ const RESEND_COOLDOWN_SECONDS = 30;
 
 function init() {
   Theme.init();
-  State.mode = window.location.pathname.includes('register') ? 'register' : 'login';
+  const params = new URLSearchParams(window.location.search);
+  // ?forgot=1 deep-links straight into the password-reset flow (used by the
+  // in-app Profile "Change password" button). ?email= pre-fills the address so a
+  // signed-in user doesn't have to retype it.
+  State.mode = window.location.pathname.includes('register') ? 'register'
+             : params.get('forgot')                          ? 'forgot'
+             : 'login';
   render();
 
+  if (State.mode === 'forgot') {
+    const prefill = params.get('email');
+    const emailInput = document.getElementById('inp-email');
+    if (prefill && emailInput) emailInput.value = prefill;
+  }
+
   // Show contextual messages from URL params
-  const params = new URLSearchParams(window.location.search);
   if (params.get('loggedout')) {
     setTimeout(() => showMsg("You've been signed out.", 'success'), 60);
   } else if (params.get('expired')) {

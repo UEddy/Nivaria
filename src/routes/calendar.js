@@ -119,7 +119,7 @@ router.get('/google/callback', callbackLimiter, async (req, res) => {
 
   if (!req.session?.userId) {
     oauthDebug(`[calendar:callback] REJECT reason=no_session_userId → redirect /login`);
-    return res.redirect('/login?returnTo=' + encodeURIComponent('/app#/settings'));
+    return res.redirect('/login?returnTo=' + encodeURIComponent('/app#/settings/integrations'));
   }
   const userId = req.session.userId;
 
@@ -127,7 +127,7 @@ router.get('/google/callback', callbackLimiter, async (req, res) => {
   if (req.query.error) {
     oauthDebug(`[calendar:callback] REJECT reason=google_returned_error error=${req.query.error}`);
     const msg = encodeURIComponent(String(req.query.error_description || req.query.error).slice(0, 200));
-    return res.redirect(`/app#/settings?calendar_error=${msg}`);
+    return res.redirect(`/app#/settings/integrations?calendar_error=${msg}`);
   }
 
   const expected = req.session.calendarOAuthState;
@@ -142,22 +142,22 @@ router.get('/google/callback', callbackLimiter, async (req, res) => {
 
   if (!expected || expected.provider !== 'google' || expected.userId !== userId) {
     oauthDebug(`[calendar:callback] REJECT reason=state_missing_or_mismatched expected=${!!expected} provider=${expected?.provider} expectedUser=${expected?.userId} sessionUser=${userId}`);
-    return res.redirect('/app#/settings?calendar_error=' + encodeURIComponent('OAuth state missing or mismatched. Start the flow again.'));
+    return res.redirect('/app#/settings/integrations?calendar_error=' + encodeURIComponent('OAuth state missing or mismatched. Start the flow again.'));
   }
   // Constant-time comparison — state is hex so lengths are predictable.
   const a = Buffer.from(expected.state, 'utf8');
   const b = Buffer.from(incomingState, 'utf8');
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
     oauthDebug(`[calendar:callback] REJECT reason=state_bytes_mismatch expectedLen=${a.length} incomingLen=${b.length}`);
-    return res.redirect('/app#/settings?calendar_error=' + encodeURIComponent('OAuth state mismatch. Possible CSRF. Start the flow again.'));
+    return res.redirect('/app#/settings/integrations?calendar_error=' + encodeURIComponent('OAuth state mismatch. Possible CSRF. Start the flow again.'));
   }
   if (Date.now() - expected.issuedAt > 10 * 60 * 1000) {
     oauthDebug(`[calendar:callback] REJECT reason=state_expired ageMs=${Date.now() - expected.issuedAt}`);
-    return res.redirect('/app#/settings?calendar_error=' + encodeURIComponent('OAuth flow timed out. Start the flow again.'));
+    return res.redirect('/app#/settings/integrations?calendar_error=' + encodeURIComponent('OAuth flow timed out. Start the flow again.'));
   }
   if (!incomingCode) {
     oauthDebug(`[calendar:callback] REJECT reason=no_auth_code`);
-    return res.redirect('/app#/settings?calendar_error=' + encodeURIComponent('No authorization code returned.'));
+    return res.redirect('/app#/settings/integrations?calendar_error=' + encodeURIComponent('No authorization code returned.'));
   }
 
   try {
@@ -202,11 +202,11 @@ router.get('/google/callback', callbackLimiter, async (req, res) => {
       console.warn(`[calendar:callback] initial sync FAILED (non-fatal): ${syncErr.message}`);
     }
 
-    oauthDebug(`[calendar:callback] SUCCESS → redirecting to /app#/settings?calendar_connected=google`);
-    res.redirect('/app#/settings?calendar_connected=google');
+    oauthDebug(`[calendar:callback] SUCCESS → redirecting to /app#/settings/integrations?calendar_connected=google`);
+    res.redirect('/app#/settings/integrations?calendar_connected=google');
   } catch (e) {
     console.error(`[calendar:callback] EXCEPTION in token/insert path: ${e.message}\n${e.stack?.split('\n').slice(0,4).join('\n')}`);
-    res.redirect('/app#/settings?calendar_error=' + encodeURIComponent(e.message.slice(0, 200)));
+    res.redirect('/app#/settings/integrations?calendar_error=' + encodeURIComponent(e.message.slice(0, 200)));
   }
 });
 

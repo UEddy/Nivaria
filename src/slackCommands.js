@@ -164,7 +164,7 @@ function usageMessage() {
 function notLinkedMessage(appUrl) {
   return {
     response_type: 'ephemeral',
-    text: `Your Slack account isn't linked to Nivaria yet. Open <${appUrl}/app#/settings|Settings in Nivaria> and click "Add to Slack" to connect, then try again.`,
+    text: `Your Slack account isn't linked to Nivaria yet. Open <${appUrl}/app#/settings/integrations|Settings in Nivaria> and click "Add to Slack" to connect, then try again.`,
   };
 }
 
