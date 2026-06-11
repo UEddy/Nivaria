@@ -268,10 +268,30 @@ const App = {
       delete App.user.csrfToken; // keep user object clean
     }
 
+    App.backfillTimezone();
     App.updateUserUI();
     App.updateBadges();
     window.addEventListener('hashchange', App.route);
     App.route();
+  },
+
+  // Silent timezone backfill. Timezone is captured at signup and never shown in
+  // the UI; greetings band by it. Accounts created before signup captured a zone
+  // (or any account whose browser reported nothing) default to 'UTC', which mis-
+  // bands the greeting. On every app load, if the stored zone is missing or
+  // 'UTC' and the browser reports a real IANA zone, adopt it: update App.user
+  // immediately so this session's greeting bands correctly, and persist it in the
+  // background for future sessions. Best-effort and entirely invisible.
+  backfillTimezone() {
+    const u = App.user;
+    if (!u) return;
+    if (u.timezone && u.timezone !== 'UTC') return; // already has a real zone
+    let detected = 'UTC';
+    try { detected = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (_) {}
+    if (!detected || detected === 'UTC') return; // nothing better to offer
+    u.timezone = detected;
+    try { sessionStorage.removeItem('cs-greeting'); } catch (_) {}
+    try { API.updateProfile({ timezone: detected }).catch(() => {}); } catch (_) {}
   },
 
   updateUserUI() {
@@ -306,11 +326,11 @@ const App = {
   },
 
   route() {
-    // A hash fragment can carry a query string (e.g. /app#/settings?calendar_connected=google
+    // A hash fragment can carry a query string (e.g. /app#/profile/integrations?calendar_connected=google
     // landing from the OAuth callback). Split path from query before parsing,
     // and pass the parsed query down to renders that opt in. Without this
-    // split, "settings?calendar_connected=google" was treated as a page name
-    // and fell through to the 404 branch.
+    // split, "profile/integrations?calendar_connected=google" would be treated as
+    // a page name and fall through to the 404 branch.
     const rawHash = (window.location.hash || '#').slice(1) || '/';
     const qIdx = rawHash.indexOf('?');
     const pathPart  = qIdx === -1 ? rawHash : rawHash.slice(0, qIdx);
@@ -390,8 +410,8 @@ const App = {
       Deals.render(routeQuery).then(transition);
     } else if (page === 'settings') {
       el('page-title').textContent = 'Settings';
-      el('page-sub').textContent = 'Workspace, integrations, notifications, and account';
-      // rest[0] is the section (#/settings/integrations). Only show the skeleton
+      el('page-sub').textContent = 'Workspace, notifications, and billing';
+      // rest[0] is the section (#/settings/notifications). Only show the skeleton
       // on a fresh entry — when the settings shell is already mounted we're just
       // switching sections, and Settings.render() re-paints from cache without a
       // flash.
@@ -399,9 +419,13 @@ const App = {
       Settings.render(routeQuery, id).then(transition);
     } else if (page === 'profile') {
       el('page-title').textContent = 'Profile';
-      el('page-sub').textContent = 'Your personal details and voice';
-      root.innerHTML = Skeleton.cards(3);
-      Profile.render().then(transition);
+      el('page-sub').textContent = 'Your personal details, integrations, and voice';
+      // rest[0] is the section (#/profile/integrations). Only show the skeleton on
+      // a fresh entry — when the profile shell is already mounted we're just
+      // switching sections, and Profile.render() re-paints from cache without a
+      // flash.
+      if (!document.getElementById('profile-shell')) root.innerHTML = Skeleton.cards(3);
+      Profile.render(routeQuery, id).then(transition);
     } else if (page === 'pricing' || page === 'plans') {
       el('page-title').textContent = 'Plans & Pricing';
       el('page-sub').textContent = 'Choose the plan that fits your team';

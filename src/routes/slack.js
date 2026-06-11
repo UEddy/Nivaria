@@ -97,12 +97,12 @@ router.get('/oauth/start', requireAuthSession, (req, res) => {
 
 router.get('/oauth/callback', async (req, res) => {
   if (!req.session?.userId) {
-    return res.redirect('/login?returnTo=' + encodeURIComponent('/app#/settings/integrations'));
+    return res.redirect('/login?returnTo=' + encodeURIComponent('/app#/profile/integrations'));
   }
   const userId = req.session.userId;
 
   if (req.query.error) {
-    return res.redirect('/app#/settings/integrations?slack_error=' + encodeURIComponent(String(req.query.error).slice(0, 200)));
+    return res.redirect('/app#/profile/integrations?slack_error=' + encodeURIComponent(String(req.query.error).slice(0, 200)));
   }
 
   const expected = req.session.slackOAuthState;
@@ -111,18 +111,18 @@ router.get('/oauth/callback', async (req, res) => {
   req.session.slackOAuthState = null; // single-use
 
   if (!expected || expected.userId !== userId) {
-    return res.redirect('/app#/settings/integrations?slack_error=' + encodeURIComponent('OAuth state missing. Start again.'));
+    return res.redirect('/app#/profile/integrations?slack_error=' + encodeURIComponent('OAuth state missing. Start again.'));
   }
   const a = Buffer.from(expected.state, 'utf8');
   const b = Buffer.from(incomingState, 'utf8');
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-    return res.redirect('/app#/settings/integrations?slack_error=' + encodeURIComponent('OAuth state mismatch. Possible CSRF.'));
+    return res.redirect('/app#/profile/integrations?slack_error=' + encodeURIComponent('OAuth state mismatch. Possible CSRF.'));
   }
   if (Date.now() - expected.issuedAt > 10 * 60 * 1000) {
-    return res.redirect('/app#/settings/integrations?slack_error=' + encodeURIComponent('OAuth flow timed out. Start again.'));
+    return res.redirect('/app#/profile/integrations?slack_error=' + encodeURIComponent('OAuth flow timed out. Start again.'));
   }
   if (!incomingCode) {
-    return res.redirect('/app#/settings/integrations?slack_error=' + encodeURIComponent('No authorization code returned.'));
+    return res.redirect('/app#/profile/integrations?slack_error=' + encodeURIComponent('No authorization code returned.'));
   }
 
   try {
@@ -148,10 +148,10 @@ router.get('/oauth/callback', async (req, res) => {
         status         = 'active'
     `).run(userId, inst.teamId, inst.teamName, inst.slackUserId, botTokenEnc, inst.botUserId, inst.scope);
 
-    res.redirect('/app#/settings/integrations?slack_connected=1');
+    res.redirect('/app#/profile/integrations?slack_connected=1');
   } catch (e) {
     console.error('[slack:callback] failed:', e.message);
-    res.redirect('/app#/settings/integrations?slack_error=' + encodeURIComponent(e.message.slice(0, 200)));
+    res.redirect('/app#/profile/integrations?slack_error=' + encodeURIComponent(e.message.slice(0, 200)));
   }
 });
 
