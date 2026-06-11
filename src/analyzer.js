@@ -1,5 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk');
-const { sanitizeDashesDeep } = require('./lib/sanitizeText');
+const { sanitizeCopyDeep } = require('./lib/sanitizeText');
 
 let client;
 
@@ -132,10 +132,10 @@ generic outside-observer voice. Do NOT invent context the user didn't supply,
 do NOT speculate about their product, and do NOT pretend to know their ICP.
 
 STYLE GUIDELINES (apply to every string field you write):
-- Do not use em-dashes (—) or en-dashes (–) in any output, ever. Use commas, periods, colons, or parentheses instead. Ordinary hyphens in compound words ("pre-meeting") are fine.
+- Never use em-dashes (—), en-dashes (–), or the "+" character as a connector between words or phrases. Write "and" instead, or use commas, periods, colons, or parentheses. Ordinary hyphens in compound words ("pre-meeting") are fine. The ONLY time you may write "+" is when quoting a competitor's literal product name, plan name, or pricing string exactly as it appears on their site (e.g. a plan actually called "Copilot+" or a price like "$20+").
 - Do not use the terms "battlecards" or "battle cards." Use "competitive briefings," "sales positioning notes," or "competitor playbooks" instead.
 - Write naturally and concisely. Avoid AI-tells like "leverage," "delve," "robust," "seamless," "In summary," or "It's worth noting that."
-- When listing items, use "and" or commas between them, not the "+" character, em-dashes, or en-dashes.
+- When listing items, use "and" or commas between them, never the "+" character, em-dashes, or en-dashes.
 
 OUTPUT FORMAT (strict): return ONE JSON object, no markdown fences, no prose
 before or after. The object MUST contain these fields, all required:
@@ -247,11 +247,11 @@ function tryParseAnalysis(text) {
       .slice(0, 3);
   }
 
-  // Deterministic safety net for the no-dash convention (CLAUDE.md): strip any
-  // em/en dashes from every string field before this brief is stored or shown.
-  // The prompt asks the model to avoid them, but LLM output is sticky; this
-  // guarantees compliance.
-  sanitizeDashesDeep(obj);
+  // Deterministic safety net for the punctuation convention (CLAUDE.md): strip
+  // any em/en dashes and connector-plus from every string field before this
+  // brief is stored or shown. The prompt asks the model to avoid them, but LLM
+  // output is sticky; this guarantees compliance.
+  sanitizeCopyDeep(obj);
   return { ok: true, value: obj };
 }
 

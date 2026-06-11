@@ -246,7 +246,7 @@ const Settings = {
                 <option value=""       ${!c.sales_motion ? 'selected' : ''}>Select</option>
                 <option value="plg"    ${c.sales_motion === 'plg' ? 'selected' : ''}>PLG (product-led / self-serve)</option>
                 <option value="slg"    ${c.sales_motion === 'slg' ? 'selected' : ''}>SLG (sales-led)</option>
-                <option value="hybrid" ${c.sales_motion === 'hybrid' ? 'selected' : ''}>Hybrid (PLG + SLG)</option>
+                <option value="hybrid" ${c.sales_motion === 'hybrid' ? 'selected' : ''}>Hybrid (PLG and SLG)</option>
               </select>
             </div>
           </div>

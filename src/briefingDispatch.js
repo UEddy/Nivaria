@@ -15,7 +15,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const axios = require('axios');
 const { getDb } = require('./db');
-const { stripDashes } = require('./lib/sanitizeText');
+const { sanitizeCopy } = require('./lib/sanitizeText');
 
 const BRIEFING_WINDOW_MINUTES   = 5;        // ±5 around the user's configured lead
 const RECENT_CHANGE_LOOKBACK_DAYS = 14;
@@ -42,7 +42,7 @@ async function condenseTalkingPoints({ competitorName, meetingTitle, headline, s
   if (!process.env.ANTHROPIC_API_KEY) {
     // Fallback: just slice the existing talking_points array
     return {
-      talkingPoints: (talkingPoints || []).slice(0, 3).map(p => stripDashes(String(p).trim())).filter(Boolean),
+      talkingPoints: (talkingPoints || []).slice(0, 3).map(p => sanitizeCopy(String(p).trim())).filter(Boolean),
       usage: null,
       source: 'fallback',
     };
@@ -70,10 +70,10 @@ Return ONLY a JSON array of strings, no prose, no markdown fences.`;
 `You write tight, factual pre-meeting prep for B2B sales reps. No fluff.
 
 STYLE GUIDELINES (apply to every talking point you write):
-- Do not use em-dashes (—) or en-dashes (–) in any output, ever. Use commas, periods, colons, or parentheses instead. Ordinary hyphens in compound words ("pre-meeting") are fine.
+- Never use em-dashes (—), en-dashes (–), or the "+" character as a connector between words or phrases. Write "and" instead, or use commas, periods, colons, or parentheses. Ordinary hyphens in compound words ("pre-meeting") are fine. The ONLY time you may write "+" is when quoting a competitor's literal product name, plan name, or pricing string exactly as it appears on their site.
 - Do not use the terms "battlecards" or "battle cards." Use "competitive briefings," "sales positioning notes," or "competitor playbooks" instead.
 - Write naturally and concisely. Avoid AI-tells like "leverage," "delve," "robust," "seamless," "In summary," or "It's worth noting that."
-- When listing items, use "and" or commas between them, not the "+" character, em-dashes, or en-dashes.`,
+- When listing items, use "and" or commas between them, never the "+" character, em-dashes, or en-dashes.`,
     messages: [{ role: 'user', content: userPrompt }],
   });
 
@@ -84,11 +84,12 @@ STYLE GUIDELINES (apply to every talking point you write):
     parsed = m ? JSON.parse(m[0]) : null;
   } catch (_) { parsed = null; }
 
-  // Strip any em/en dashes the model slipped in (no-dash convention, CLAUDE.md).
+  // Strip any em/en dashes and connector-plus the model slipped in (punctuation
+  // convention, CLAUDE.md).
   const points = (Array.isArray(parsed)
     ? parsed.map(p => String(p).trim()).filter(Boolean).slice(0, 3)
     : (talkingPoints || []).slice(0, 3)
-  ).map(stripDashes);
+  ).map(sanitizeCopy);
 
   return {
     talkingPoints: points,

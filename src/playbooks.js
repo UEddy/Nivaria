@@ -294,14 +294,16 @@ function detectPlusConnectors(text) {
 
 function stripPlusConnectors(text) {
   if (!text) return text;
-  // Replace "word + word" with "word, word" iteratively so chains like
-  // "X + Y + Z" become "X, Y, Z" cleanly.
+  // Replace a "+" connector between words with " and " iteratively so chains
+  // like "X + Y + Z" become "X and Y and Z" cleanly. Matches the canonical
+  // replacement in src/lib/sanitizeText.js (the convention is " and ", see
+  // CLAUDE.md).
   let prev = null;
   let out = String(text);
   let guard = 10;
   while (prev !== out && guard-- > 0) {
     prev = out;
-    out = out.replace(/([a-zA-Z][a-zA-Z\s]{0,30})\s\+\s([a-zA-Z])/g, '$1, $2');
+    out = out.replace(/([a-zA-Z][a-zA-Z\s]{0,30})\s\+\s([a-zA-Z])/g, '$1 and $2');
   }
   return out;
 }
