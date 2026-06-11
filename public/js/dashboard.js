@@ -321,7 +321,7 @@ const Dashboard = {
         <div class="roi-widget">
           <div>
             <div class="hero-stat-label" style="margin-bottom:6px">Revenue at risk from competitors</div>
-            <div class="roi-widget-figure">${hasFigure ? fmtBig(roiSummary.revenue_at_risk_usd) : '—'}</div>
+            <div class="roi-widget-figure">${hasFigure ? fmtBig(roiSummary.revenue_at_risk_usd) : '-'}</div>
           </div>
           <div class="roi-widget-body">
             <div class="text-muted text-sm">

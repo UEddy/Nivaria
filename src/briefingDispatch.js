@@ -15,6 +15,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const axios = require('axios');
 const { getDb } = require('./db');
+const { stripDashes } = require('./lib/sanitizeText');
 
 const BRIEFING_WINDOW_MINUTES   = 5;        // ±5 around the user's configured lead
 const RECENT_CHANGE_LOOKBACK_DAYS = 14;
@@ -41,7 +42,7 @@ async function condenseTalkingPoints({ competitorName, meetingTitle, headline, s
   if (!process.env.ANTHROPIC_API_KEY) {
     // Fallback: just slice the existing talking_points array
     return {
-      talkingPoints: (talkingPoints || []).slice(0, 3).map(p => String(p).trim()).filter(Boolean),
+      talkingPoints: (talkingPoints || []).slice(0, 3).map(p => stripDashes(String(p).trim())).filter(Boolean),
       usage: null,
       source: 'fallback',
     };
@@ -69,10 +70,10 @@ Return ONLY a JSON array of strings, no prose, no markdown fences.`;
 `You write tight, factual pre-meeting prep for B2B sales reps. No fluff.
 
 STYLE GUIDELINES (apply to every talking point you write):
-- Do not use em-dashes (—) in any output. Use commas, periods, or parentheses instead.
+- Do not use em-dashes (—) or en-dashes (–) in any output, ever. Use commas, periods, colons, or parentheses instead. Ordinary hyphens in compound words ("pre-meeting") are fine.
 - Do not use the terms "battlecards" or "battle cards." Use "competitive briefings," "sales positioning notes," or "competitor playbooks" instead.
 - Write naturally and concisely. Avoid AI-tells like "leverage," "delve," "robust," "seamless," "In summary," or "It's worth noting that."
-- When listing items, use "and" or commas between them, not the "+" character or em-dashes.`,
+- When listing items, use "and" or commas between them, not the "+" character, em-dashes, or en-dashes.`,
     messages: [{ role: 'user', content: userPrompt }],
   });
 
@@ -83,9 +84,11 @@ STYLE GUIDELINES (apply to every talking point you write):
     parsed = m ? JSON.parse(m[0]) : null;
   } catch (_) { parsed = null; }
 
-  const points = Array.isArray(parsed)
+  // Strip any em/en dashes the model slipped in (no-dash convention, CLAUDE.md).
+  const points = (Array.isArray(parsed)
     ? parsed.map(p => String(p).trim()).filter(Boolean).slice(0, 3)
-    : (talkingPoints || []).slice(0, 3);
+    : (talkingPoints || []).slice(0, 3)
+  ).map(stripDashes);
 
   return {
     talkingPoints: points,

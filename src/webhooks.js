@@ -103,8 +103,8 @@ async function sendAlerts(settings, competitor, analysis, changeId) {
 async function sendPatternAlert(settings, competitor, analysis, changeId, typeLabel) {
   const appUrl = process.env.APP_URL || 'http://localhost:3000';
   const headline = analysis?.headline ? `: ${analysis.headline}` : '';
-  const slackText = `:rotating_light: *Pattern alert* — ${competitor.name} just made a ${typeLabel}${headline}. This is the kind of move that has correlated with deals you lost. <${appUrl}/app#/history/${changeId}|View change> · <${appUrl}/app#/deals|ROI dashboard>`;
-  const discordText = `🚨 **Pattern alert** — ${competitor.name} just made a ${typeLabel}${headline}. This is the kind of move that has correlated with deals you lost. [View change](${appUrl}/app#/history/${changeId})`;
+  const slackText = `:rotating_light: *Pattern alert*: ${competitor.name} just made a ${typeLabel}${headline}. This is the kind of move that has correlated with deals you lost. <${appUrl}/app#/history/${changeId}|View change> · <${appUrl}/app#/deals|ROI dashboard>`;
+  const discordText = `🚨 **Pattern alert**: ${competitor.name} just made a ${typeLabel}${headline}. This is the kind of move that has correlated with deals you lost. [View change](${appUrl}/app#/history/${changeId})`;
 
   const promises = [];
   if (settings.slack_webhook) {

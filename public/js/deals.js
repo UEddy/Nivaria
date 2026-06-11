@@ -531,7 +531,7 @@ const Deals = {
     const headline = `
       <div class="roi-headline">
         <div class="roi-headline-label">Estimated revenue at risk from tracked competitors</div>
-        <div class="roi-headline-value">${roi.revenue_at_risk_usd > 0 ? Deals.fmtBig(roi.revenue_at_risk_usd) : '—'}</div>
+        <div class="roi-headline-value">${roi.revenue_at_risk_usd > 0 ? Deals.fmtBig(roi.revenue_at_risk_usd) : '-'}</div>
         <div class="roi-headline-sub">
           ${roi.revenue_at_risk_usd > 0
             ? `Across ${roi.revenue_at_risk_deal_count} deal${roi.revenue_at_risk_deal_count === 1 ? '' : 's'} in medium and high confidence patterns · based on ${roi.total_deals} logged deals over ${rangeStr}`
@@ -562,7 +562,7 @@ const Deals = {
         ${Deals.outcomePill(d.outcome)}
         <span class="support-name">${esc(d.deal_name)}</span>
         <span class="support-meta">${formatShortDate(d.close_date)}</span>
-        <span class="support-val">${d.deal_value_usd != null ? Deals.fmtMoney(d.deal_value_usd) : '—'}</span>
+        <span class="support-val">${d.deal_value_usd != null ? Deals.fmtMoney(d.deal_value_usd) : '-'}</span>
       </div>`).join('');
     const changesList = p.supporting_changes.map(c => `
       <div class="support-row support-row--change" onclick="navigate('/history/${c.id}')">

@@ -133,7 +133,7 @@ const Settings = {
     const status = sub && sub.status;
     const cancel = sub && sub.cancelAtPeriodEnd;
     const periodEnd = sub && sub.currentPeriodEnd;
-    const fmt = (d) => (d ? formatShortDate(d) : '—');
+    const fmt = (d) => (d ? formatShortDate(d) : '-');
     const badgeTier = tier === 'business' ? 'team' : tier; // reuse team gradient
     const badge = `<span class="plan-badge plan-badge--${badgeTier}">${tier.charAt(0).toUpperCase() + tier.slice(1)}</span>`;
 

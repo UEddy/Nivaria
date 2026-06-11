@@ -157,7 +157,7 @@ function renderShell(title, bodyHtml) {
 
 function renderDenied() {
   return renderShell('Access denied', `
-    <div class="admin-head"><h1>403 — Access denied</h1></div>
+    <div class="admin-head"><h1>403: Access denied</h1></div>
     <p class="admin-sub">Your account is not authorized to view this page.</p>
     <a class="back" href="/app">&larr; Back to app</a>`);
 }
@@ -176,7 +176,7 @@ function renderWaitlist(rows) {
           <td>${esc(r.email)}</td>
           <td><span class="pill pill-${esc(r.tier_interest)}">${esc(r.tier_interest)}</span></td>
           <td>${esc(r.created_at)}</td>
-          <td>${r.notified_at ? esc(r.notified_at) : '<span class="muted">—</span>'}</td>
+          <td>${r.notified_at ? esc(r.notified_at) : '<span class="muted">-</span>'}</td>
         </tr>`).join('')
     : `<tr><td class="empty" colspan="5">No waitlist signups yet.</td></tr>`;
 

@@ -7,6 +7,7 @@
 
 const fs   = require('fs');
 const path = require('path');
+const { stripDashes } = require('../lib/sanitizeText');
 
 const LEGAL_DIR = path.join(__dirname, '../../docs/legal');
 
@@ -34,7 +35,11 @@ const cache = {};
 for (const [key, { file }] of Object.entries(DOCS)) {
   try {
     const raw = fs.readFileSync(path.join(LEGAL_DIR, file), 'utf8');
-    cache[key] = extractArticle(raw);
+    // Enforce the no-dash convention (CLAUDE.md) on the rendered legal copy.
+    // The source docs are third-party generated boilerplate we extract verbatim;
+    // stripDashes converts any em/en dashes in the prose to commas at render
+    // time, so users never see them and future doc updates stay compliant too.
+    cache[key] = stripDashes(extractArticle(raw));
   } catch (err) {
     console.warn(`⚠️  legal: could not load ${file} — /${key} will 404 (${err.message})`);
     cache[key] = null;

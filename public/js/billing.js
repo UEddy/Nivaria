@@ -129,9 +129,9 @@ const Billing = {
            <label class="form-label" for="wl-size">Team size</label>
            <select class="form-input" id="wl-size">
              <option value="">Select…</option>
-             <option value="3">1–5 people</option>
-             <option value="10">6–15 people</option>
-             <option value="30">16–50 people</option>
+             <option value="3">1 to 5 people</option>
+             <option value="10">6 to 15 people</option>
+             <option value="30">16 to 50 people</option>
              <option value="75">50+ people</option>
            </select>
          </div>`
