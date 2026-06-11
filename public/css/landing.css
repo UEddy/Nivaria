@@ -736,6 +736,21 @@ img, svg { display: block; }
 .lp-plan-card-slim .lp-plan-desc { margin-bottom: 28px; }
 .lp-plan-card-slim .lp-plan-cta { margin-top: auto; }
 
+/* Full card: name + price + subtitle + complete feature list + CTA. Flex column
+   pins the CTA to the bottom so every card's button aligns across the row even
+   though the tiers have different numbers of features. */
+.lp-plan-card-full {
+  display: flex;
+  flex-direction: column;
+  padding: 32px 28px;
+}
+.lp-plan-card-full .lp-plan-desc { margin-bottom: 20px; }
+.lp-plan-card-full .lp-plan-cta { margin-top: auto; }
+/* Feature rows can wrap to two lines on narrow cards; top-align the check so it
+   sits with the first line instead of floating to the vertical centre. */
+.lp-plan-card-full .lp-plan-feat { align-items: flex-start; line-height: 1.45; }
+.lp-plan-card-full .lp-plan-feat-icon { margin-top: 2px; }
+
 /* Render the CTA as a proper centered button for both <a> and <button>. */
 .lp-plan-cta {
   display: inline-flex;
