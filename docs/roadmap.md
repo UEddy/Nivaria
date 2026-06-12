@@ -84,6 +84,8 @@ Sequenced after launch. Order can change based on what early customers ask for.
 - **Scope:** Workspace invitations, member roles (admin/member), and shared
   workspace resources. This is what actually unblocks the **Team tier waitlist**
   to convert into paid subscriptions. (Formerly tracked as Phase 10.5.)
+- **Team competitor cap:** 60 (locked during pre-launch pricing review, June
+  2026). Enforcement built in this phase uses this constant.
 - **Estimate:** 5–8 days for the feature set, **plus** the prerequisite below.
 - **Prerequisites (hard):** Complete the `user_id` to `workspace_id` query
   refactor documented in [`phase-10.5-prerequisites.md`](phase-10.5-prerequisites.md).
@@ -104,8 +106,10 @@ Sequenced after launch. Order can change based on what early customers ask for.
 ### Phase 18: Business tier infrastructure
 - **Status:** conditional on demand
 - **Scope:** Tier 4 ("fortress") capabilities: high-frequency site monitoring,
-  custom integrations, and dedicated support. Backs the **Business tier**
-  ($149/mo) currently on the waitlist.
+  API access and advanced webhook delivery, and dedicated support. Backs the
+  **Business tier** ($149/mo) currently on the waitlist. The Business storefront
+  bullet is "API access and advanced webhook delivery" (nothing bespoke is sold
+  through the storefront).
 - **Estimate:** Not estimated yet. Scope depends heavily on what the first
   Business-tier prospect actually needs. Could be 2+ weeks.
 - **Prerequisites:** Phase 16 (multi-user) for shared-team support; at least one

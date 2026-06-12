@@ -133,10 +133,10 @@ const Competitors = {
 
       <p class="text-muted text-sm mt-16 comp-footnote">
         ${App.user?.tier === 'free'
-          ? `Free plan: 1 competitor. <a href="#/pricing" style="color:var(--accent-2)">Upgrade to Pro for 10</a> or <a href="#/pricing" style="color:var(--accent-2)">Team for unlimited</a>.`
+          ? `Free plan: 1 competitor. <a href="#/pricing" style="color:var(--accent-2)">Upgrade to Pro for 10</a> or <a href="#/pricing" style="color:var(--accent-2)">Team for 60</a>.`
           : App.user?.tier === 'pro'
-          ? `Pro plan: up to 10 competitors. <a href="#/pricing" style="color:var(--accent-2)">Upgrade to Team for unlimited</a>.`
-          : 'Team plan: unlimited competitors.'
+          ? `Pro plan: up to 10 competitors. <a href="#/pricing" style="color:var(--accent-2)">Upgrade to Team for 60</a>.`
+          : 'Team plan: 60 competitors.'
         }
       </p>
     `;

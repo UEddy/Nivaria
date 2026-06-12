@@ -123,7 +123,7 @@ const Billing = {
     const label = isTeam ? 'Team' : 'Business';
     const blurb = isTeam
       ? 'Team adds shared workspaces and multi-user seats. Launching soon. Leave your email and we’ll notify you first.'
-      : 'Business adds advanced monitoring, custom integrations, and dedicated support. Tell us about your use case and we’ll be in touch.';
+      : 'Business adds advanced monitoring, API access and advanced webhook delivery, and dedicated support. Tell us about your use case and we’ll be in touch.';
     const field = isTeam
       ? `<div class="form-group">
            <label class="form-label" for="wl-size">Team size</label>
@@ -288,7 +288,7 @@ const GATE_BY_TIER = {
     title: 'Join the Team Waitlist',
     desc: "You’ve reached your Pro plan’s limit. Join the Team waitlist to be notified when team features launch.",
     features: [
-      'Unlimited competitors within team scope',
+      '60 competitors with automatic daily monitoring',
       'Multi-user workspace',
       'Shared business context & voice profiles',
       'Role permissions',
@@ -303,7 +303,7 @@ const GATE_BY_TIER = {
     features: [
       'Unlimited competitors',
       'Fortress site monitoring (Cloudflare / anti-bot defended sites)',
-      'Custom integrations',
+      'API access and advanced webhook delivery',
       'Dedicated support',
       'Audit logs',
     ],
