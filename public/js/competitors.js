@@ -312,8 +312,8 @@ const Competitors = {
         </div>
         <div class="form-group">
           <label class="form-label">Page URL to Monitor <span style="color:var(--red)">*</span></label>
-          <input class="form-input" id="comp-url" placeholder="https://acmecorp.com/pricing" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" />
-          <span class="form-hint">Monitor a specific page. Pricing, features, or homepage works best.</span>
+          <input class="form-input" id="comp-url" placeholder="https://competitor.com/pricing or /changelog" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" />
+          <span class="form-hint">Pricing pages, changelogs, and blogs work best. Heavily bot-protected sites may not be monitorable on this plan.</span>
         </div>
         <div class="form-group">
           <label class="form-label">Internal Notes <span style="color:var(--txt-3);font-weight:400">(optional)</span></label>

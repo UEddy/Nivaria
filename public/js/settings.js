@@ -91,7 +91,7 @@ const Settings = {
         <div class="settings-page-header">
           <div>
             <div class="settings-page-title">Settings</div>
-            <div class="settings-page-subtitle">Manage your workspace context, notifications, and billing.</div>
+            <div class="settings-page-subtitle">Workspace configuration, billing, and company context</div>
           </div>
           <div class="settings-identity">
             <span>${esc(user?.email || '')}</span>
@@ -214,19 +214,19 @@ const Settings = {
           <div class="form-group">
             <label class="form-label">What we sell</label>
             <textarea class="form-input form-textarea" id="ctx-what-we-sell" rows="3" maxlength="5000"
-              placeholder="Describe your product in 1 to 3 sentences.">${esc(c.what_we_sell || '')}</textarea>
+              placeholder="Example: We sell project management software to mid-market engineering teams.">${esc(c.what_we_sell || '')}</textarea>
           </div>
 
           <div class="form-group">
             <label class="form-label">Target ICP</label>
             <textarea class="form-input form-textarea" id="ctx-target-icp" rows="3" maxlength="5000"
-              placeholder="Who do you sell to? Industry, company size, and the typical role you sell to.">${esc(c.target_icp || '')}</textarea>
+              placeholder="Example: Mid-market engineering teams of 50 to 500 people. The buyer is usually the VP of Engineering.">${esc(c.target_icp || '')}</textarea>
           </div>
 
           <div class="form-group">
             <label class="form-label">Our positioning</label>
             <textarea class="form-input form-textarea" id="ctx-our-positioning" rows="3" maxlength="5000"
-              placeholder="How do you differentiate from competitors?">${esc(c.our_positioning || '')}</textarea>
+              placeholder="Example: We win on reliability and lose on advanced filtering. Our main competitors are Linear and Asana.">${esc(c.our_positioning || '')}</textarea>
           </div>
 
           <div class="set-row-2">

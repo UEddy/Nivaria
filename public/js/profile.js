@@ -23,7 +23,7 @@ const Profile = {
     { id: 'details',      label: 'Your details',  icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>` },
     { id: 'voice',        label: 'Voice profile', icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>` },
     { id: 'integrations', label: 'Integrations',  icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7H6a3 3 0 0 0 0 6h3"/><path d="M15 17h3a3 3 0 0 0 0-6h-3"/><line x1="8" y1="12" x2="16" y2="12"/></svg>` },
-    { id: 'account',      label: 'Account',       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>` },
+    { id: 'security',     label: 'Security',      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>` },
   ],
 
   _RETURN_PARAMS: ['calendar_connected', 'calendar_error', 'slack_connected', 'slack_error'],
@@ -32,6 +32,8 @@ const Profile = {
   // params (so an OAuth callback landing on #/profile?calendar_connected=… shows
   // Integrations), then the last active section, then the details default.
   _resolveSection(section, routeQuery) {
+    // 'account' was renamed to 'security'; alias old deep links/bookmarks.
+    if (section === 'account') return 'security';
     if (section) return section;
     if (routeQuery instanceof URLSearchParams &&
         Profile._RETURN_PARAMS.some(k => routeQuery.has(k))) return 'integrations';
@@ -103,7 +105,7 @@ const Profile = {
         <div class="settings-page-header">
           <div>
             <div class="settings-page-title">Profile</div>
-            <div class="settings-page-subtitle">Your personal details, integrations, and how Nivaria writes on your behalf.</div>
+            <div class="settings-page-subtitle">Your personal details and how Nivaria represents you</div>
           </div>
           <div class="settings-identity">
             <span>${esc(user?.email || '')}</span>
@@ -127,15 +129,15 @@ const Profile = {
 
     switch (section) {
       case 'details':
-        return Profile.identityHtml(user) + Profile.securityHtml(user);
+        return Profile.identityHtml(user) + Profile.emailHtml(user);
       case 'voice':
         return Profile.voiceProfileHtml(voiceData);
       case 'integrations':
         return Profile.calendarHtml(s, calData) + Profile.slackHtml(slackData) + Profile.webhooksHtml(s, isProPlus);
-      case 'account':
-        return Profile.accountHtml(user) + Profile.gdprHtml();
+      case 'security':
+        return Profile.passwordHtml(user) + Profile.accountHtml(user) + Profile.gdprHtml();
       default:
-        return Profile.identityHtml(user) + Profile.securityHtml(user);
+        return Profile.identityHtml(user) + Profile.emailHtml(user);
     }
   },
 
@@ -194,15 +196,15 @@ const Profile = {
     }
   },
 
-  // ── Sign-in & security (email read-only + password) ─────────────────────────
+  // ── Email (read-only) — lives in "Your details" ─────────────────────────────
 
-  securityHtml(user) {
+  emailHtml(user) {
     const email = user?.email || '';
     return `
       <div class="set-card">
         <div class="set-card__head">
-          <div class="set-card__title">Sign-in &amp; security</div>
-          <div class="set-card__desc">The email you sign in with, and your password.</div>
+          <div class="set-card__title">Email</div>
+          <div class="set-card__desc">The email you sign in with.</div>
         </div>
         <div class="set-card__body">
           <div class="form-group">
@@ -213,7 +215,21 @@ const Profile = {
             </div>
             <span class="form-hint">To change the email on your account, contact <a href="mailto:support@nivaria.app" class="link-accent">support@nivaria.app</a>.</span>
           </div>
+        </div>
+      </div>`;
+  },
 
+  // ── Password change — lives in the "Security" section ───────────────────────
+
+  passwordHtml(user) {
+    const email = user?.email || '';
+    return `
+      <div class="set-card">
+        <div class="set-card__head">
+          <div class="set-card__title">Password</div>
+          <div class="set-card__desc">Reset the password you use to sign in.</div>
+        </div>
+        <div class="set-card__body">
           <div class="set-integration-block">
             <div class="set-integration">
               <div class="set-integration__text">
@@ -258,7 +274,8 @@ const Profile = {
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
             </div>
             <div class="set-empty__title">Your voice profile is empty</div>
-            <div class="set-empty__desc">Nivaria will use sensible defaults when generating outreach. Set it up to make every message sound like you.</div>
+            <div class="set-empty__desc">Used to draft outreach messages that sound like you. Nivaria uses sensible defaults until you set it up.</div>
+            <div class="set-empty__desc" style="font-style:italic;opacity:0.82;margin-top:-2px">Example: casual and warm tone, always use contractions, direct openers, short punchy sentences. Sign-off: "Cheers, Sam".</div>
             <button class="btn btn-primary btn-sm" onclick="Profile.expandVoiceProfile()">Set up voice profile</button>
           </div>
           <div id="vp-editor" class="set-card__body" data-dirty-group style="display:none;margin-top:20px">${editor}</div>
