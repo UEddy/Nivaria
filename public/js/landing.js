@@ -121,7 +121,7 @@
     function open(tier) {
       currentTier = tier === 'business' ? 'business' : 'team';
       titleEl.textContent = `Get notified when ${label()} is available`;
-      descEl.textContent  = `We'll email you when the ${label()} tier launches.`;
+      descEl.textContent  = `We'll email you when the ${label()} tier launches. Waitlist members get 10% off their first 2 months.`;
       form.reset();
       setMsg('');
       submitting = false;

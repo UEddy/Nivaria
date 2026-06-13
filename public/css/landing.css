@@ -746,6 +746,16 @@ img, svg { display: block; }
 }
 .lp-plan-card-full .lp-plan-desc { margin-bottom: 20px; }
 .lp-plan-card-full .lp-plan-cta { margin-top: auto; }
+
+/* Waitlist anticipation line, sits just under the Team/Business CTA. Small and
+   muted so it reads as a footnote, not a feature. */
+.lp-plan-waitnote {
+  margin-top: 10px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--lp-txt-3);
+  text-align: center;
+}
 /* Feature rows can wrap to two lines on narrow cards; top-align the check so it
    sits with the first line instead of floating to the vertical centre. */
 .lp-plan-card-full .lp-plan-feat { align-items: flex-start; line-height: 1.45; }

@@ -713,11 +713,11 @@ const Pricing = {
       },
       {
         id: 'team', name: 'Team', price: 49, desc: 'For sales-led organizations.', badge: 'Launching soon',
-        features: ['60 competitors with automatic daily monitoring', 'Multiple users', 'Shared workspace', 'Advanced correlation', 'Everything in Pro'],
+        features: ['60 competitors with automatic monitoring, twice daily', 'Multi-user workspace with shared competitive intelligence', "Outreach drafts in each team member's own voice", 'Role permissions and team collaboration', 'Everything in Pro'],
       },
       {
         id: 'business', name: 'Business', price: 149, desc: 'For larger orgs with special needs.', badge: 'Coming soon',
-        features: ['Everything in Team', 'Tier-4 fortress site monitoring', 'API access and advanced webhook delivery', 'Dedicated support'],
+        features: ["Monitor the competitors others can't: bot-protected sites fully covered", 'Monitor your entire competitive landscape', 'Hourly monitoring', 'API access and advanced webhook delivery', '12-month change history', 'Priority support', 'Everything in Team'],
       },
     ];
 

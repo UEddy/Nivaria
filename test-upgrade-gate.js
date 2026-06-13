@@ -93,7 +93,8 @@ console.log('\n── showUpgradeModal rendered HTML (per current tier) ──')
   check('pro: ignores tier-wrong backend message',    !html.includes('competitor limit. Upgrade to Pro to track more'));
   check('pro: tier-aware Pro-plan-limit copy',        html.includes("reached your Pro plan"));
   check('pro: lists multi-user workspace',            html.includes('Multi-user workspace'));
-  check('pro: Team gate shows the 60-competitor cap', html.includes('60 competitors with automatic daily monitoring'));
+  check('pro: Team gate shows the 60-cap, twice daily', html.includes('60 competitors with automatic monitoring, twice daily'));
+  check('pro: Team gate lists Everything in Pro',     html.includes('Everything in Pro'));
   check('pro: Team gate never says "unlimited"',      !/unlimited/i.test(html));
   check('pro: CTA opens Team waitlist',               html.includes("Billing.openWaitlist('team')"));
   check('pro: shows $49/month (waitlist)',            html.includes('$49/month (waitlist)'));
@@ -102,9 +103,12 @@ console.log('\n── showUpgradeModal rendered HTML (per current tier) ──')
   // Team user hits cap → Business waitlist
   html = render('team', {});
   check('team: title is Join the Business Waitlist',  /modal-title">Join the Business Waitlist</.test(html));
-  check('team: lists fortress site monitoring',       html.includes('Fortress site monitoring'));
+  check('team: lists bot-protected site coverage',    html.includes('bot-protected sites fully covered'));
+  check('team: lists hourly monitoring',              html.includes('Hourly monitoring'));
+  check('team: lists entire competitive landscape',   html.includes('Monitor your entire competitive landscape'));
   check('team: Business gate lists API access bullet', html.includes('API access and advanced webhook delivery'));
   check('team: Business gate has no "custom integration"', !/custom integration/i.test(html));
+  check('team: Business gate never says "unlimited"', !/unlimited/i.test(html));
   check('team: CTA opens Business waitlist',          html.includes("Billing.openWaitlist('business')"));
   check('team: shows $149/month (waitlist)',          html.includes('$149/month (waitlist)'));
 

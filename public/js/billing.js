@@ -122,8 +122,8 @@ const Billing = {
     const isTeam = tier === 'team';
     const label = isTeam ? 'Team' : 'Business';
     const blurb = isTeam
-      ? 'Team adds shared workspaces and multi-user seats. Launching soon. Leave your email and we’ll notify you first.'
-      : 'Business adds advanced monitoring, API access and advanced webhook delivery, and dedicated support. Tell us about your use case and we’ll be in touch.';
+      ? 'Team adds shared workspaces and multi-user seats. Launching soon. Waitlist members get 10% off their first 2 months. Leave your email and we’ll notify you first.'
+      : 'Business adds advanced monitoring, API access and advanced webhook delivery, and priority support. Launching soon. Waitlist members get 10% off their first 2 months. Tell us about your use case and we’ll be in touch.';
     const field = isTeam
       ? `<div class="form-group">
            <label class="form-label" for="wl-size">Team size</label>
@@ -288,24 +288,26 @@ const GATE_BY_TIER = {
     title: 'Join the Team Waitlist',
     desc: "You’ve reached your Pro plan’s limit. Join the Team waitlist to be notified when team features launch.",
     features: [
-      '60 competitors with automatic daily monitoring',
-      'Multi-user workspace',
-      'Shared business context & voice profiles',
-      'Role permissions',
-      'Team collaboration',
+      '60 competitors with automatic monitoring, twice daily',
+      'Multi-user workspace with shared competitive intelligence',
+      "Outreach drafts in each team member's own voice",
+      'Role permissions and team collaboration',
+      'Everything in Pro',
     ],
     price: '$49/month (waitlist)',
     cta: { label: 'Join Waitlist', onclick: "Billing.openWaitlist('team')" },
   },
   team: {
     title: 'Join the Business Waitlist',
-    desc: "You’ve reached your Team plan’s limit. Join the Business waitlist for fortress-protected site monitoring and dedicated support.",
+    desc: "You’ve reached your Team plan’s limit. Join the Business waitlist for protected-site monitoring and priority support.",
     features: [
-      'Unlimited competitors',
-      'Fortress site monitoring (Cloudflare / anti-bot defended sites)',
+      "Monitor the competitors others can't: bot-protected sites fully covered",
+      'Monitor your entire competitive landscape',
+      'Hourly monitoring',
       'API access and advanced webhook delivery',
-      'Dedicated support',
-      'Audit logs',
+      '12-month change history',
+      'Priority support',
+      'Everything in Team',
     ],
     price: '$149/month (waitlist)',
     cta: { label: 'Join Waitlist', onclick: "Billing.openWaitlist('business')" },

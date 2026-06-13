@@ -84,8 +84,9 @@ Sequenced after launch. Order can change based on what early customers ask for.
 - **Scope:** Workspace invitations, member roles (admin/member), and shared
   workspace resources. This is what actually unblocks the **Team tier waitlist**
   to convert into paid subscriptions. (Formerly tracked as Phase 10.5.)
-- **Team competitor cap:** 60 (locked during pre-launch pricing review, June
-  2026). Enforcement built in this phase uses this constant.
+- **Team definition (locked June 2026):** Cap: 60 competitors. Monitoring: twice
+  daily. Waitlist members get 10% off first 2 months at launch (honor via Lemon
+  Squeezy discount code). Enforcement built in this phase uses these constants.
 - **Estimate:** 5–8 days for the feature set, **plus** the prerequisite below.
 - **Prerequisites (hard):** Complete the `user_id` to `workspace_id` query
   refactor documented in [`phase-10.5-prerequisites.md`](phase-10.5-prerequisites.md).
@@ -105,11 +106,17 @@ Sequenced after launch. Order can change based on what early customers ask for.
 
 ### Phase 18: Business tier infrastructure
 - **Status:** conditional on demand
-- **Scope:** Tier 4 ("fortress") capabilities: high-frequency site monitoring,
-  API access and advanced webhook delivery, and dedicated support. Backs the
-  **Business tier** ($149/mo) currently on the waitlist. The Business storefront
-  bullet is "API access and advanced webhook delivery" (nothing bespoke is sold
-  through the storefront).
+- **Scope:** Tier 4 ("fortress") capabilities: protected-site scraping
+  infrastructure, hourly monitoring, API access and advanced webhooks, and
+  12-month change history. Backs the **Business tier** ($149/mo) currently on the
+  waitlist. The Business storefront bullet is "API access and advanced webhook
+  delivery" (nothing bespoke is sold through the storefront).
+- **Business definition (locked June 2026):** No advertised competitor cap. Copy:
+  "entire competitive landscape". Internal soft ceiling at enforcement time
+  (alert, not block, around 300) with outliers routed to enterprise contact.
+  Fair-use covered by ToS. Hourly monitoring. Protected-site scraping. API access
+  and advanced webhooks. 12-month history. Priority support. Same 10% waitlist
+  discount as Team (honor via Lemon Squeezy discount code).
 - **Estimate:** Not estimated yet. Scope depends heavily on what the first
   Business-tier prospect actually needs. Could be 2+ weeks.
 - **Prerequisites:** Phase 16 (multi-user) for shared-team support; at least one
