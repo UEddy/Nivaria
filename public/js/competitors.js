@@ -32,6 +32,7 @@ const Competitors = {
           </div>
           <div class="empty-title">No competitors yet</div>
           <div class="empty-desc">Add your first competitor URL to start monitoring for changes and generating briefs.</div>
+          <div class="empty-desc" style="max-width:520px;margin-top:8px;">Nivaria monitors and analyzes publicly available information such as website content, pricing pages, product announcements, and messaging changes. We do not access private accounts, bypass authentication, or collect non-public data.</div>
           <button class="btn btn-primary" onclick="Competitors.showAddModal()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add First Competitor
