@@ -7,7 +7,10 @@ const { getDb } = require('../db');
 const { hashIp } = require('../lib/audit');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const ALLOWED_TIERS = new Set(['team', 'business']);
+// 'trial' is a manual-access contact capture for the 14-day Pro trial (no payment
+// processor / automated trial yet). It rides the same table, rate limit, and
+// privacy rules as the Team/Business waitlist and is distinguished by tier='trial'.
+const ALLOWED_TIERS = new Set(['team', 'business', 'trial']);
 // Strip ASCII control characters (keep normal whitespace) from free text.
 const CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g;
 
@@ -25,7 +28,7 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: 'A valid email is required.' });
   }
   if (!ALLOWED_TIERS.has(tier)) {
-    return res.status(400).json({ error: 'tier must be "team" or "business".' });
+    return res.status(400).json({ error: 'tier must be "team", "business", or "trial".' });
   }
 
   // team_size_estimate only meaningful for Team; ignored otherwise.

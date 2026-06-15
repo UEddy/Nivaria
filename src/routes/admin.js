@@ -119,6 +119,7 @@ function renderShell(title, bodyHtml) {
     .pill { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
     .pill-team { background: rgba(129,140,248,0.16); color: #A5B4FC; }
     .pill-business { background: rgba(16,185,129,0.16); color: #34D399; }
+    .pill-trial { background: rgba(236,72,153,0.16); color: #F472B6; }
     .pill-dev { background: rgba(245,158,11,0.18); color: #FBBF24; }
     .pill-off { background: rgba(255,255,255,0.06); color: var(--txt-3); }
     .muted { color: var(--txt-3); }
@@ -186,7 +187,7 @@ function renderWaitlist(rows) {
       <h1>Waitlist signups</h1>
       <span class="admin-sub"><span class="admin-count">${rows.length}</span> total</span>
     </div>
-    <p class="admin-sub">Team and Business tier interest captured from the marketing site and in-app upgrade gate.</p>
+    <p class="admin-sub">Team and Business tier interest plus 14-day Pro trial requests (tier_interest='trial'), captured from the marketing site and in-app upgrade gate. Trial requests are granted manually until a payment processor is live.</p>
     <table>
       <thead><tr><th>id</th><th>email</th><th>tier_interest</th><th>created_at</th><th>notified_at</th></tr></thead>
       <tbody>${body}</tbody>

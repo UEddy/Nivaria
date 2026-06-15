@@ -104,14 +104,39 @@
     const closeBtn = document.getElementById('lp-wl-close');
     const titleEl = document.getElementById('lp-wl-title');
     const descEl  = document.getElementById('lp-wl-desc');
-    const triggers = document.querySelectorAll('[data-waitlist]');
+    const triggers = document.querySelectorAll('[data-waitlist], [data-trial]');
     if (!overlay || !modal || !form || !triggers.length) return;
+
+    // Copy per mode. 'trial' reuses the same modal/endpoint as the waitlist but is
+    // a manual-access contact capture for the 14-day Pro trial (no automated trial
+    // yet). It posts tier_interest='trial' so admins can tell it apart.
+    const COPY = {
+      team: {
+        title: 'Get notified when Team is available',
+        desc: "We'll email you when the Team tier launches. Waitlist members get 10% off their first 2 months.",
+        button: 'Join Waitlist',
+        success: "You're on the list. We'll email you when Team is available.",
+        already: "You're already on the waitlist for Team.",
+      },
+      business: {
+        title: 'Get notified when Business is available',
+        desc: "We'll email you when the Business tier launches. Waitlist members get 10% off their first 2 months.",
+        button: 'Join Waitlist',
+        success: "You're on the list. We'll email you when Business is available.",
+        already: "You're already on the waitlist for Business.",
+      },
+      trial: {
+        title: 'Start your free trial',
+        desc: "Enter your email and we'll get your 14-day Pro trial set up. We'll be in touch shortly to get you started.",
+        button: 'Start free trial',
+        success: "Thanks. We'll reach out shortly to set up your trial.",
+        already: "You've already requested a trial. We'll be in touch shortly.",
+      },
+    };
 
     let currentTier = 'team';
     let lastFocused = null;
     let submitting = false;
-
-    const label = () => (currentTier === 'team' ? 'Team' : 'Business');
 
     function setMsg(text, type) {
       msg.textContent = text || '';
@@ -119,15 +144,16 @@
     }
 
     function open(tier) {
-      currentTier = tier === 'business' ? 'business' : 'team';
-      titleEl.textContent = `Get notified when ${label()} is available`;
-      descEl.textContent  = `We'll email you when the ${label()} tier launches. Waitlist members get 10% off their first 2 months.`;
+      currentTier = COPY[tier] ? tier : 'team';
+      const c = COPY[currentTier];
+      titleEl.textContent = c.title;
+      descEl.textContent  = c.desc;
       form.reset();
       setMsg('');
       submitting = false;
       submit.disabled = false;
       email.disabled = false;
-      submit.textContent = 'Join Waitlist';
+      submit.textContent = c.button;
       lastFocused = document.activeElement;
       overlay.hidden = false;
       document.body.style.overflow = 'hidden';
@@ -154,7 +180,9 @@
     }
 
     triggers.forEach(btn => {
-      btn.addEventListener('click', () => open(btn.getAttribute('data-waitlist')));
+      // data-trial → trial mode; data-waitlist="team|business" → waitlist mode.
+      btn.addEventListener('click', () =>
+        open(btn.hasAttribute('data-trial') ? 'trial' : btn.getAttribute('data-waitlist')));
     });
 
     closeBtn.addEventListener('click', close);
@@ -187,11 +215,8 @@
         if (res.ok) {
           // Success — leave the form disabled to prevent double-submit.
           submit.textContent = 'Done';
-          if (data.already_signed_up) {
-            setMsg(`You're already on the waitlist for ${label()}.`, 'success');
-          } else {
-            setMsg(`You're on the list. We'll email you when ${label()} is available.`, 'success');
-          }
+          const c = COPY[currentTier] || COPY.team;
+          setMsg(data.already_signed_up ? c.already : c.success, 'success');
         } else {
           // Recoverable — re-enable so the user can retry.
           submitting = false;

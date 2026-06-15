@@ -462,14 +462,16 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(user_id);
   CREATE INDEX IF NOT EXISTS idx_workspace_members_ws   ON workspace_members(workspace_id);
 
-  -- Waitlist captures for the not-yet-active Team and Business tiers.
+  -- Waitlist captures for the not-yet-active Team and Business tiers, plus
+  -- manual-access requests for the 14-day Pro trial (tier='trial'), which reuses
+  -- this table until a payment processor and automated trial are live.
   -- notified_at is reserved for a future "your tier is now live" mailout (NULL
-  -- until that email is sent). A user may join both tiers but not the same tier
-  -- twice — enforced by UNIQUE(email, tier).
+  -- until that email is sent). A user may request multiple tiers but not the same
+  -- tier twice, enforced by UNIQUE(email, tier).
   CREATE TABLE IF NOT EXISTS waitlist_signups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL,
-    tier TEXT NOT NULL CHECK(tier IN ('team','business')),
+    tier TEXT NOT NULL CHECK(tier IN ('team','business','trial')),
     team_size_estimate INTEGER,
     use_case TEXT,
     signed_up_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -620,6 +622,32 @@ async function initDb() {
   const waitlistCols = (sqlDb.exec('PRAGMA table_info(waitlist_signups)')[0]?.values || []).map(v => v[1]);
   if (waitlistCols.length && !waitlistCols.includes('notified_at')) {
     sqlDb.run('ALTER TABLE waitlist_signups ADD COLUMN notified_at DATETIME');
+  }
+  // Widen the tier CHECK constraint to allow 'trial' (14-day Pro trial requests).
+  // SQLite cannot ALTER a CHECK constraint, so rebuild the table when an existing
+  // DB still has the old ('team','business')-only definition. Rows are preserved.
+  const waitlistDdl = (sqlDb.exec(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='waitlist_signups'"
+  )[0]?.values?.[0]?.[0]) || '';
+  if (waitlistDdl && !waitlistDdl.includes("'trial'")) {
+    sqlDb.run(`
+      BEGIN TRANSACTION;
+      CREATE TABLE waitlist_signups__new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL,
+        tier TEXT NOT NULL CHECK(tier IN ('team','business','trial')),
+        team_size_estimate INTEGER,
+        use_case TEXT,
+        signed_up_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        notified_at DATETIME,
+        UNIQUE(email, tier)
+      );
+      INSERT INTO waitlist_signups__new (id, email, tier, team_size_estimate, use_case, signed_up_at, notified_at)
+        SELECT id, email, tier, team_size_estimate, use_case, signed_up_at, notified_at FROM waitlist_signups;
+      DROP TABLE waitlist_signups;
+      ALTER TABLE waitlist_signups__new RENAME TO waitlist_signups;
+      COMMIT;
+    `);
   }
   sqlDb.run('CREATE INDEX IF NOT EXISTS idx_waitlist_email ON waitlist_signups(email)');
 

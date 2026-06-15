@@ -527,7 +527,14 @@ img, svg { display: block; }
   max-width: 960px;
   margin: 0 auto;
 }
+/* Three-tier grid: 3 → 2 → 1 across breakpoints. */
 @media (max-width: 860px) {
+  .lp-pricing-grid {
+    grid-template-columns: repeat(2, 1fr);
+    max-width: 640px;
+  }
+}
+@media (max-width: 560px) {
   .lp-pricing-grid {
     grid-template-columns: 1fr;
     max-width: 400px;
