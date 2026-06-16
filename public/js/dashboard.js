@@ -341,10 +341,17 @@ const Dashboard = {
       : 0;
 
     // The competitor cap comes from the server (stats.max_competitors), derived
-    // from the workspace's authoritative effective tier — NOT the deprecated
-    // App.user.tier. A value of -1 means unlimited (team/business). This keeps
-    // the slot counter consistent with the sidebar/Settings plan labels.
-    const slotMax = stats.max_competitors === -1 ? null : (stats.max_competitors ?? 1);
+    // from the workspace's authoritative effective tier (getWorkspaceTier), NOT
+    // the deprecated App.user.tier. A value of -1 means unlimited (team/business).
+    // If the field is somehow absent (e.g. a stale cached stats response), fall
+    // back to the same app-wide effectiveTier the sidebar/Settings use, rather
+    // than silently defaulting to the most restrictive Free cap of 1 (which would
+    // misreport a Pro account as "/ 1"). Mirrors the server TIER_LIMITS caps.
+    const CAP_BY_TIER = { free: 1, pro: 10, team: -1, business: -1 };
+    const rawCap = (stats.max_competitors !== undefined && stats.max_competitors !== null)
+      ? stats.max_competitors
+      : (CAP_BY_TIER[App.subscription?.effectiveTier] ?? CAP_BY_TIER.free);
+    const slotMax = rawCap === -1 ? null : rawCap;
     const slotPct = slotMax ? Math.min(100, (stats.total_competitors / slotMax) * 100) : 20;
     const slotWarn = slotMax && stats.total_competitors / slotMax > 0.8;
 
