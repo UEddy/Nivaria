@@ -340,7 +340,11 @@ const Dashboard = {
       ? Math.min(100, Math.round((stats.total_changes / Math.max(1, stats.total_competitors)) * 12 + stats.active_competitors * 8))
       : 0;
 
-    const slotMax = App.user?.tier === 'free' ? 1 : App.user?.tier === 'team' ? null : 10;
+    // The competitor cap comes from the server (stats.max_competitors), derived
+    // from the workspace's authoritative effective tier — NOT the deprecated
+    // App.user.tier. A value of -1 means unlimited (team/business). This keeps
+    // the slot counter consistent with the sidebar/Settings plan labels.
+    const slotMax = stats.max_competitors === -1 ? null : (stats.max_competitors ?? 1);
     const slotPct = slotMax ? Math.min(100, (stats.total_competitors / slotMax) * 100) : 20;
     const slotWarn = slotMax && stats.total_competitors / slotMax > 0.8;
 
@@ -492,7 +496,7 @@ const Dashboard = {
             <div class="usage-wrap">
               <div class="usage-label">
                 <span>Competitor slots</span>
-                <span>${stats.total_competitors} / ${App.user?.tier === 'free' ? '1' : App.user?.tier === 'team' ? '∞' : '10'}</span>
+                <span>${stats.total_competitors} / ${slotMax === null ? '∞' : slotMax}</span>
               </div>
               <div class="usage-bar">
                 <div class="usage-fill ${slotWarn ? 'warn' : ''}" style="width:${slotPct}%"></div>

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db');
+const { getWorkspaceTier, maxCompetitors } = require('../lib/tierLimits');
 
 function parseChange(c) {
   return {
@@ -92,7 +93,16 @@ router.get('/stats', (req, res) => {
     WHERE c.user_id = ? AND ch.is_meaningful = 0
   `).get(uid).n;
 
-  res.json({ total_competitors, active_competitors, total_changes, changes_this_week, high_threats, medium_threats, trivial_changes });
+  // Tier and competitor cap come from the SAME authoritative source the rest of
+  // the app uses (getWorkspaceTier → workspace subscription state), not the
+  // deprecated users.tier column. This keeps the dashboard slot counter in sync
+  // with the sidebar/Settings/Profile plan labels and survives the Dodo
+  // migration (Dodo writes subscription_tier via webhook → getWorkspaceTier).
+  // maxCompetitors of -1 means unlimited (team/business).
+  const tier = getWorkspaceTier(req.workspaceId);
+  const max_competitors = maxCompetitors(req.workspaceId);
+
+  res.json({ total_competitors, active_competitors, total_changes, changes_this_week, high_threats, medium_threats, trivial_changes, tier, max_competitors });
 });
 
 router.get('/:id', (req, res) => {

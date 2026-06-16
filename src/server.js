@@ -299,7 +299,10 @@ app.get('/api/health', (_req, res) => res.json({ status: 'ok', version: '1.0.0' 
 // ── Auth pages ─────────────────────────────────────────────────────────────────
 
 app.get('/login', (req, res) => {
-  if (req.session?.userId) return res.redirect('/app');
+  // A signed-in user is normally bounced to the app, but the in-app Profile
+  // "Change password" action deep-links here with ?forgot=1 to reuse the
+  // password-reset flow. Let that case through so the reset screen can render.
+  if (req.session?.userId && !req.query.forgot) return res.redirect('/app');
   res.sendFile(path.join(__dirname, '../public/auth/index.html'));
 });
 
