@@ -265,9 +265,11 @@ const Settings = {
   // columns are omitted from the body so the server keeps them intact.
 
   notificationsHtml(s, accountEmail) {
-    const emailAddr  = s.notification_email || accountEmail || '';
-    const briefOn    = (s?.briefings_enabled ?? 1) === 1;
-    const lead       = s?.briefing_lead_minutes ?? 30;
+    const emailAddr     = s.notification_email || accountEmail || '';
+    const usingAccount  = !s.notification_email;
+    const briefEmailOn  = (s?.brief_email_enabled ?? 1) === 1;
+    const briefOn       = (s?.briefings_enabled ?? 1) === 1;
+    const lead          = s?.briefing_lead_minutes ?? 30;
 
     const mailIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>`;
     const checkIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
@@ -280,17 +282,33 @@ const Settings = {
         </div>
         <div class="set-card__body" data-dirty-group>
 
-          <!-- Email (notification address, read-only) -->
+          <!-- Brief notification email (delivery target + on/off) -->
           <div class="set-integration-block">
             <div class="set-integration">
               <div class="set-integration__icon">${mailIcon}</div>
               <div class="set-integration__text">
-                <div class="set-integration__name">Notification address ${emailAddr ? `<span class="set-pill set-pill--active">${checkIcon} Verified</span>` : ''}</div>
-                <div class="set-integration__meta">${esc(emailAddr || 'Uses your account email')}</div>
+                <div class="set-integration__name">Brief notification email
+                  ${briefEmailOn
+                    ? `<span class="set-pill set-pill--active">${checkIcon} Active</span>`
+                    : `<span class="set-pill set-pill--off">Off</span>`}
+                </div>
+                <div class="set-integration__meta">${emailAddr ? esc(emailAddr) : 'No address on file'}${usingAccount && emailAddr ? ' (your account email)' : ''}</div>
               </div>
             </div>
-            <span class="form-hint">Email briefings go to your account address. Add Slack or Discord webhooks in <a href="#/profile/integrations" class="link-accent">Profile → Integrations</a>.</span>
+            <span class="form-hint">${briefEmailOn
+              ? 'We email this address whenever a brief is generated for a tracked competitor.'
+              : 'Brief emails are off. Turn them on below to get each brief in your inbox.'} Set a different address in <a href="#/profile" class="link-accent">Profile</a>, or leave it blank to use your account email. Add Slack or Discord webhooks in <a href="#/profile/integrations" class="link-accent">Profile → Integrations</a>.</span>
           </div>
+
+          <!-- Brief email on/off -->
+          <label class="set-switch-row" for="brief-email-enabled">
+            <span class="set-switch-text">
+              <span class="set-switch-label">Email me when a brief is generated</span>
+              <span class="set-switch-help">Each time we detect a meaningful change for a tracked competitor, send the full brief to your notification address. Available on Pro.</span>
+            </span>
+            <input type="checkbox" role="switch" id="brief-email-enabled" class="set-switch"
+              ${briefEmailOn ? 'checked' : ''} aria-label="Email me when a brief is generated" />
+          </label>
 
           <!-- Pre-meeting briefing preferences -->
           <label class="set-switch-row" for="briefings-enabled">
@@ -352,9 +370,10 @@ const Settings = {
   },
 
   async saveNotifications(btn) {
-    const enabledEl = document.getElementById('briefings-enabled');
-    const leadEl    = document.getElementById('briefing-lead');
-    const feedback  = document.getElementById('notif-save-feedback');
+    const enabledEl    = document.getElementById('briefings-enabled');
+    const leadEl       = document.getElementById('briefing-lead');
+    const briefEmailEl = document.getElementById('brief-email-enabled');
+    const feedback     = document.getElementById('notif-save-feedback');
 
     const setFeedback = (msg, isErr) => {
       if (!feedback) return;
@@ -365,8 +384,9 @@ const Settings = {
     // Only briefing prefs — webhooks live on the Profile page and are omitted
     // here so the partial-update-safe endpoint leaves them in place.
     const payload = {
-      briefings_enabled:     enabledEl ? (enabledEl.checked ? 1 : 0) : undefined,
-      briefing_lead_minutes: leadEl    ? parseInt(leadEl.value, 10)  : undefined,
+      briefings_enabled:     enabledEl    ? (enabledEl.checked ? 1 : 0)    : undefined,
+      briefing_lead_minutes: leadEl       ? parseInt(leadEl.value, 10)     : undefined,
+      brief_email_enabled:   briefEmailEl ? (briefEmailEl.checked ? 1 : 0) : undefined,
     };
 
     btn.disabled = true;
@@ -376,7 +396,7 @@ const Settings = {
     try {
       await API.saveSettings(payload);
       if (Settings._ctx) {
-        Settings._ctx.settings = { ...Settings._ctx.settings, briefings_enabled: payload.briefings_enabled, briefing_lead_minutes: payload.briefing_lead_minutes };
+        Settings._ctx.settings = { ...Settings._ctx.settings, briefings_enabled: payload.briefings_enabled, briefing_lead_minutes: payload.briefing_lead_minutes, brief_email_enabled: payload.brief_email_enabled };
       }
       btn.textContent = original;
       Settings._flashSaved(btn);

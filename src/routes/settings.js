@@ -48,7 +48,7 @@ router.get('/', (req, res) => {
 router.put('/', (req, res) => {
   const db = getDb();
   const { slack_webhook, discord_webhook, notification_email,
-          briefings_enabled, briefing_lead_minutes } = req.body;
+          briefings_enabled, briefing_lead_minutes, brief_email_enabled } = req.body;
 
   // Validate webhook URLs if provided
   if (slack_webhook && !isValidSlackWebhook(slack_webhook)) {
@@ -104,17 +104,21 @@ router.put('/', (req, res) => {
   const finalBriefingLead = briefing_lead_minutes === undefined
     ? (existing.briefing_lead_minutes ?? 30)
     : parseInt(briefing_lead_minutes, 10);
+  const finalBriefEmailEnabled = brief_email_enabled === undefined
+    ? (existing.brief_email_enabled ?? 1)
+    : (brief_email_enabled ? 1 : 0);
 
   db.prepare(`
     INSERT INTO settings (user_id, slack_webhook, discord_webhook, notification_email,
-                          briefings_enabled, briefing_lead_minutes)
-    VALUES (?, ?, ?, ?, ?, ?)
+                          briefings_enabled, briefing_lead_minutes, brief_email_enabled)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id) DO UPDATE SET
       slack_webhook         = excluded.slack_webhook,
       discord_webhook       = excluded.discord_webhook,
       notification_email    = excluded.notification_email,
       briefings_enabled     = excluded.briefings_enabled,
-      briefing_lead_minutes = excluded.briefing_lead_minutes
+      briefing_lead_minutes = excluded.briefing_lead_minutes,
+      brief_email_enabled   = excluded.brief_email_enabled
   `).run(
     req.userId,
     finalSlack,
@@ -122,6 +126,7 @@ router.put('/', (req, res) => {
     finalNotifEmail,
     finalBriefingsEnabled,
     finalBriefingLead,
+    finalBriefEmailEnabled,
   );
 
   res.json({ success: true });

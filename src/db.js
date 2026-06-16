@@ -617,6 +617,12 @@ async function initDb() {
   if (!settingsCols.includes('briefings_enabled'))     sqlDb.run('ALTER TABLE settings ADD COLUMN briefings_enabled INTEGER DEFAULT 1');
   if (!settingsCols.includes('briefing_lead_minutes')) sqlDb.run('ALTER TABLE settings ADD COLUMN briefing_lead_minutes INTEGER DEFAULT 30');
 
+  // Brief-notification email preference. Controls whether a generated brief is
+  // emailed to the user's notification address (or account email fallback) when
+  // a meaningful competitor change is detected. Defaults ON so the feature is
+  // live for existing rows without an explicit opt-in.
+  if (!settingsCols.includes('brief_email_enabled'))   sqlDb.run('ALTER TABLE settings ADD COLUMN brief_email_enabled INTEGER DEFAULT 1');
+
   // Phase 12: waitlist notification tracking (additive; existing DBs created the
   // table before this column existed). Index speeds up admin/dup-check lookups.
   const waitlistCols = (sqlDb.exec('PRAGMA table_info(waitlist_signups)')[0]?.values || []).map(v => v[1]);

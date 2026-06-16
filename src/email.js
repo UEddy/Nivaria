@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { sanitizeCopy } = require('./lib/sanitizeText');
 
 // In dev, fall back to console logging when Resend rejects the recipient
 // (onboarding@resend.dev can only deliver to the Resend account owner's email).
@@ -164,4 +165,139 @@ async function sendAccountDeletionEmail(toEmail, cancelUrl, scheduledDate) {
   }
 }
 
-module.exports = { sendOtpEmail, sendAccountDeletionEmail };
+// ── Brief-notification delivery ────────────────────────────────────────────────
+//
+// Sends the generated brief to the user's notification address whenever a
+// meaningful change is detected for a tracked competitor. Wired into the
+// scheduler alongside the Slack/Discord alert dispatch, under the same
+// meaningful-change and tier gating, so it fires once per generated brief.
+//
+// Robust like the OTP path: failures are logged under [EMAIL_DELIVERY_FAILED]
+// with the error type and purpose only. The recipient address and the brief
+// contents are never logged. The function never throws, so a transient delivery
+// failure can't disrupt the monitoring pipeline.
+//
+// All model-authored fields (headline, summary, recommended response, talking
+// points) are run through sanitizeCopy before rendering, per the no-dash and
+// no-connector-plus rule for AI output (see CLAUDE.md).
+async function sendBriefEmail(toEmail, { competitor, analysis, changeId }) {
+  if (!process.env.RESEND_API_KEY) {
+    console.error('[EMAIL_DELIVERY_FAILED]', { error: 'RESEND_API_KEY not configured', purpose: 'brief_notification' });
+    return { fallback: true, delivered: false };
+  }
+
+  const subject = `Competitor brief: ${competitor.name}`;
+  try {
+    const resp = await axios.post(
+      'https://api.resend.com/emails',
+      {
+        from: FROM,
+        to: [toEmail],
+        subject,
+        html: buildBriefHtml(competitor, analysis, changeId),
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 12000,
+      }
+    );
+    return { delivered: true, data: resp.data };
+  } catch (err) {
+    const errorMessage = err.response?.data ? JSON.stringify(err.response.data) : err.message;
+    console.error('[EMAIL_DELIVERY_FAILED]', { error: errorMessage, purpose: 'brief_notification' });
+    return { fallback: true, delivered: false };
+  }
+}
+
+function buildBriefHtml(competitor, analysis, changeId) {
+  const appUrl = process.env.APP_URL || 'http://localhost:3000';
+  const briefUrl = `${appUrl}/app#/history/${changeId}`;
+
+  const THREAT_HEX = { low: '#10B981', medium: '#F59E0B', high: '#EF4444' };
+  const level = String(analysis.threat_level || 'medium').toLowerCase();
+  const threatColor = THREAT_HEX[level] || '#6366F1';
+  const threatLabel = level.toUpperCase();
+
+  // Sanitize every model-authored field before it reaches the inbox.
+  const name      = sanitizeCopy(competitor.name || 'Competitor');
+  const headline  = sanitizeCopy(analysis.headline || 'A tracked competitor page changed.');
+  const summary   = sanitizeCopy(analysis.summary || '');
+  const action    = sanitizeCopy(analysis.recommended_response || '');
+  const points    = Array.isArray(analysis.talking_points) ? analysis.talking_points : [];
+
+  const pointsHtml = points.length
+    ? `<table cellpadding="0" cellspacing="0" style="margin:8px 0 0">
+        ${points.map(p => `
+          <tr>
+            <td style="vertical-align:top;padding:4px 10px 4px 0;color:#6366F1;font-size:14px;line-height:1.6">&bull;</td>
+            <td style="padding:4px 0;color:#94A3B8;font-size:14px;line-height:1.6">${sanitizeCopy(String(p))}</td>
+          </tr>`).join('')}
+      </table>`
+    : '';
+
+  const section = (label, body) => body
+    ? `<p style="margin:24px 0 6px;font-size:11px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#6366F1">${label}</p>
+       <p style="margin:0;font-size:14px;color:#94A3B8;line-height:1.65">${body}</p>`
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#000000;font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#000000;padding:48px 20px">
+    <tr><td align="center">
+      <table width="520" cellpadding="0" cellspacing="0"
+        style="background:#0A0A0A;border:1px solid #1A1A1A;border-radius:16px;overflow:hidden;max-width:100%">
+
+        <tr><td style="padding:28px 36px 24px;border-bottom:1px solid #1A1A1A">
+          <table cellpadding="0" cellspacing="0"><tr>
+            <td style="background:#4338CA;border-radius:9px;width:34px;height:34px;text-align:center;vertical-align:middle;font-size:18px;font-weight:800;color:#FFFFFF;font-family:Arial,sans-serif">
+              N
+            </td>
+            <td style="padding-left:11px;font-size:15px;font-weight:800;color:#F1F5F9;letter-spacing:-0.4px">
+              Nivaria
+            </td>
+          </tr></table>
+        </td></tr>
+
+        <tr><td style="padding:34px 36px 30px">
+          <p style="margin:0 0 4px;font-size:12px;font-weight:600;color:#64748B;letter-spacing:0.3px">
+            New competitor brief
+          </p>
+          <table cellpadding="0" cellspacing="0" style="margin:0 0 18px"><tr>
+            <td style="font-size:22px;font-weight:800;color:#F1F5F9;letter-spacing:-0.5px;padding-right:10px">${name}</td>
+            <td style="vertical-align:middle">
+              <span style="display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:0.5px;color:${threatColor};background:${threatColor}22;border:1px solid ${threatColor}55;border-radius:999px;padding:3px 9px">${threatLabel} THREAT</span>
+            </td>
+          </tr></table>
+
+          <p style="margin:0 0 2px;font-size:11px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#6366F1">What changed</p>
+          <p style="margin:0;font-size:16px;font-weight:700;color:#F1F5F9;line-height:1.5">${headline}</p>
+
+          ${section('Executive summary', summary)}
+          ${section('Recommended response', action)}
+          ${points.length ? `<p style="margin:24px 0 0;font-size:11px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#6366F1">Key talking points</p>${pointsHtml}` : ''}
+
+          <table cellpadding="0" cellspacing="0" style="margin:30px 0 0"><tr><td>
+            <a href="${briefUrl}" style="display:inline-block;background:#4338CA;color:#FFFFFF;text-decoration:none;font-weight:700;font-size:14px;padding:13px 24px;border-radius:10px">View full brief</a>
+          </td></tr></table>
+          <p style="margin:18px 0 0;font-size:12px;color:#4B5563;line-height:1.6">
+            You receive this because brief notifications are on for your workspace. You can turn them off in Settings, Notifications.
+          </p>
+        </td></tr>
+
+        <tr><td style="padding:18px 36px;border-top:1px solid #1A1A1A">
+          <p style="margin:0;font-size:11.5px;color:#374151">Nivaria: Competitor Intelligence Platform</p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+module.exports = { sendOtpEmail, sendAccountDeletionEmail, sendBriefEmail, buildBriefHtml };

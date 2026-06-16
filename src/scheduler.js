@@ -4,6 +4,7 @@ const { fetchPageContent, generateDiff, classifyScrapeError } = require('./scrap
 const { analyzeChange, buildFallbackAnalysis, estimateCostUsd } = require('./analyzer');
 const { classifyChange } = require('./changeGate');
 const { sendAlerts, sendPatternAlert } = require('./webhooks');
+const { sendBriefEmail } = require('./email');
 const { canWorkspaceAccess } = require('./lib/tierLimits');
 const { classifyChangeTypes, PATTERN_TYPES, TYPE_LABEL, runNightlyForAllUsers } = require('./correlationEngine');
 const { getCompetitorHistory, invalidateCompetitorHistory } = require('./historicalContext');
@@ -218,6 +219,25 @@ async function checkCompetitor(competitor, db) {
           await sendAlerts(settings, competitor, analysis, changeRowId);
         } catch (alertErr) {
           console.error(`  ⚠️  Alert delivery failed for ${competitor.name}: ${alertErr.message}`);
+        }
+
+        // Brief-notification email. Same meaningful-change and tier gating as the
+        // Slack/Discord alerts above, so it fires exactly once per generated
+        // brief. Recipient rule: the configured notification_email if set,
+        // otherwise the account email. Gated on the brief_email_enabled
+        // preference (default ON). Best effort: sendBriefEmail never throws and
+        // logs failures itself, but the lookup is wrapped so nothing here can
+        // disrupt the pipeline. No email address or brief content is logged.
+        if (settings.brief_email_enabled !== 0) {
+          try {
+            const account = db.prepare('SELECT email FROM users WHERE id = ?').get(competitor.user_id);
+            const recipient = settings.notification_email || account?.email;
+            if (recipient) {
+              await sendBriefEmail(recipient, { competitor, analysis, changeId: changeRowId });
+            }
+          } catch (emailErr) {
+            console.error('[EMAIL_DELIVERY_FAILED]', { error: emailErr.message, purpose: 'brief_notification' });
+          }
         }
 
         // Phase 9: forward-looking pattern alerts. If the user subscribed to
