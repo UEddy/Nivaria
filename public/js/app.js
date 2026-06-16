@@ -702,48 +702,70 @@ const Pricing = {
     try { sub = await API.getSubscription(); } catch (_) {}
     const current = sub.effectiveTier || 'free';
 
+    // Tier content is kept identical to the landing page cards (public/index.html);
+    // only the CTAs differ, because these users are already logged in. Free is no
+    // longer a public offering, so it is not shown as a selectable card. Existing
+    // free accounts are still handled gracefully by the banner below.
     const plans = [
       {
-        id: 'free', name: 'Free', price: 0, desc: 'Track a single competitor, on demand.',
-        features: ['1 competitor URL', 'Manual checks only', 'Basic AI briefs', 'Community support'],
+        id: 'pro', name: 'Pro', price: 20, desc: 'For active sales teams', popular: true,
+        features: [
+          '10 competitors monitored',
+          'Automatic daily monitoring',
+          'AI briefs with sales talking points and recommended responses',
+          'AI outreach playbook drafts in your voice',
+          'Slack and Discord alerts',
+          'Google Calendar pre-meeting briefings',
+          'Win/loss correlation and historical pattern analysis',
+          'ROI dashboard',
+        ],
       },
       {
-        id: 'pro', name: 'Pro', price: 20, desc: 'For growing competitive teams.', popular: true,
-        features: ['10 competitor URLs', 'Automatic daily monitoring', 'Slack & Discord alerts', 'Calendar pre-meeting briefings', 'AI outreach playbooks', 'Win/loss correlation', 'Historical pattern analysis'],
+        id: 'team', name: 'Team', price: 49, desc: 'For collaborative teams', badge: 'Launching soon',
+        features: [
+          '60 competitors with automatic monitoring, twice daily',
+          'Multi-user workspace with shared competitive intelligence',
+          "Outreach drafts in each team member's own voice",
+          'Role permissions and team collaboration',
+          'Everything in Pro',
+        ],
       },
       {
-        id: 'team', name: 'Team', price: 49, desc: 'For sales-led organizations.', badge: 'Launching soon',
-        features: ['60 competitors with automatic monitoring, twice daily', 'Multi-user workspace with shared competitive intelligence', "Outreach drafts in each team member's own voice", 'Role permissions and team collaboration', 'Everything in Pro'],
-      },
-      {
-        id: 'business', name: 'Business', price: 149, desc: 'For larger orgs with special needs.', badge: 'Coming soon',
-        features: ["Monitor the competitors others can't: bot-protected sites fully covered", 'Monitor your entire competitive landscape', 'Hourly monitoring', 'API access and advanced webhook delivery', '12-month change history', 'Priority support', 'Everything in Team'],
+        id: 'business', name: 'Business', price: 149, desc: 'For enterprise needs', badge: 'Launching soon',
+        features: [
+          "Monitor the competitors others can't: bot-protected sites fully covered",
+          'Monitor your entire competitive landscape',
+          'Hourly monitoring',
+          'API access and advanced webhook delivery',
+          '12-month change history',
+          'Priority support',
+          'Everything in Team',
+        ],
       },
     ];
 
     const cta = (p) => {
-      if (p.id === 'free') {
-        return current === 'free'
-          ? `<button class="btn btn-secondary w-full" disabled>Current plan</button>`
-          : `<button class="btn btn-ghost w-full" disabled>Included</button>`;
+      if (current === p.id) {
+        return `<button class="btn btn-secondary w-full" disabled>Current plan</button>`;
       }
       if (p.id === 'pro') {
-        return current === 'pro'
-          ? `<button class="btn btn-secondary w-full" onclick="navigate('/settings/billing')">Current plan · Manage</button>`
-          : `<button class="btn btn-primary w-full" onclick="Billing.subscribe(this)">Subscribe</button>`;
+        // Logged-in users have already started, so this is a direct subscribe
+        // action. We never surface the landing page's "start trial" framing here.
+        return `<button class="btn btn-primary w-full" onclick="Billing.subscribe(this)">Subscribe to Pro</button>`;
       }
-      // team / business → waitlist
-      return `<button class="btn btn-secondary w-full" onclick="Billing.openWaitlist('${p.id}')">Get notified</button>`;
+      // team / business are waitlist-only until launch
+      return `<button class="btn btn-secondary w-full" onclick="Billing.openWaitlist('${p.id}')">Join waitlist</button>`;
     };
 
-    const banner = current === 'pro'
-      ? `You're on <strong style="color:var(--txt)">Pro</strong>${sub.cancelAtPeriodEnd ? ' (cancels at period end)' : ''}.`
-      : `You're on the <strong style="color:var(--txt)">Free</strong> plan.`;
+    const tierLabel = { free: 'Free', pro: 'Pro', team: 'Team', business: 'Business' }[current] || current;
+    const banner = current === 'free'
+      ? `You're on the <strong style="color:var(--txt)">Free</strong> plan. Subscribe to Pro to unlock automatic monitoring and AI briefs.`
+      : `You're on <strong style="color:var(--txt)">${tierLabel}</strong>${sub.cancelAtPeriodEnd ? ' (cancels at period end)' : ''}.`;
 
     el('page-root').innerHTML = `
-      <div class="pricing-wrap pricing-wrap--4">
+      <div class="pricing-wrap">
         <div class="pricing-intro"><p class="text-muted">${banner}</p></div>
-        <div class="pricing-grid pricing-grid--4">
+        <div class="pricing-grid">
           ${plans.map(p => `
             <div class="pricing-card ${p.popular ? 'featured' : ''} ${current === p.id ? 'is-current' : ''}">
               ${p.popular ? '<div class="pricing-popular">Most Popular</div>' : ''}
