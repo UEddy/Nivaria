@@ -146,19 +146,17 @@ img, svg { display: block; }
   gap: 10px;
   flex-shrink: 0;
 }
-.lp-logo-icon {
+.lp-logo-mark {
+  display: block;
   width: 34px;
   height: 34px;
-  background: var(--lp-accent);
   border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-shrink: 0;
 }
 .lp-logo-name {
   font-size: 0.9375rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 800;
+  letter-spacing: -0.03em;
   color: var(--lp-txt);
 }
 .lp-nav-right {
