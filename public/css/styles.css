@@ -480,6 +480,17 @@ img, svg { display: block; }
 }
 .menu-toggle:hover { background: var(--bg-hover); color: var(--txt); }
 
+/* ── Tour launch button (Phase 13) ───────────────────────────── */
+.tour-launch {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px;
+  border-radius: var(--radius-xs);
+  background: none; border: none; cursor: pointer;
+  color: var(--txt-3);
+  transition: background 0.14s, color 0.14s;
+}
+.tour-launch:hover { background: var(--bg-hover); color: var(--accent-2); }
+
 /* ── Theme Toggle ────────────────────────────────────────────── */
 .theme-toggle {
   display: flex; align-items: center;
@@ -3956,4 +3967,66 @@ button:focus-visible,
 @media (max-width: 600px) {
   .app-footer { flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px 16px; }
   .app-footer-links { flex-direction: column; gap: 10px; }
+}
+
+/* ── Guided product tour (Phase 13) ───────────────────────────────────────────
+   Brand skin for Driver.js. The library renders .driver-popover (plus our
+   popoverClass "nivaria-tour"); we restyle it to match the dark indigo look.
+   Driver handles all positioning/spotlight geometry; we only theme the chrome. */
+.driver-popover.nivaria-tour {
+  background: var(--bg-elevated);
+  color: var(--txt);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--border-accent);
+  max-width: 320px;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+.driver-popover.nivaria-tour .driver-popover-title {
+  font-size: 1rem; font-weight: 800; letter-spacing: -0.01em; color: var(--txt);
+}
+.driver-popover.nivaria-tour .driver-popover-description {
+  font-size: 0.875rem; line-height: 1.55; color: var(--txt-2);
+}
+.driver-popover.nivaria-tour .driver-popover-progress-text {
+  font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--txt-3);
+}
+.driver-popover.nivaria-tour .driver-popover-footer button {
+  background: var(--bg-card);
+  border: 1px solid var(--border-2);
+  color: var(--txt);
+  border-radius: var(--radius-xs);
+  font-weight: 600; font-size: 0.8125rem;
+  padding: 6px 14px; text-shadow: none;
+  transition: background 0.14s, border-color 0.14s, color 0.14s;
+}
+.driver-popover.nivaria-tour .driver-popover-footer button:hover {
+  background: var(--bg-hover); border-color: var(--border-accent); color: var(--txt);
+}
+/* Primary action (Next / Done) gets the indigo accent. */
+.driver-popover.nivaria-tour .driver-popover-next-btn {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+  box-shadow: 0 2px 10px var(--accent-glow);
+}
+.driver-popover.nivaria-tour .driver-popover-next-btn:hover {
+  background: var(--accent-2); border-color: var(--accent-2); color: #fff;
+}
+.driver-popover.nivaria-tour .driver-popover-close-btn {
+  color: var(--txt-3); font-size: 20px;
+}
+.driver-popover.nivaria-tour .driver-popover-close-btn:hover { color: var(--txt); }
+/* Spotlight arrow follows the popover background. */
+.driver-popover.nivaria-tour .driver-popover-arrow { border-color: var(--bg-elevated); }
+
+/* 375px: never let the tooltip overflow the viewport. Driver clamps position,
+   but we also cap width and tighten padding so copy stays readable on a phone. */
+@media (max-width: 420px) {
+  .driver-popover.nivaria-tour {
+    max-width: calc(100vw - 24px);
+    padding: 14px 16px;
+  }
+  .driver-popover.nivaria-tour .driver-popover-footer button {
+    padding: 8px 14px; /* 44px-friendly touch targets */
+  }
 }

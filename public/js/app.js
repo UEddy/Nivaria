@@ -262,6 +262,11 @@ const App = {
     // If getMe returned null (redirect in progress), stop here
     if (!App.user) return;
 
+    // Phase 13: snapshot first-visit state NOW, before the dashboard greeting
+    // reads and flips has_visited_dashboard during render. Tour.maybeAutoStart
+    // keys the one-time product tour off this.
+    App.isNewUser = !App.user.has_visited_dashboard;
+
     // Store CSRF token for all subsequent mutation requests (see api.js)
     if (App.user.csrfToken) {
       App.csrfToken = App.user.csrfToken;
@@ -357,7 +362,7 @@ const App = {
       el('page-title').textContent = 'Dashboard';
       el('page-sub').textContent = 'Your competitive intelligence overview';
       root.innerHTML = Skeleton.dashboard();
-      Dashboard.render().then(transition);
+      Dashboard.render().then(transition).then(() => window.Tour?.maybeAutoStart());
       // One-time welcome after a successful Pro checkout (set by billing.js).
       try {
         if (sessionStorage.getItem('cs-welcome-pro')) {

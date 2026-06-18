@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/styles.css">
+  <!-- Phase 13: guided product tour (Driver.js, vendored, ~5KB gzipped). -->
+  <link rel="stylesheet" href="/js/vendor/driver.css">
   <link rel="icon" href="/assets/monogram-solid.svg">
 </head>
 <body>
@@ -168,6 +170,14 @@
         <div class="topbar-right">
           <div class="topbar-actions" id="topbar-actions"></div>
 
+          <!-- Phase 13: manual tour re-launch. Always available, ignores the
+               once-per-user autostart guard. -->
+          <button class="tour-launch" id="tour-launch" type="button"
+                  title="Take a tour" aria-label="Take a product tour"
+                  onclick="window.Tour && Tour.start()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </button>
+
           <!-- Live clock -->
           <div class="live-clock-wrap" title="Local time">
             <span class="live-clock" id="live-clock">--:--:--</span>
@@ -232,6 +242,9 @@
 
   <script src="/js/animations.js"></script>
   <script src="/js/api.js"></script>
+  <!-- Phase 13: vendored Driver.js (UMD/iife) + tour config. -->
+  <script src="/js/vendor/driver.js.iife.js"></script>
+  <script src="/js/tour.js"></script>
   <script src="/js/dashboard.js"></script>
   <script src="/js/competitors.js"></script>
   <script src="/js/history.js"></script>

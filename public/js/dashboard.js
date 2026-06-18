@@ -397,7 +397,7 @@ const Dashboard = {
       ` : ''}
 
       <!-- Radar / Monitoring Status -->
-      <div class="radar-widget">
+      <div class="radar-widget" data-tour="monitoring">
         <div class="radar-visual">
           <div class="radar-ring"></div>
           <div class="radar-ring"></div>
@@ -430,7 +430,7 @@ const Dashboard = {
       <div class="dashboard-grid">
 
         <!-- Recent Changes -->
-        <div class="card">
+        <div class="card" data-tour="briefs">
           <div class="card-header">
             <div>
               <div class="card-title">Recent Changes</div>
@@ -468,7 +468,7 @@ const Dashboard = {
         </div>
 
         <!-- Active Competitors -->
-        <div class="card">
+        <div class="card" data-tour="add-competitor">
           <div class="card-header">
             <div>
               <div class="card-title">Active Competitors</div>
