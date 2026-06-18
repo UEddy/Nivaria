@@ -7,6 +7,57 @@ const { sanitizeCopy } = require('./lib/sanitizeText');
 // before going to production.
 const FROM = process.env.RESEND_FROM || 'Nivaria <onboarding@resend.dev>';
 
+// Canonical brand logo for email: a hosted PNG lockup (the Nivaria monogram plus
+// wordmark) served from the site's static assets at an absolute nivaria.app URL,
+// so email clients can fetch it over the network. PNG is used deliberately, not
+// SVG (many clients, notably Outlook, do not render SVG), and the wordmark font
+// is baked into the image, so the email depends on neither SVG support nor web
+// fonts. Always the production URL: localhost asset URLs are not reachable from
+// a recipient's inbox, so this is the only URL that resolves in a real client.
+const LOGO_URL = 'https://nivaria.app/assets/nivaria-email-logo.png';
+
+// Shared branded header/footer. Inline styles only (email clients ignore
+// stylesheets). The logo is an <img> with explicit width/height and alt text.
+function brandHeader() {
+  return `<tr><td style="padding:26px 36px 22px;border-bottom:1px solid #1A1A1A">
+            <img src="${LOGO_URL}" alt="Nivaria" width="137" height="44"
+                 style="display:block;border:0;outline:none;text-decoration:none;width:137px;height:44px">
+          </td></tr>`;
+}
+
+function brandFooter() {
+  return `<tr><td style="padding:18px 36px;border-top:1px solid #1A1A1A">
+            <p style="margin:0;font-size:11.5px;color:#374151">Nivaria: Competitor Intelligence Platform</p>
+          </td></tr>`;
+}
+
+// Calendar re-auth email body. Lives here with the other templates so every
+// email shares the one branded header/footer. Called by calendarSync.js.
+function buildCalendarReauthHtml({ name, provider, accountEmail, appUrl }) {
+  const providerName = provider === 'google' ? 'Google' : 'Microsoft';
+  const acct = accountEmail || 'unknown account';
+  const reconnectUrl = `${appUrl}/app#/profile/integrations`;
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#000000;font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#000000;padding:48px 20px"><tr><td align="center">
+    <table width="480" cellpadding="0" cellspacing="0" style="background:#0A0A0A;border:1px solid #1A1A1A;border-radius:16px;overflow:hidden;max-width:100%">
+      ${brandHeader()}
+      <tr><td style="padding:34px 36px 28px">
+        <p style="margin:0 0 14px;font-size:21px;font-weight:800;color:#F1F5F9;letter-spacing:-0.5px">Re-connect your calendar</p>
+        <p style="margin:0 0 16px;font-size:14px;color:#94A3B8;line-height:1.65">Hi ${name || 'there'},</p>
+        <p style="margin:0 0 22px;font-size:14px;color:#94A3B8;line-height:1.65">
+          Your ${providerName} Calendar connection (${acct}) expired and could not be refreshed automatically.
+          Pre-meeting briefings will stop firing until you re-connect.
+        </p>
+        <a href="${reconnectUrl}" style="display:inline-block;background:#4338CA;color:#FFFFFF;text-decoration:none;font-weight:700;font-size:14px;padding:13px 22px;border-radius:10px">Re-connect now</a>
+      </td></tr>
+      ${brandFooter()}
+    </table>
+  </td></tr></table>
+</body></html>`;
+}
+
 // ── OTP delivery (with graceful fallback) ──────────────────────────────────────
 //
 // Sends the OTP via Resend (the nivaria.app domain was verified in Phase 12D).
@@ -78,16 +129,7 @@ function buildHtml(code, purpose) {
       <table width="480" cellpadding="0" cellspacing="0"
         style="background:#0A0A0A;border:1px solid #1A1A1A;border-radius:16px;overflow:hidden;max-width:100%">
 
-        <tr><td style="padding:28px 36px 24px;border-bottom:1px solid #1A1A1A">
-          <table cellpadding="0" cellspacing="0"><tr>
-            <td style="background:#6366F1;border-radius:9px;width:34px;height:34px;text-align:center;vertical-align:middle;font-size:17px">
-              🔍
-            </td>
-            <td style="padding-left:11px;font-size:15px;font-weight:700;color:#F1F5F9;letter-spacing:-0.3px">
-              Nivaria
-            </td>
-          </tr></table>
-        </td></tr>
+        ${brandHeader()}
 
         <tr><td style="padding:36px 36px 28px">
           <p style="margin:0 0 6px;font-size:22px;font-weight:800;color:#F1F5F9;letter-spacing:-0.5px">
@@ -109,11 +151,7 @@ function buildHtml(code, purpose) {
           </p>
         </td></tr>
 
-        <tr><td style="padding:18px 36px;border-top:1px solid #1A1A1A">
-          <p style="margin:0;font-size:11.5px;color:#374151">
-            Nivaria: Competitor Intelligence Platform
-          </p>
-        </td></tr>
+        ${brandFooter()}
 
       </table>
     </td></tr>
@@ -133,6 +171,7 @@ async function sendAccountDeletionEmail(toEmail, cancelUrl, scheduledDate) {
 <body style="margin:0;padding:0;background:#000;font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#000;padding:48px 20px"><tr><td align="center">
     <table width="480" cellpadding="0" cellspacing="0" style="background:#0A0A0A;border:1px solid #1A1A1A;border-radius:16px;overflow:hidden;max-width:100%">
+      ${brandHeader()}
       <tr><td style="padding:36px 36px 28px">
         <p style="margin:0 0 6px;font-size:21px;font-weight:800;color:#F1F5F9;letter-spacing:-0.5px">We received your deletion request</p>
         <p style="margin:0 0 22px;font-size:14px;color:#94A3B8;line-height:1.65">
@@ -145,7 +184,7 @@ async function sendAccountDeletionEmail(toEmail, cancelUrl, scheduledDate) {
         <a href="${cancelUrl}" style="display:inline-block;background:#6366F1;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:13px 22px;border-radius:10px">Cancel deletion &amp; keep my account</a>
         <p style="margin:24px 0 0;font-size:12px;color:#4B5563;line-height:1.6">If the button doesn't work, paste this link into your browser:<br>${cancelUrl}</p>
       </td></tr>
-      <tr><td style="padding:18px 36px;border-top:1px solid #1A1A1A"><p style="margin:0;font-size:11.5px;color:#374151">Nivaria: Competitor Intelligence Platform</p></td></tr>
+      ${brandFooter()}
     </table>
   </td></tr></table>
 </body></html>`;
@@ -252,16 +291,7 @@ function buildBriefHtml(competitor, analysis, changeId) {
       <table width="520" cellpadding="0" cellspacing="0"
         style="background:#0A0A0A;border:1px solid #1A1A1A;border-radius:16px;overflow:hidden;max-width:100%">
 
-        <tr><td style="padding:28px 36px 24px;border-bottom:1px solid #1A1A1A">
-          <table cellpadding="0" cellspacing="0"><tr>
-            <td style="background:#4338CA;border-radius:9px;width:34px;height:34px;text-align:center;vertical-align:middle;font-size:18px;font-weight:800;color:#FFFFFF;font-family:Arial,sans-serif">
-              N
-            </td>
-            <td style="padding-left:11px;font-size:15px;font-weight:800;color:#F1F5F9;letter-spacing:-0.4px">
-              Nivaria
-            </td>
-          </tr></table>
-        </td></tr>
+        ${brandHeader()}
 
         <tr><td style="padding:34px 36px 30px">
           <p style="margin:0 0 4px;font-size:12px;font-weight:600;color:#64748B;letter-spacing:0.3px">
@@ -289,9 +319,7 @@ function buildBriefHtml(competitor, analysis, changeId) {
           </p>
         </td></tr>
 
-        <tr><td style="padding:18px 36px;border-top:1px solid #1A1A1A">
-          <p style="margin:0;font-size:11.5px;color:#374151">Nivaria: Competitor Intelligence Platform</p>
-        </td></tr>
+        ${brandFooter()}
 
       </table>
     </td></tr>
@@ -300,4 +328,4 @@ function buildBriefHtml(competitor, analysis, changeId) {
 </html>`;
 }
 
-module.exports = { sendOtpEmail, sendAccountDeletionEmail, sendBriefEmail, buildBriefHtml };
+module.exports = { sendOtpEmail, sendAccountDeletionEmail, sendBriefEmail, buildBriefHtml, buildCalendarReauthHtml, LOGO_URL };

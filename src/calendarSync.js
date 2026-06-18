@@ -247,6 +247,7 @@ async function sendReauthEmail(userId, provider, accountEmail) {
     return;
   }
   const axios = require('axios');
+  const { buildCalendarReauthHtml } = require('./email');
   const FROM = process.env.RESEND_FROM || 'Nivaria <onboarding@resend.dev>';
   const appUrl = process.env.APP_URL || 'http://localhost:3000';
   await axios.post(
@@ -255,11 +256,7 @@ async function sendReauthEmail(userId, provider, accountEmail) {
       from: FROM,
       to: [user.email],
       subject: 'Nivaria: re-connect your calendar',
-      html: `<p>Hi ${user.name || ''},</p>
-             <p>Your ${provider === 'google' ? 'Google' : 'Microsoft'} Calendar connection
-             (${accountEmail || 'unknown account'}) expired and could not be refreshed automatically.</p>
-             <p>Pre-meeting briefings will stop firing until you re-connect.
-             <a href="${appUrl}/app#/profile/integrations">Re-connect now</a>.</p>`,
+      html: buildCalendarReauthHtml({ name: user.name, provider, accountEmail, appUrl }),
     },
     { headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, timeout: 10000 }
   );
