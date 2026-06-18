@@ -23,6 +23,7 @@ const EVENT_TYPES = Object.freeze([
   'webhook_signature_invalid', 'account_deletion_cancelled', 'subscription_reconciled',
   // Phase 12 admin actions:
   'admin_view_waitlist', 'admin_view_users', 'admin_view_stats', 'set_developer_flag',
+  'admin_grant_tier',
 ]);
 
 function hashIp(ip) {

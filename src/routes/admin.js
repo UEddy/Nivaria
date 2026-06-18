@@ -75,6 +75,7 @@ function navHtml(active) {
     ['/admin/stats', 'Stats'],
     ['/admin/waitlist', 'Waitlist'],
     ['/admin/users', 'Users'],
+    ['/admin/set-tier', 'Grant Pro'],
     ['/admin/set-developer', 'Set developer'],
   ];
   return `<nav class="admin-nav">${links
@@ -299,6 +300,69 @@ function renderSetDeveloperForm(csrfToken, note, prefillEmail) {
     <a class="back" href="/admin/users">&larr; Back to users</a>`);
 }
 
+// Pre-launch manual Pro grant form. note: { type, text } | null. prefillEmail
+// pre-populates the field. grantedRows: workspaces currently carrying a manual
+// grant (tier_granted_at set), shown so the admin can track who was comped and
+// when, ahead of the payment-processor transition.
+function renderSetTierForm(csrfToken, note, prefillEmail, grantedRows) {
+  const noteHtml = note
+    ? `<div class="note note-${note.type === 'ok' ? 'ok' : 'err'}">${esc(note.text)}</div>`
+    : '';
+
+  const rows = grantedRows || [];
+  const grantedBody = rows.length
+    ? rows.map(r => `
+        <tr>
+          <td class="muted">${esc(r.workspace_id)}</td>
+          <td>${esc(r.email)}</td>
+          <td><span class="pill pill-team">${esc(r.subscription_tier)}</span></td>
+          <td>${esc(r.tier_granted_at)}</td>
+        </tr>`).join('')
+    : `<tr><td class="empty" colspan="4">No manual grants yet.</td></tr>`;
+
+  return renderShell('Grant Pro', `
+    ${navHtml('/admin/set-tier')}
+    <div class="admin-head"><h1>Grant Pro access</h1></div>
+    <p class="admin-sub">Manually set a user's workspace tier during the pre-launch window. Look up a user by email and grant Pro (or revert to Free). New signups always default to Free.</p>
+    ${noteHtml}
+    <form class="admin-form" method="POST" action="/admin/set-tier">
+      <input type="hidden" name="_csrf" value="${esc(csrfToken)}">
+      <div class="field">
+        <label for="tier-email">User email</label>
+        <input type="email" id="tier-email" name="email" required placeholder="user@example.com" value="${esc(prefillEmail || '')}">
+      </div>
+      <div class="field">
+        <label for="tier">Tier</label>
+        <select id="tier" name="tier">
+          <option value="pro">Grant Pro (10 competitors, daily monitoring, full features)</option>
+          <option value="free">Revert to Free</option>
+        </select>
+      </div>
+      <button class="submit" type="submit">Apply</button>
+      <p class="warn">This sets the workspace's authoritative subscription tier, the same field a payment webhook will later drive. Grant time is recorded so comped accounts can be transitioned to paid once billing is live. It does not charge the user or create a real subscription.</p>
+    </form>
+
+    <p class="stat-section-title" style="margin-top:32px">Currently granted</p>
+    <p class="admin-sub">Workspaces carrying a manual Pro grant, with the time it was granted.</p>
+    <table>
+      <thead><tr><th>workspace</th><th>email</th><th>tier</th><th>granted_at</th></tr></thead>
+      <tbody>${grantedBody}</tbody>
+    </table>
+    <a class="back" href="/admin/users">&larr; Back to users</a>`);
+}
+
+// Workspaces currently carrying a manual grant (tier_granted_at set), joined to
+// the owner's email for display. Admin-only surface, so email is acceptable
+// here (consistent with the Users and Waitlist tables).
+function getGrantedWorkspaces(db) {
+  return db.prepare(`
+    SELECT w.id AS workspace_id, w.subscription_tier, w.tier_granted_at, u.email
+    FROM workspaces w JOIN users u ON u.id = w.owner_user_id
+    WHERE w.tier_granted_at IS NOT NULL
+    ORDER BY w.tier_granted_at DESC, w.id DESC
+  `).all();
+}
+
 function registerAdminRoutes(app) {
   const urlencoded = express.urlencoded({ extended: false });
 
@@ -417,6 +481,123 @@ function registerAdminRoutes(app) {
       ? `Developer access ENABLED for ${user.email}. They now have unlimited Pro features.`
       : `Developer access DISABLED for ${user.email}. Normal tier behaviour applies.`;
     res.type('html').send(renderSetDeveloperForm(req.session.csrfToken, { type: 'ok', text }, email));
+  });
+
+  app.get('/admin/set-tier', requireAdmin, (req, res) => {
+    res.type('html').send(
+      renderSetTierForm(req.session.csrfToken, null, req.query.email, getGrantedWorkspaces(getDb()))
+    );
+  });
+
+  // Manually set a user's workspace tier during the pre-launch window. Writes
+  // the AUTHORITATIVE source (workspaces.subscription_tier and the related
+  // subscription_* fields read by getWorkspaceTier), so the grant reflects
+  // everywhere consistently (hamburger, Settings, slot counter) and a future
+  // payment webhook overwrites the exact same field with no parallel system to
+  // reconcile. No automated trial/expiry is created. This is purely an admin
+  // set, the same shape as the existing set-developer handler.
+  app.post('/admin/set-tier', urlencoded, requireAdmin, (req, res) => {
+    const db = getDb();
+    const reform = (note, prefill) =>
+      renderSetTierForm(req.session.csrfToken, note, prefill, getGrantedWorkspaces(db));
+
+    const token = req.body?._csrf;
+    if (!safeEqual(token, req.session.csrfToken)) {
+      return res.status(403).type('html').send(
+        reform({ type: 'err', text: 'Invalid request token. Please reload and try again.' })
+      );
+    }
+
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const tier = String(req.body?.tier || '').trim().toLowerCase();
+
+    if (!email) {
+      return res.status(400).type('html').send(
+        reform({ type: 'err', text: 'An email address is required.' }, email)
+      );
+    }
+    if (tier !== 'pro' && tier !== 'free') {
+      return res.status(400).type('html').send(
+        reform({ type: 'err', text: 'Tier must be either Pro or Free.' }, email)
+      );
+    }
+
+    const user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(email);
+    if (!user) {
+      return res.status(404).type('html').send(
+        reform({ type: 'err', text: `No user found with email ${email}.` }, email)
+      );
+    }
+
+    const ws = db.prepare(
+      'SELECT id, subscription_tier, subscription_id FROM workspaces WHERE owner_user_id = ?'
+    ).get(user.id);
+    if (!ws) {
+      return res.status(404).type('html').send(
+        reform({ type: 'err', text: `No workspace found for ${user.email}.` }, email)
+      );
+    }
+
+    // Safety: never clobber a workspace already linked to a real payment-processor
+    // subscription. Once billing is live, real subscriptions own the tier and must
+    // be changed through the billing portal, not this manual override, so the two
+    // tier sources can never fight. (During the pre-launch window no workspace has
+    // a subscription_id, so this never blocks a legitimate grant.)
+    if (ws.subscription_id) {
+      return res.status(409).type('html').send(
+        reform({ type: 'err', text: `${user.email} has a live subscription. Manage their tier through the billing portal, not a manual grant.` }, email)
+      );
+    }
+
+    const previousTier = getWorkspaceTier(ws.id);
+
+    if (tier === 'pro') {
+      // Grant a real Pro experience via the authoritative fields: active status,
+      // no end date, no pending cancellation. tier_granted_at records WHEN, for
+      // the future paid transition. getWorkspaceTier now returns 'pro' for this
+      // workspace, so every surface shows Pro / 10 competitors.
+      db.prepare(`
+        UPDATE workspaces SET
+          subscription_tier = 'pro',
+          subscription_status = 'active',
+          subscription_current_period_end = NULL,
+          subscription_cancel_at_period_end = 0,
+          tier_granted_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`).run(ws.id);
+    } else {
+      // Revert to Free: clear the manual grant and its subscription_* fields.
+      db.prepare(`
+        UPDATE workspaces SET
+          subscription_tier = 'free',
+          subscription_status = NULL,
+          subscription_current_period_end = NULL,
+          subscription_cancel_at_period_end = 0,
+          tier_granted_at = NULL,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`).run(ws.id);
+    }
+
+    // Audit every grant/revert: which admin set which tier on which workspace.
+    // Consistent with set_developer_flag (admin-only surface, target email kept).
+    logAudit({
+      userId: req.adminUser.id,
+      workspaceId: ws.id,
+      eventType: 'admin_grant_tier',
+      eventData: {
+        target_user_id: user.id,
+        target_email: user.email,
+        tier,
+        previous_tier: previousTier,
+        set_by: req.adminUser.email,
+      },
+      req,
+    });
+
+    const text = tier === 'pro'
+      ? `Pro access GRANTED to ${user.email}. Their workspace now has full Pro: 10 competitors, daily monitoring, and all features.`
+      : `Reverted ${user.email} to Free. Pro features no longer apply.`;
+    res.type('html').send(reform({ type: 'ok', text }, email));
   });
 }
 

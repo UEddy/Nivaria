@@ -436,6 +436,13 @@ const SCHEMA = `
     subscription_tier TEXT NOT NULL DEFAULT 'free' CHECK(subscription_tier IN ('free','pro','team','business')),
     subscription_current_period_end DATETIME,
     subscription_cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+    -- Pre-launch manual Pro grant bookkeeping (admin /admin/set-tier). Records
+    -- WHEN an admin manually granted the current tier, so that once a real
+    -- payment processor is live we can see who was comped and when, to manage
+    -- their transition to paid. NULL for tiers set by a real subscription or
+    -- never granted. This is bookkeeping only: the authoritative tier remains
+    -- subscription_tier, which a future payment webhook overwrites directly.
+    tier_granted_at DATETIME,
     lemon_squeezy_customer_id TEXT,
     lemon_squeezy_subscription_variant_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -656,6 +663,15 @@ async function initDb() {
     `);
   }
   sqlDb.run('CREATE INDEX IF NOT EXISTS idx_waitlist_email ON waitlist_signups(email)');
+
+  // Pre-launch: manual Pro grant timestamp on workspaces (additive; existing DBs
+  // created the workspaces table before this column existed). The workspaces
+  // table may not exist yet on a brand-new DB (it is created by the Phase 10
+  // migration below), so guard on the table being present.
+  const wsCols = (sqlDb.exec('PRAGMA table_info(workspaces)')[0]?.values || []).map(v => v[1]);
+  if (wsCols.length && !wsCols.includes('tier_granted_at')) {
+    sqlDb.run('ALTER TABLE workspaces ADD COLUMN tier_granted_at DATETIME');
+  }
 
   // Phase 5: speed up per-competitor reverse-chronological lookups used by
   // historicalContext.getCompetitorHistory and the new timeline endpoints.
