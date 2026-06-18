@@ -429,6 +429,14 @@ img, svg { display: block; }
 .user-name  { font-size: 13px; font-weight: 600; color: var(--txt); line-height: 1.3; }
 .user-email { font-size: 11px; color: var(--txt-3); }
 
+/* Neutral loading state for the sidebar identity (see index.html). Shimmer bars
+   stand in until the real authenticated user resolves, so no demo/placeholder
+   identity is ever shown. .skeleton supplies the shimmer; these set the size. */
+.user-name.skeleton  { width: 86px;  height: 12px; color: transparent; border-radius: 5px; }
+.user-email.skeleton { width: 116px; height: 10px; color: transparent; border-radius: 5px; margin-top: 4px; }
+/* Loading avatar: a plain neutral disc with no initial, no gradient identity. */
+.user-avatar--loading { background: var(--bg-elevated); box-shadow: none; }
+
 /* ── Main Wrapper ────────────────────────────────────────────── */
 .main-wrapper {
   flex: 1;

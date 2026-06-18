@@ -129,10 +129,13 @@
           <span id="plan-name">Pro Plan</span>
         </div>
         <div class="sidebar-user" id="sidebar-user">
-          <div class="user-avatar" id="user-avatar">D</div>
+          <!-- Neutral loading state only: NEVER a demo/placeholder identity.
+               These are blank skeleton bars until App.updateUserUI() fills in the
+               real authenticated user once /auth/me resolves. -->
+          <div class="user-avatar user-avatar--loading" id="user-avatar" aria-hidden="true"></div>
           <div class="user-meta">
-            <div class="user-name" id="user-name">Demo User</div>
-            <div class="user-email" id="user-email">demo@nivaria.app</div>
+            <div class="user-name skeleton" id="user-name" aria-hidden="true"></div>
+            <div class="user-email skeleton" id="user-email" aria-hidden="true"></div>
             <a href="#/profile" class="sidebar-manage-link" style="font-size:11px;color:var(--accent);text-decoration:none;opacity:0.85;margin-top:1px;display:inline-block;line-height:1.3" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.85'">Manage account</a>
           </div>
           <button

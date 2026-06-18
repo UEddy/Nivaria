@@ -302,9 +302,21 @@ const App = {
   updateUserUI() {
     const u = App.user;
     if (!u) return;
-    el('user-name').textContent = u.name;
-    el('user-email').textContent = u.email;
-    el('user-avatar').textContent = u.name?.[0]?.toUpperCase() || 'U';
+    // Populate the real authenticated identity and clear the neutral loading
+    // skeletons. Until this runs, the sidebar shows blank shimmer bars, never a
+    // demo/placeholder user.
+    const nameEl = el('user-name');
+    const emailEl = el('user-email');
+    const avatarEl = el('user-avatar');
+    nameEl.textContent = u.name;
+    emailEl.textContent = u.email;
+    avatarEl.textContent = u.name?.[0]?.toUpperCase() || 'U';
+    nameEl.classList.remove('skeleton');
+    emailEl.classList.remove('skeleton');
+    avatarEl.classList.remove('user-avatar--loading');
+    nameEl.removeAttribute('aria-hidden');
+    emailEl.removeAttribute('aria-hidden');
+    avatarEl.removeAttribute('aria-hidden');
     // Phase 10: tier is workspace-driven (App.subscription.effectiveTier), not the
     // deprecated user.tier.
     const tier = App.subscription?.effectiveTier || 'free';
