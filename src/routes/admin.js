@@ -15,6 +15,9 @@ const crypto  = require('crypto');
 const express = require('express');
 const { getDb } = require('../db');
 const { logAudit } = require('../lib/audit');
+// Authoritative effective-tier source (same one the dashboard/sidebar/Settings
+// read). Tallied per workspace for the stats breakdown so every surface agrees.
+const { getWorkspaceTier } = require('../lib/tierLimits');
 
 // Parse ADMIN_EMAILS at call time (so an env change takes effect on restart
 // without code edits). Comma-separated, case-insensitive, whitespace-trimmed.
@@ -69,6 +72,7 @@ function requireAdmin(req, res, next) {
 
 function navHtml(active) {
   const links = [
+    ['/admin/stats', 'Stats'],
     ['/admin/waitlist', 'Waitlist'],
     ['/admin/users', 'Users'],
     ['/admin/set-developer', 'Set developer'],
@@ -124,6 +128,12 @@ function renderShell(title, bodyHtml) {
     .pill-off { background: rgba(255,255,255,0.06); color: var(--txt-3); }
     .muted { color: var(--txt-3); }
     .empty { padding: 40px 16px; text-align: center; color: var(--txt-2); }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 28px; }
+    .stat-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+    .stat-num { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; color: var(--txt); }
+    .stat-label { font-size: 0.75rem; color: var(--txt-2); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; margin-top: 4px; }
+    .stat-section-title { font-size: 0.8125rem; font-weight: 700; color: var(--txt-2); text-transform: uppercase; letter-spacing: 0.06em; margin: 4px 0 12px; }
+    .stat-card .pill { margin-top: 8px; }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
     .back { display: inline-block; margin-top: 24px; font-size: 0.8125rem; color: var(--txt-2); }
@@ -167,6 +177,44 @@ function devPill(on) {
   return on
     ? '<span class="pill pill-dev">developer</span>'
     : '<span class="pill pill-off">no</span>';
+}
+
+// All inputs are integer aggregate counts (no per-user data). num() formats
+// them with thousands separators for readability.
+function renderStats(s) {
+  const num = n => Number(n || 0).toLocaleString('en-US');
+  const statCard = (value, label) =>
+    `<div class="stat-card"><div class="stat-num">${num(value)}</div><div class="stat-label">${esc(label)}</div></div>`;
+
+  return renderShell('Stats', `
+    ${navHtml('/admin/stats')}
+    <div class="admin-head"><h1>Stats</h1></div>
+    <p class="admin-sub">Aggregate counts only. No individual user data is shown or logged.</p>
+
+    <div class="stat-grid">
+      ${statCard(s.totalUsers, 'Total users')}
+      ${statCard(s.newUsers7d, 'New users (7 days)')}
+      ${statCard(s.activeCompetitors, 'Competitors monitored')}
+    </div>
+
+    <p class="stat-section-title">Workspaces by tier</p>
+    <p class="admin-sub">Effective tier from getWorkspaceTier, the same source the in-app plan display uses. Tallied across all ${num(s.workspaceCount)} workspaces.</p>
+    <div class="stat-grid">
+      ${statCard(s.tierCounts.free, 'Free')}
+      ${statCard(s.tierCounts.pro, 'Pro')}
+      ${statCard(s.tierCounts.team, 'Team')}
+      ${statCard(s.tierCounts.business, 'Business')}
+    </div>
+
+    <p class="stat-section-title">Waitlist by interest</p>
+    <p class="admin-sub">Team and Business tier interest plus 14-day Pro trial requests (tier_interest='trial').</p>
+    <div class="stat-grid">
+      ${statCard(s.waitlistCounts.team, 'Team')}
+      ${statCard(s.waitlistCounts.business, 'Business')}
+      ${statCard(s.waitlistCounts.trial, 'Trial')}
+    </div>
+
+    <a class="back" href="/app">&larr; Back to app</a>`);
 }
 
 function renderWaitlist(rows) {
@@ -254,7 +302,48 @@ function renderSetDeveloperForm(csrfToken, note, prefillEmail) {
 function registerAdminRoutes(app) {
   const urlencoded = express.urlencoded({ extended: false });
 
-  app.get('/admin', requireAdmin, (_req, res) => res.redirect('/admin/waitlist'));
+  app.get('/admin', requireAdmin, (_req, res) => res.redirect('/admin/stats'));
+
+  app.get('/admin/stats', requireAdmin, (req, res) => {
+    const db = getDb();
+
+    const totalUsers = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+    const newUsers7d = db.prepare(
+      `SELECT COUNT(*) AS n FROM users WHERE created_at >= datetime('now', '-7 days')`
+    ).get().n;
+    // "Being monitored" = active competitors (active=1), the rows the scheduler
+    // actually checks. A rough cross-account activity signal.
+    const activeCompetitors = db.prepare(
+      'SELECT COUNT(*) AS n FROM competitors WHERE active = 1'
+    ).get().n;
+
+    // Tier breakdown from the authoritative effective-tier source. Resolve each
+    // workspace through getWorkspaceTier (honours cancellation grace periods),
+    // so this matches what the app shows the user, not the deprecated
+    // users.tier column.
+    const wsIds = db.prepare('SELECT id FROM workspaces').all();
+    const tierCounts = { free: 0, pro: 0, team: 0, business: 0 };
+    for (const { id } of wsIds) {
+      const t = getWorkspaceTier(id);
+      tierCounts[t] = (tierCounts[t] || 0) + 1;
+    }
+
+    // Waitlist counts by tier_interest, reusing the existing waitlist data.
+    const waitlistCounts = { team: 0, business: 0, trial: 0 };
+    for (const r of db.prepare('SELECT tier, COUNT(*) AS n FROM waitlist_signups GROUP BY tier').all()) {
+      waitlistCounts[r.tier] = r.n;
+    }
+
+    // Audit the view with aggregate counts only — no emails or per-user data.
+    logAudit({ userId: req.adminUser.id, workspaceId: req.workspaceId || null,
+      eventType: 'admin_view_stats',
+      eventData: { total_users: totalUsers, workspaces: wsIds.length }, req });
+
+    res.type('html').send(renderStats({
+      totalUsers, newUsers7d, activeCompetitors,
+      tierCounts, waitlistCounts, workspaceCount: wsIds.length,
+    }));
+  });
 
   app.get('/admin/waitlist', requireAdmin, (req, res) => {
     // Column aliases map storage names (tier, signed_up_at) onto the display
