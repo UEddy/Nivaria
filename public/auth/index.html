@@ -24,6 +24,17 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="icon" href="/assets/monogram-solid.svg">
 
+  <!-- PWA: installable standalone shell (manifest and icons only, no service
+       worker by design). iOS ignores the manifest for icon/standalone, so the
+       apple-* meta tags below are required for Add to Home Screen there. -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#4338CA">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Nivaria">
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+
   <style>
     /* ── Design tokens (dark default) ───────────────────────────────── */
     :root {
