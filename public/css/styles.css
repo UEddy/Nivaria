@@ -810,6 +810,21 @@ img, svg { display: block; }
 .badge-cyan   { background: var(--cyan-dim);   color: var(--cyan-2);   border-color: rgba(6,182,212,0.22); }
 .badge-cyan::before    { background: var(--cyan);   box-shadow: 0 0 4px var(--cyan); }
 
+/* Light-theme badge text — WCAG AA fix.
+   The *-2 tints (e.g. --yellow-2 #FCD34D, --red-2 #FCA5A5) are tuned to read as
+   bright text on the dark UI. On the near-white *-dim fills of light mode they
+   fall well under the 4.5:1 AA floor. Override with darker shades of the SAME
+   hue so the severity semantics are preserved (red = high, amber = medium,
+   green = low) while the text clears AA. Dark mode keeps the brighter tints. */
+[data-theme="light"] .badge-high,
+[data-theme="light"] .conf-pill--high   { color: #B91C1C; }   /* red 700 */
+[data-theme="light"] .badge-medium,
+[data-theme="light"] .conf-pill--medium  { color: #B45309; }   /* amber 700 */
+[data-theme="light"] .badge-low,
+[data-theme="light"] .conf-pill--low     { color: #047857; }   /* emerald 700 */
+[data-theme="light"] .badge-cyan         { color: #0E7490; }   /* cyan 700 */
+[data-theme="light"] .badge-accent       { color: #4338CA; }   /* indigo 800 */
+
 /* ── Tables ──────────────────────────────────────────────────── */
 .table-wrap {
   border-radius: var(--radius);
@@ -1138,7 +1153,10 @@ tbody tr:hover td { background: var(--bg-hover); }
 .pricing-popular {
   position: absolute; top: -1px; left: 50%;
   transform: translateX(-50%);
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  /* Both stops stay dark enough that the white label clears WCAG AA. The old
+     gradient ran out to --accent-2 (a light indigo), where white text dropped
+     below 3:1. Kept on-brand indigo, just a tighter, darker range. */
+  background: linear-gradient(90deg, var(--accent), #4F46E5);
   color: #fff; font-size: 10.5px; font-weight: 800;
   padding: 5px 14px; border-radius: 0 0 10px 10px;
   letter-spacing: 0.5px; text-transform: uppercase;
@@ -2045,8 +2063,21 @@ tbody tr:hover td { background: var(--bg-hover); }
   .bc-header { flex-direction: column; align-items: flex-start; }
 }
 
+/* Phones (<=480px): keep the stat cards 2-up rather than stacking to a single
+   column, and tighten the internal padding, gap, and type so roughly three of
+   the four key metrics land above the fold at 375px without scrolling. This is
+   a mobile-only tightening; the desktop and tablet layouts above are untouched. */
 @media (max-width: 480px) {
-  .hero-stats { grid-template-columns: 1fr; }
+  .hero-stats {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .hero-stat { padding: 13px 14px 12px; }
+  .hero-stat-label { font-size: 10px; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .hero-stat-value,
+  .hero-value { font-size: 26px; letter-spacing: -1.5px; margin-bottom: 4px; }
+  .hero-stat-sub { font-size: 11px; }
 }
 
 /* ── Phase 5: pattern context + recent changes + timeline ──────────────────────── */
@@ -2263,7 +2294,11 @@ tbody tr:hover td { background: var(--bg-hover); }
   color: var(--txt);
   margin-bottom: 18px;
 }
-@media (max-width: 480px) { .dash-greeting { font-size: 19px; margin-bottom: 14px; } }
+/* Compact the welcome greeting on phones so the metric data is reachable sooner.
+   Mobile-only: the desktop greeting (22px / 18px) is unchanged. */
+@media (max-width: 480px) {
+  .dash-greeting { font-size: 18px; margin-bottom: 10px; }
+}
 
 .ctx-banner {
   display: flex; align-items: center; gap: 14px;
@@ -2284,6 +2319,12 @@ tbody tr:hover td { background: var(--bg-hover); }
 .ctx-banner-text { flex: 1; font-size: 13px; color: var(--txt-2); line-height: 1.4; }
 .ctx-banner-text strong { color: var(--txt); font-weight: 600; }
 .ctx-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+/* Tighten the context banner on phones (mobile-only) so it eats less of the
+   first view. Declared after the base rule so it wins inside the breakpoint. */
+@media (max-width: 480px) {
+  .ctx-banner { margin-bottom: 12px; padding: 10px 12px; gap: 10px; }
+}
 
 /* Battle card "Analyzed for: [Company]" label */
 .bc-analyzed-for {
@@ -3058,8 +3099,8 @@ html       { overflow-x: hidden; }
   inset: 0;
   z-index: 95; /* under sidebar (100), over content + sticky topbar (50) */
   background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   opacity: 0;
   pointer-events: none;          /* don't swallow taps when invisible */
   transition: opacity 0.24s ease;
