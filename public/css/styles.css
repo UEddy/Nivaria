@@ -231,6 +231,7 @@ img, svg { display: block; }
 .sidebar {
   width: var(--sidebar-w);
   height: 100vh;
+  height: 100dvh; /* dvh tracks the visible viewport so the mobile address bar showing/hiding never clips the pinned footer */
   position: fixed;
   top: 0; left: 0; bottom: 0;
   z-index: 100;
@@ -3172,8 +3173,17 @@ html       { overflow-x: hidden; }
      Add a touch of vertical padding so the icon + label don't crowd the edges. */
   .nav-item { padding-block: 12px; }
 
-  /* Drawer-open prevents body scroll so the scrim feels modal. */
-  body.drawer-open { overflow: hidden; }
+  /* Drawer-open prevents background scroll so the scrim feels modal. iOS Safari
+     ignores overflow:hidden on <body>, so we pin the body with position:fixed
+     (JS stores/restores scrollY via the inline top offset on open/close). */
+  body.drawer-open {
+    position: fixed;
+    top: var(--drawer-scroll-lock, 0);
+    left: 0;
+    right: 0;
+    width: 100%;
+    overflow: hidden;
+  }
 }
 
 /* ── Topbar compaction on mobile ──────────────────────────────────────────── */

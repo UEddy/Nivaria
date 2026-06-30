@@ -140,9 +140,25 @@ function trapTab(e, container) {
 // At 768px+ the sidebar is permanent and every Drawer method silently no-ops.
 const Drawer = {
   _lastTrigger: null,
+  _scrollY: 0,
 
   isMobile() { return window.matchMedia('(max-width: 767px)').matches; },
   isOpen()   { return document.getElementById('sidebar')?.classList.contains('open'); },
+
+  // Background scroll lock. overflow:hidden alone leaks on iOS Safari, so we pin
+  // the body with position:fixed and offset it by the current scroll position
+  // (the CSS reads --drawer-scroll-lock for `top`). Restored exactly on unlock.
+  _lockScroll() {
+    Drawer._scrollY = window.scrollY || window.pageYOffset || 0;
+    document.body.style.setProperty('--drawer-scroll-lock', `-${Drawer._scrollY}px`);
+    document.body.classList.add('drawer-open');
+  },
+  _unlockScroll() {
+    if (!document.body.classList.contains('drawer-open')) return;
+    document.body.classList.remove('drawer-open');
+    document.body.style.removeProperty('--drawer-scroll-lock');
+    window.scrollTo(0, Drawer._scrollY);
+  },
 
   open() {
     if (!Drawer.isMobile()) return;
@@ -157,7 +173,7 @@ const Drawer = {
     sc?.classList.add('visible');
     tb?.setAttribute('aria-expanded', 'true');
     tb?.setAttribute('aria-label', 'Close menu');
-    document.body.classList.add('drawer-open');
+    Drawer._lockScroll();
     // Move focus to the first nav item for keyboard / screen-reader users.
     requestAnimationFrame(() => sb.querySelector('.nav-item')?.focus());
   },
@@ -173,7 +189,7 @@ const Drawer = {
     sc?.classList.remove('visible');
     tb?.setAttribute('aria-expanded', 'false');
     tb?.setAttribute('aria-label', 'Open menu');
-    document.body.classList.remove('drawer-open');
+    Drawer._unlockScroll();
     if (Drawer._lastTrigger && document.contains(Drawer._lastTrigger)) {
       Drawer._lastTrigger.focus();
     }
@@ -213,7 +229,7 @@ const Drawer = {
       sc?.classList.remove('visible');
       tb.setAttribute('aria-expanded', 'false');
       tb.setAttribute('aria-label', 'Open menu');
-      document.body.classList.remove('drawer-open');
+      Drawer._unlockScroll();
       if (e.matches) sb.setAttribute('aria-hidden', 'true');
       else { sb.removeAttribute('aria-hidden'); sb.removeAttribute('aria-modal'); }
     };
