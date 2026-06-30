@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { removePhase9DemoData } = require('./db/migrations/remove-phase9-demo-data');
+const { removeDemoUser } = require('./db/migrations/remove-demo-user');
 
 let db;       // DatabaseWrapper
 let sqlDb;    // raw sql.js Database
@@ -734,6 +735,16 @@ async function initDb() {
     removePhase9DemoData(db);
   } catch (e) {
     console.warn('[CLEANUP] Phase 9 demo-data cleanup skipped (non-fatal):', e.message);
+  }
+
+  // One-time PRODUCTION cleanup of a leaked demo-USER account (defensive safety
+  // net; see the migration for the signature/ambiguity model). No-op in dev/test
+  // and idempotent in production — once the demo account is gone, or if it never
+  // existed, subsequent boots match nothing and delete nothing.
+  try {
+    removeDemoUser(db);
+  } catch (e) {
+    console.warn('[CLEANUP] Demo-user cleanup skipped (non-fatal):', e.message);
   }
 
   saveDb();

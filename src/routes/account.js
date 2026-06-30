@@ -295,3 +295,7 @@ function processScheduledDeletions() {
 module.exports = router;
 module.exports.restoreByToken = restoreByToken;
 module.exports.processScheduledDeletions = processScheduledDeletions;
+// Exported for the one-time production demo-user cleanup migration
+// (src/db/migrations/remove-demo-user.js), which reuses the exact same safe,
+// atomic cascade so a removed demo account leaves no orphaned rows.
+module.exports.purgeUser = purgeUser;

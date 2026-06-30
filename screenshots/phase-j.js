@@ -15,13 +15,25 @@ const BASE = 'http://localhost:3000';
 const MODE = process.argv[2] || 'matrix';
 const TAG = process.argv[3] || '';
 
+// The seeded demo login. A fresh dev DB seeds demo@nivaria.app; an older local DB
+// created under the original brand persists as demo@competitor-shadow.com. Try the
+// current-brand email first, then fall back to the legacy one so this works on both.
+const DEMO_EMAILS = ['demo@nivaria.app', 'demo@competitor-shadow.com'];
+
 async function login(browser) {
   const ctx = await browser.newContext();
-  const r = await ctx.request.post(`${BASE}/api/auth/login`, { data: { email: 'demo@nivaria.app', password: 'Demo1234!' } });
-  if (!r.ok()) throw new Error(`login ${r.status()}`);
-  const state = await ctx.storageState();
+  let lastStatus = 0;
+  for (const email of DEMO_EMAILS) {
+    const r = await ctx.request.post(`${BASE}/api/auth/login`, { data: { email, password: 'Demo1234!' } });
+    if (r.ok()) {
+      const state = await ctx.storageState();
+      await ctx.close();
+      return state;
+    }
+    lastStatus = r.status();
+  }
   await ctx.close();
-  return state;
+  throw new Error(`login failed for all demo emails (last status ${lastStatus})`);
 }
 
 // Derive real detail-page IDs from the list DOM so the matrix hits live pages.
