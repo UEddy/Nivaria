@@ -313,8 +313,9 @@ const Competitors = {
         </div>
         <div class="form-group">
           <label class="form-label">Page URL to Monitor <span style="color:var(--red)">*</span></label>
-          <input class="form-input" id="comp-url" placeholder="https://competitor.com/pricing or /changelog" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" />
-          <span class="form-hint">Pricing pages, changelogs, and blogs work best. Heavily bot-protected sites may not be monitorable on this plan.</span>
+          <input class="form-input" id="comp-url" placeholder="apple.com or competitor.com/pricing" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" />
+          <span class="form-hint" id="comp-url-preview" aria-live="polite"></span>
+          <span class="form-hint">Just type the domain, no "https://" needed. Pricing pages, changelogs, and blogs work best. Heavily bot-protected sites may not be monitorable on this plan.</span>
         </div>
         <div class="form-group">
           <label class="form-label">Internal Notes <span style="color:var(--txt-3);font-weight:400">(optional)</span></label>
@@ -338,9 +339,28 @@ const Competitors = {
     `);
 
     setTimeout(() => el('comp-name').focus(), 50);
-    el('comp-url').addEventListener('keydown', e => {
+    const urlInput = el('comp-url');
+    urlInput.addEventListener('keydown', e => {
       if (e.key === 'Enter') document.querySelector('.modal-footer .btn-primary').click();
     });
+    // Live, transparent preview of what will actually be monitored once the
+    // protocol is completed (server-side normalization is authoritative; this is
+    // only a friendly mirror so the user sees the resolved URL as they type).
+    urlInput.addEventListener('input', () => Competitors.updateUrlPreview('comp-url', 'comp-url-preview'));
+  },
+
+  // Client-side preview of the resolved monitoring URL. Mirrors the server's
+  // protocol-completion (default https) for display only; it never blocks the
+  // submit, which relies on the server's validation and normalization.
+  updateUrlPreview(inputId, previewId) {
+    const raw     = (el(inputId)?.value || '').trim();
+    const preview = el(previewId);
+    if (!preview) return;
+    if (!raw) { preview.textContent = ''; return; }
+    const resolved = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw)
+      ? raw
+      : 'https://' + raw.replace(/^\/+/, '');
+    preview.textContent = `Monitoring: ${resolved}`;
   },
 
   // Inline component: rendering-mode radios. Caller supplies a unique field name
@@ -445,8 +465,8 @@ const Competitors = {
         </div>
         <div class="form-group">
           <label class="form-label">Page URL to Monitor <span style="color:var(--red)">*</span></label>
-          <input class="form-input" id="edit-comp-url" value="${esc(c.url)}" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" />
-          <span class="form-hint">Changing the URL will reset the baseline so the next check captures the new page.</span>
+          <input class="form-input" id="edit-comp-url" value="${esc(c.url)}" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" />
+          <span class="form-hint">You can enter just the domain, no "https://" needed. Changing the URL will reset the baseline so the next check captures the new page.</span>
         </div>
         <div class="form-group">
           <label class="form-label">Internal Notes <span style="color:var(--txt-3);font-weight:400">(optional)</span></label>

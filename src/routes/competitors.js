@@ -5,18 +5,23 @@ const { checkCompetitor }  = require('../scheduler');
 const { canAddCompetitor, upgradeRequired } = require('../lib/tierLimits');
 const { logAudit } = require('../lib/audit');
 const { getCompetitorHistory, generatePatternCallouts } = require('../historicalContext');
+const { normalizeCompetitorUrl, canonicalUrlKey } = require('../lib/urlNormalize');
 
 // ── Input validation ───────────────────────────────────────────────────────────
 
-function validateCompetitorUrl(raw) {
-  try {
-    const u = new URL(raw);
-    if (!['http:', 'https:'].includes(u.protocol)) return 'URL must use http or https';
-    if (u.hostname.length < 2) return 'URL must have a valid hostname';
-    return null; // valid
-  } catch {
-    return 'Invalid URL format';
+// Returns the id of an existing competitor whose URL is the same site as `url`
+// after normalization (scheme/www/trailing-slash insensitive, path-sensitive),
+// or null. `excludeId` skips a row (used on edit so a competitor isn't flagged a
+// duplicate of itself). Scoped to the user so it only considers their own list.
+function findDuplicateUrl(db, userId, url, excludeId = null) {
+  const key = canonicalUrlKey(url);
+  if (!key) return null;
+  const rows = db.prepare('SELECT id, url FROM competitors WHERE user_id = ?').all(userId);
+  for (const r of rows) {
+    if (excludeId != null && r.id === excludeId) continue;
+    if (canonicalUrlKey(r.url) === key) return r.id;
   }
+  return null;
 }
 
 // Returns { value, error }. value is always 'fetch' or 'js'; defaults to 'fetch' when missing.
@@ -75,12 +80,20 @@ router.post('/', (req, res) => {
 
   // Length limits
   if (name.length        > 100)  return res.status(400).json({ error: 'name must be 100 characters or fewer' });
-  if (url.length         > 2048) return res.status(400).json({ error: 'url must be 2048 characters or fewer' });
   if (description.length > 500)  return res.status(400).json({ error: 'description must be 500 characters or fewer' });
 
-  // URL format
-  const urlError = validateCompetitorUrl(url);
-  if (urlError) return res.status(400).json({ error: urlError });
+  // URL normalization + completion. The user may type a bare domain ("apple.com")
+  // or a full URL; we complete a missing scheme to https and store the cleaned,
+  // monitorable form. Length is checked inside on the raw input.
+  const norm = normalizeCompetitorUrl(url);
+  if (norm.error) return res.status(400).json({ error: norm.error });
+  const normalizedUrl = norm.url;
+
+  // Duplicate detection uses the same normalization, so "apple.com" is caught as
+  // a duplicate of an existing "https://www.apple.com".
+  if (findDuplicateUrl(db, req.userId, normalizedUrl) != null) {
+    return res.status(409).json({ error: 'You are already monitoring this URL.' });
+  }
 
   // Optional CSS selector
   const sel = validateCssSelector(req.body.css_selector);
@@ -97,11 +110,11 @@ router.post('/', (req, res) => {
     return upgradeRequired(res, 'add_competitor');
   }
 
-  const domain = extractDomainFromUrl(url);
+  const domain = extractDomainFromUrl(normalizedUrl);
 
   const result = db.prepare(
     'INSERT INTO competitors (user_id, name, url, description, css_selector, render_mode, domain) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(req.userId, name, url, description || null, sel.value, rm.value, domain);
+  ).run(req.userId, name, normalizedUrl, description || null, sel.value, rm.value, domain);
 
   res.status(201).json(db.prepare('SELECT * FROM competitors WHERE id = ?').get(result.lastInsertRowid));
 });
@@ -125,11 +138,18 @@ router.put('/:id', (req, res) => {
   }
 
   if (req.body.url !== undefined) {
-    const newUrl = String(req.body.url).trim();
-    if (!newUrl) return res.status(400).json({ error: 'url cannot be empty' });
-    if (newUrl.length > 2048) return res.status(400).json({ error: 'url must be 2048 characters or fewer' });
-    const urlError = validateCompetitorUrl(newUrl);
-    if (urlError) return res.status(400).json({ error: urlError });
+    const rawUrl = String(req.body.url).trim();
+    if (!rawUrl) return res.status(400).json({ error: 'url cannot be empty' });
+    // Same completion + validation as add: accept a bare domain, store the
+    // cleaned URL. Length is checked inside normalizeCompetitorUrl.
+    const norm = normalizeCompetitorUrl(rawUrl);
+    if (norm.error) return res.status(400).json({ error: norm.error });
+    const newUrl = norm.url;
+    // Reject an edit that would collide with another competitor (same normalized
+    // site), excluding this row so an unchanged URL is never a self-duplicate.
+    if (findDuplicateUrl(db, req.userId, newUrl, row.id) != null) {
+      return res.status(409).json({ error: 'You are already monitoring this URL.' });
+    }
     if (newUrl !== url) resetHash = true;
     url = newUrl;
   }
