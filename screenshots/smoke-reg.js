@@ -18,7 +18,7 @@ function readDb(sql) {
 (async () => {
   console.log('throwaway email:', EMAIL);
   // 1. request OTP
-  const req1 = await fetch(`${BASE}/api/auth/register/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: EMAIL }) });
+  const req1 = await fetch(`${BASE}/api/auth/register/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: EMAIL, consent: true }) });
   console.log('register/request →', req1.status);
   // 2. read OTP from DB (read-only)
   const otp = (await readDb(`SELECT code FROM otp_codes WHERE email='${EMAIL}' AND purpose='register' AND used=0 ORDER BY id DESC LIMIT 1`))[0];

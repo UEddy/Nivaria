@@ -18,7 +18,7 @@ function readDb(sql) {
 
 (async () => {
   // ── register throwaway ──
-  await fetch(`${BASE}/api/auth/register/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: EMAIL }) });
+  await fetch(`${BASE}/api/auth/register/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: EMAIL, consent: true }) });
   const otp = (await readDb(`SELECT code FROM otp_codes WHERE email='${EMAIL}' AND used=0 ORDER BY id DESC LIMIT 1`))[0];
   const ver = await j(await fetch(`${BASE}/api/auth/register/verify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: EMAIL, code: otp.code }) }));
   const comp = await fetch(`${BASE}/api/auth/register/complete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: EMAIL, token: ver.token, password: PASSWORD }) });

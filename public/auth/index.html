@@ -473,6 +473,29 @@
     }
     .auth-consent a:hover { color: var(--a-accent-hover); }
 
+    /* ── Required signup consent (email-entry step) ──────────────────── */
+    /* Left-aligned checkbox + wrapping label so the three policy links never
+       overflow the card, including at 375px. The checkbox is 16px and its own
+       label is the tap target on mobile. */
+    .consent-row {
+      display: flex; align-items: flex-start; gap: 10px;
+      margin-top: 4px;
+    }
+    .consent-check {
+      width: 16px; height: 16px; margin-top: 1px;
+      accent-color: var(--a-accent);
+      cursor: pointer; flex-shrink: 0;
+    }
+    .consent-label {
+      font-size: 12.5px; line-height: 1.5;
+      color: var(--a-txt-2); cursor: pointer;
+    }
+    .consent-label a {
+      color: var(--a-accent); text-decoration: underline;
+      text-underline-offset: 2px; white-space: nowrap;
+    }
+    .consent-label a:hover { color: var(--a-accent-hover); }
+
     /* ── Footer (Phase 11C — legal links) ────────────────────────────── */
     .auth-footer {
       position: relative; z-index: 1;
@@ -605,6 +628,7 @@ const State = {
   mode: 'login',       // login | register | forgot
   step: 1,             // 1 | 2 | 3
   email: '',
+  consentChecked: false,   // signup consent (Terms, Privacy, Cookie) — email-entry step
   verifiedToken: '',
   resendTimer: null,
   resendSeconds: 0,
@@ -679,7 +703,7 @@ function render() {
 
 function switchMode(mode) {
   clearOtpTimers();
-  State.mode = mode; State.step = 1; State.email = ''; State.verifiedToken = ''; State.codeExpired = false;
+  State.mode = mode; State.step = 1; State.email = ''; State.consentChecked = false; State.verifiedToken = ''; State.codeExpired = false;
   history.replaceState(null, '', mode === 'register' ? '/register' : '/login');
   render();
 }
@@ -724,8 +748,12 @@ function renderRegisterEmail() {
         <label class="form-label">Work email</label>
         <input id="inp-email" class="form-input" type="email" placeholder="you@company.com" autocomplete="email" value="${esc(State.email)}" />
       </div>
+      <div class="consent-row">
+        <input type="checkbox" id="inp-consent" class="consent-check" ${State.consentChecked ? 'checked' : ''} aria-describedby="consent-text" />
+        <label for="inp-consent" class="consent-label" id="consent-text">By continuing, you agree to our <a href="/terms" target="_blank" rel="noopener">Terms of Use</a>, <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>, and <a href="/cookies" target="_blank" rel="noopener">Cookie Policy</a>.</label>
+      </div>
       <div style="margin-top:20px">
-        <button type="submit" class="btn btn-primary" id="submit-btn">Send verification code</button>
+        <button type="submit" class="btn btn-primary" id="submit-btn" ${State.consentChecked ? '' : 'disabled'}>Send verification code</button>
       </div>
     </form>`;
 }
@@ -810,7 +838,6 @@ function renderPassword(flow) {
       <div style="margin-top:20px">
         <button type="submit" class="btn btn-primary" id="submit-btn" disabled>${flow === 'register' ? 'Create account' : 'Update password'}</button>
       </div>
-      ${flow === 'register' ? `<p class="auth-consent">By creating an account, you agree to our <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</p>` : ''}
     </form>`;
 }
 
@@ -849,12 +876,33 @@ function wireLoginForm() {
 }
 
 function wireRegisterEmailForm() {
-  const form = document.getElementById('register-email-form');
+  const form     = document.getElementById('register-email-form');
+  const consent  = document.getElementById('inp-consent');
+  const submit   = document.getElementById('submit-btn');
+
+  // Required consent: the button stays disabled until the box is ticked. This is
+  // UX only — the server independently rejects a request without consent.
+  if (consent && submit) {
+    const sync = () => {
+      State.consentChecked = consent.checked;
+      submit.disabled = !consent.checked;
+    };
+    consent.addEventListener('change', sync);
+    sync();
+  }
+
+  // Tapping a policy link inside the <label> must open the policy, not toggle the
+  // checkbox (a label click otherwise proxies to its control).
+  document.querySelectorAll('.consent-label a').forEach(a => {
+    a.addEventListener('click', e => e.stopPropagation());
+  });
+
   if (form) form.addEventListener('submit', async e => {
     e.preventDefault();
     const email = val('inp-email');
     if (!email) return showMsg('Please enter your email address.');
     if (!isEmail(email)) return showMsg('Please enter a valid email address.');
+    if (!consent?.checked) return showMsg('Please accept the Terms of Use, Privacy Policy, and Cookie Policy to continue.');
     await doRegisterRequest(email);
   });
   document.getElementById('inp-email')?.focus();
@@ -939,7 +987,9 @@ async function doLogin(email, password, rememberMe = false) {
 async function doRegisterRequest(email) {
   setLoading(true);
   try {
-    await post('/api/auth/register/request', { email });
+    // consent:true mirrors the ticked box; the server re-checks it and rejects
+    // the request (recording nothing) if it is absent.
+    await post('/api/auth/register/request', { email, consent: true });
     State.email = email; State.step = 2;
     clearOtpTimers(); render();
   } catch (err) {

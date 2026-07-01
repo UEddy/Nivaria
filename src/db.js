@@ -133,6 +133,14 @@ const SCHEMA = `
     session_version INTEGER DEFAULT 1,
     stripe_customer_id TEXT,
     stripe_subscription_id TEXT,
+    -- GDPR-style opt-in consent audit trail. consent_given_at is the timestamp the
+    -- user affirmatively accepted the Terms of Use, Privacy Policy, and Cookie
+    -- Policy at signup (captured on the email-entry step, enforced server-side in
+    -- routes/auth.register/request). consent_policy_versions is a JSON identifier of
+    -- which policy set/version was accepted, so the record is defensible if audited.
+    -- NULL for accounts created before this column (pre-consent-feature).
+    consent_given_at DATETIME,
+    consent_policy_versions TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -147,6 +155,13 @@ const SCHEMA = `
     -- Wrong-guess counter for the per-email verification lockout. The code is
     -- burned (used=1) once this reaches the cap; see routes/auth.verifyOtp.
     failed_attempts INTEGER DEFAULT 0,
+    -- Consent audit on the signup ATTEMPT (register OTPs only). Recorded when the
+    -- user opts in on the email-entry step; copied onto the users row when the
+    -- account is created. consent_at is the moment of opt-in; consent_policy_versions
+    -- is the JSON policy-set/version identifier. See routes/auth.register/request.
+    consent_given INTEGER DEFAULT 0,
+    consent_at DATETIME,
+    consent_policy_versions TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -566,6 +581,12 @@ async function initDb() {
   if (!userCols.includes('first_name'))            sqlDb.run('ALTER TABLE users ADD COLUMN first_name TEXT');
   if (!userCols.includes('timezone'))              sqlDb.run("ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT 'UTC'");
   if (!userCols.includes('has_visited_dashboard')) sqlDb.run('ALTER TABLE users ADD COLUMN has_visited_dashboard INTEGER DEFAULT 0');
+  // GDPR-style signup consent audit trail (additive; existing DBs created the users
+  // table before these columns existed). consent_given_at + consent_policy_versions
+  // persist the timestamp and policy set/version a user accepted at signup, so the
+  // record can be produced for a compliance audit. Enforced in routes/auth.
+  if (!userCols.includes('consent_given_at'))        sqlDb.run('ALTER TABLE users ADD COLUMN consent_given_at DATETIME');
+  if (!userCols.includes('consent_policy_versions')) sqlDb.run('ALTER TABLE users ADD COLUMN consent_policy_versions TEXT');
 
   // Security: per-email OTP verification lockout counter (additive; existing DBs
   // created the otp_codes table before this column existed).
@@ -573,6 +594,11 @@ async function initDb() {
   if (otpCols.length && !otpCols.includes('failed_attempts')) {
     sqlDb.run('ALTER TABLE otp_codes ADD COLUMN failed_attempts INTEGER DEFAULT 0');
   }
+  // Consent audit on the signup attempt (additive; mirrors the users columns above).
+  // Recorded on the register OTP row at opt-in, then copied onto the account.
+  if (otpCols.length && !otpCols.includes('consent_given'))           sqlDb.run('ALTER TABLE otp_codes ADD COLUMN consent_given INTEGER DEFAULT 0');
+  if (otpCols.length && !otpCols.includes('consent_at'))              sqlDb.run('ALTER TABLE otp_codes ADD COLUMN consent_at DATETIME');
+  if (otpCols.length && !otpCols.includes('consent_policy_versions')) sqlDb.run('ALTER TABLE otp_codes ADD COLUMN consent_policy_versions TEXT');
 
   // Migrate competitors table for P0 check-status tracking
   const compCols = (sqlDb.exec('PRAGMA table_info(competitors)')[0]?.values || []).map(v => v[1]);

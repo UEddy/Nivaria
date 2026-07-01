@@ -37,6 +37,31 @@ const COMMON_PASSWORDS = new Set([
   'p@ssw0rd','passw0rd1','P@ssw0rd','Passw0rd','Password1','Password123','Password1!',
 ]);
 
+// ── Consent audit (GDPR-style opt-in) ──────────────────────────────────────────
+// Signup requires affirmative acceptance of the Terms of Use, Privacy Policy, and
+// Cookie Policy at the email-entry step. We enforce this SERVER-SIDE on the
+// signup-initiation endpoint (/register/request) and persist a defensible audit
+// record: WHEN consent was given and WHICH policy set/version was accepted.
+//
+// The version identifier is bumped whenever any of the three policies materially
+// changes, so a stored record always reflects the text the user actually agreed
+// to. The three routes /terms, /privacy, /cookies (src/routes/legal.js) are the
+// live policy pages the checkbox links to.
+const CONSENT_POLICIES = ['terms', 'privacy', 'cookies'];
+const CONSENT_VERSION  = '2026-07-01';
+
+// The identifier string stored alongside each consent timestamp. JSON keeps it
+// queryable/parseable if an auditor ever needs to see exactly what was accepted.
+function consentPolicyVersions() {
+  return JSON.stringify({ policies: CONSENT_POLICIES, version: CONSENT_VERSION });
+}
+
+// Accept only an explicit, affirmative opt-in. A missing/false/omitted value is a
+// rejection — consent must be a deliberate action, never a default.
+function hasConsent(body) {
+  return body && (body.consent === true || body.consent === 'true');
+}
+
 // ── Input helpers ──────────────────────────────────────────────────────────────
 
 function sanitizeEmail(raw) {
@@ -170,6 +195,14 @@ router.post('/register/request', limits.register, async (req, res) => {
     return res.status(400).json({ error: 'Invalid email address' });
   }
 
+  // SERVER-SIDE consent gate. The client disables the button until the box is
+  // checked, but that is UX only: account creation begins here, so this endpoint
+  // rejects any attempt that did not affirmatively opt in — even one that bypassed
+  // the client. Nothing (no OTP, no pending signup) is created without consent.
+  if (!hasConsent(req.body)) {
+    return res.status(400).json({ error: 'You must accept the Terms of Use, Privacy Policy, and Cookie Policy to continue.' });
+  }
+
   const db = getDb();
   const existing = db.prepare('SELECT email_verified FROM users WHERE email = ?').get(email);
   if (existing?.email_verified) {
@@ -184,8 +217,14 @@ router.post('/register/request', limits.register, async (req, res) => {
 
   if (!activeOtp) {
     db.prepare("UPDATE otp_codes SET used = 1 WHERE email = ? AND purpose = 'register' AND used = 0").run(email);
-    db.prepare('INSERT INTO otp_codes (email, code, purpose, expires_at) VALUES (?, ?, ?, ?)').run(
-      email, code, 'register', new Date(Date.now() + 10 * 60 * 1000).toISOString()
+    // Stamp the consent audit trail onto the signup attempt (the otp_codes row).
+    // consent_at is the moment the user affirmatively opted in; it is carried onto
+    // the users row when the account is created in /register/complete.
+    db.prepare(
+      'INSERT INTO otp_codes (email, code, purpose, expires_at, consent_given, consent_at, consent_policy_versions) VALUES (?, ?, ?, ?, 1, ?, ?)'
+    ).run(
+      email, code, 'register', new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      new Date().toISOString(), consentPolicyVersions()
     );
   }
 
@@ -292,19 +331,32 @@ router.post('/register/complete', async (req, res) => {
   const passwordHash = await bcrypt.hash(password, 12);
   const apiKey       = 'cs-' + uuidv4().replace(/-/g, '');
 
+  // Persist the consent audit record onto the account. Prefer the timestamp
+  // captured on the signup attempt (the earliest consented register OTP for this
+  // email — robust to a resend having issued a later code), so the stored time is
+  // when the user actually opted in. This can only be reached through a verified
+  // OTP that /register/request issued, and that endpoint now requires consent; the
+  // fallback (stamp now) is purely defensive so an account is never left without a
+  // consent record.
+  const consentRow = db.prepare(
+    "SELECT consent_at, consent_policy_versions FROM otp_codes WHERE email = ? AND purpose = 'register' AND consent_given = 1 ORDER BY id ASC LIMIT 1"
+  ).get(email);
+  const consentGivenAt   = consentRow?.consent_at || new Date().toISOString();
+  const consentVersions  = consentRow?.consent_policy_versions || consentPolicyVersions();
+
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
   let userId;
 
   if (existing) {
     // Re-completing a pending signup — capture the name/timezone too (the row may
     // predate them) so the greeting and profile are populated from the start.
-    db.prepare('UPDATE users SET password_hash = ?, email_verified = 1, first_name = ?, name = ?, timezone = ? WHERE id = ?')
-      .run(passwordHash, firstName, firstName, timezone, existing.id);
+    db.prepare('UPDATE users SET password_hash = ?, email_verified = 1, first_name = ?, name = ?, timezone = ?, consent_given_at = ?, consent_policy_versions = ? WHERE id = ?')
+      .run(passwordHash, firstName, firstName, timezone, consentGivenAt, consentVersions, existing.id);
     userId = existing.id;
   } else {
     const r = db.prepare(
-      'INSERT INTO users (email, name, first_name, timezone, tier, api_key, password_hash, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(email, firstName, firstName, timezone, 'free', apiKey, passwordHash, 1);
+      'INSERT INTO users (email, name, first_name, timezone, tier, api_key, password_hash, email_verified, consent_given_at, consent_policy_versions) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(email, firstName, firstName, timezone, 'free', apiKey, passwordHash, 1, consentGivenAt, consentVersions);
     userId = r.lastInsertRowid;
     db.prepare('INSERT INTO settings (user_id) VALUES (?)').run(userId);
   }
