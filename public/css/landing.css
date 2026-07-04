@@ -922,7 +922,11 @@ img, svg { display: block; }
   width: 100%;
   height: 100%;
   border: 0;
-  object-fit: cover;
+  /* No object-fit here. The frame and the Vimeo video are both 16:9, so the
+     iframe fills the box exactly at 100% x 100%. object-fit: cover previously
+     scaled the iframe's default 2:1 intrinsic box to cover the frame and
+     clipped the bottom of the player (the email-drop moment), which
+     overflow: hidden then hid. */
 }
 /* Click-to-play facade. Fills the frame; clicking it swaps in the Vimeo iframe. */
 .lp-video-facade {
