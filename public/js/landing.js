@@ -105,8 +105,11 @@
       const id = btn.getAttribute('data-vimeo-id');
       if (!id) return;
       const iframe = document.createElement('iframe');
+      // Official Vimeo embed params (badge/autopause/player_id/app_id) plus a clean
+      // chrome set (no title/byline/portrait) and autoplay, allowed under the click.
       iframe.src = 'https://player.vimeo.com/video/' + encodeURIComponent(id) +
-        '?autoplay=1&title=0&byline=0&portrait=0&dnt=1';
+        '?badge=0&autopause=0&player_id=0&app_id=58479' +
+        '&autoplay=1&title=0&byline=0&portrait=0&dnt=1';
       iframe.title = 'Nivaria product demo';
       iframe.loading = 'lazy';
       iframe.allow = 'autoplay; fullscreen; picture-in-picture';
