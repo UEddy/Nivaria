@@ -93,6 +93,30 @@
     });
   }
 
+  // ── Demo video (lazy Vimeo embed) ──────────────────────────
+  // Nothing is requested from Vimeo until the visitor clicks the facade, so the
+  // initial page render is never blocked by the player. On click we build the
+  // iframe with a clean parameter set (no title/byline/portrait) and autoplay it,
+  // which is allowed because the click is a user gesture.
+  function initDemoVideo() {
+    const btn = document.getElementById('lp-demo-play');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-vimeo-id');
+      if (!id) return;
+      const iframe = document.createElement('iframe');
+      iframe.src = 'https://player.vimeo.com/video/' + encodeURIComponent(id) +
+        '?autoplay=1&title=0&byline=0&portrait=0&dnt=1';
+      iframe.title = 'Nivaria product demo';
+      iframe.loading = 'lazy';
+      iframe.allow = 'autoplay; fullscreen; picture-in-picture';
+      iframe.setAttribute('allowfullscreen', '');
+      const frame = btn.closest('.lp-video-frame');
+      if (!frame) return;
+      frame.replaceChildren(iframe);
+    }, { once: true });
+  }
+
   // ── Waitlist modal (Team / Business) ───────────────────────
   function initWaitlist() {
     const overlay = document.getElementById('lp-wl-overlay');
@@ -246,6 +270,7 @@
     initScrollAnimations();
     initMobileMenu();
     initVideo();
+    initDemoVideo();
     initWaitlist();
   });
 })();

@@ -128,7 +128,8 @@ app.use(helmet({
       imgSrc:         ["'self'", 'data:', 'https:'],
       // Lemon Squeezy overlay posts to / loads assets from *.lemonsqueezy.com.
       connectSrc:     ["'self'", 'https://*.lemonsqueezy.com'],
-      frameSrc:       ["'self'", 'https://*.lemonsqueezy.com'],
+      // player.vimeo.com hosts the lazy-loaded landing-page demo embed.
+      frameSrc:       ["'self'", 'https://*.lemonsqueezy.com', 'https://player.vimeo.com'],
       objectSrc:      ["'none'"],
       baseUri:        ["'self'"],
       formAction:     ["'self'"],

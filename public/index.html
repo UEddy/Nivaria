@@ -86,15 +86,19 @@
         <p class="lp-section-sub">See exactly how Nivaria turns competitor activity into clear, ready-to-use sales intelligence.</p>
       </div>
 
-      <!-- Demo video goes here. Drop the embed (a <video> or <iframe>) inside this
-           frame. The placeholder below shows through until the video is added. -->
-      <div class="lp-video-frame lp-animate" data-delay="1" role="img" aria-label="Product demo video">
-        <div class="lp-video-play" aria-hidden="true">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M8 5v14l11-7z"/>
-          </svg>
-        </div>
-        <span class="lp-video-caption">Product demo</span>
+      <!-- Demo video. The Vimeo iframe is lazy-loaded: the facade below shows until
+           the visitor clicks play, at which point landing.js injects the player.
+           No Vimeo request is made on page load, so initial render stays fast. -->
+      <div class="lp-video-frame lp-animate" data-delay="1">
+        <button type="button" class="lp-video-facade" id="lp-demo-play"
+                data-vimeo-id="1206994569" aria-label="Play product demo video">
+          <span class="lp-video-play" aria-hidden="true">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          </span>
+          <span class="lp-video-caption">Play product demo</span>
+        </button>
       </div>
     </div>
   </section>
