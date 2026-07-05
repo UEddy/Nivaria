@@ -898,22 +898,38 @@ img, svg { display: block; }
 }
 .lp-video-header .lp-section-sub { margin: 0 auto; }
 /* 16:9 frame that holds the demo embed. Until a <video>/<iframe> is dropped in,
-   the play badge and caption show through as a placeholder. */
+   the play badge and caption show through as a placeholder (the facade centers
+   its own content, so the frame itself does not need to be a flex box).
+
+   Sizing uses the padding-top: 56.25% technique (9 / 16) rather than
+   aspect-ratio. The frame's only children (the facade button and the injected
+   iframe) are absolutely positioned, so they contribute no height. With
+   aspect-ratio alone, any context that does not honor it, older iOS/Android
+   WebViews and the in-app browsers much mobile traffic arrives through, fell
+   back to content height, collapsed the box, and overflow: hidden then clipped
+   the bottom of the video (the email-drop moment) on mobile only. padding-top
+   derives the height from the width on every browser, so the box is a true 16:9
+   at all widths including 375px. */
 .lp-video-frame {
   position: relative;
+  width: 100%;
   max-width: 900px;
   margin: 0 auto;
-  aspect-ratio: 16 / 9;
   border-radius: var(--lp-radius-lg);
   border: 1px solid var(--lp-border);
   background: var(--lp-bg-2);
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
   box-shadow: 0 32px 80px rgba(0,0,0,0.4);
+}
+/* Establish the 16:9 height on a pseudo-element. Its percentage padding
+   resolves against the frame's own width (its containing block), so the
+   max-width: 900px cap is respected and the ratio is correct at every width.
+   Putting padding-top on the frame itself would resolve against .lp-container
+   instead and over-tall the box on desktop. */
+.lp-video-frame::before {
+  content: "";
+  display: block;
+  padding-top: 56.25%; /* 9 / 16 */
 }
 .lp-video-frame video,
 .lp-video-frame iframe {
