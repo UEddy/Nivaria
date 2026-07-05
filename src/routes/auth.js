@@ -5,6 +5,7 @@ const { v4: uuidv4 }  = require('uuid');
 const bcrypt          = require('bcryptjs');
 const { getDb }       = require('../db');
 const { sendOtpEmail} = require('../email');
+const { notifyNewSignup } = require('../telegram');
 const limits          = require('../middleware/rateLimits');
 const { csrfProtect } = require('../middleware/security');
 const { createPersonalWorkspace } = require('../lib/workspace');
@@ -344,7 +345,11 @@ router.post('/register/complete', async (req, res) => {
   const consentGivenAt   = consentRow?.consent_at || new Date().toISOString();
   const consentVersions  = consentRow?.consent_policy_versions || consentPolicyVersions();
 
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  const existing = db.prepare('SELECT id, email_verified FROM users WHERE email = ?').get(email);
+  // A genuinely new signup is either a brand-new row or completing a row that was
+  // still pending (email not yet verified). Re-completing an already-verified
+  // account is not a new signup, so it must not trigger the admin notification.
+  const isNewSignup = !existing || !existing.email_verified;
   let userId;
 
   if (existing) {
@@ -367,6 +372,17 @@ router.post('/register/complete', async (req, res) => {
   createPersonalWorkspace(userId, firstName, email);
 
   db.prepare('UPDATE otp_codes SET verified_token = NULL WHERE id = ?').run(otp.id);
+
+  // Admin-only heads-up (Telegram) that someone signed up, so the founder learns
+  // of it without checking /admin/stats. The user count uses the same
+  // authoritative source as /admin/stats and now includes this account.
+  // Fire-and-forget and fully non-blocking: the send is not awaited and
+  // notifyNewSignup swallows every error (and is a no-op unless the Telegram env
+  // vars are set), so it can never delay or break signup.
+  if (isNewSignup) {
+    const totalUsers = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+    notifyNewSignup(email, totalUsers);
+  }
 
   const freshUser = db.prepare('SELECT session_version FROM users WHERE id = ?').get(userId);
 
