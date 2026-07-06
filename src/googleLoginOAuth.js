@@ -71,6 +71,17 @@ function getAuthUrl(state) {
 //   → { sub, email, emailVerified, name, givenName } or throws.
 async function exchangeCodeForProfile(code) {
   const client = loginClient();
+
+  // TEMPORARY diagnostic: confirm the running process is reading the correct,
+  // non-empty Google credentials. Logs ONLY the last 4 chars and a present/absent
+  // flag, never the full secret. Remove once the credential issue is resolved.
+  {
+    const id  = process.env.GOOGLE_OAUTH_CLIENT_ID  || '';
+    const sec = process.env.GOOGLE_OAUTH_CLIENT_SECRET || '';
+    const last4 = (v) => v ? v.slice(-4) : '(none)';
+    console.log(`[auth:google:debug] client_id present=${!!id} last4=${last4(id)} | client_secret present=${!!sec} last4=${last4(sec)}`);
+  }
+
   const { tokens } = await client.getToken(code);
   if (!tokens.id_token) throw new Error('Google did not return an identity token');
 
