@@ -7,10 +7,17 @@
 // the same OAuth client), but they use their own env vars and callback URLs.
 //
 // Env vars (set these in Railway / .env):
-//   GOOGLE_CLIENT_ID          OAuth client id (may equal GOOGLE_OAUTH_CLIENT_ID)
-//   GOOGLE_CLIENT_SECRET      OAuth client secret
-//   GOOGLE_LOGIN_REDIRECT_URI callback URL (exact match required by Google).
-//                             Defaults to `${APP_URL}/api/auth/google/callback`.
+//   GOOGLE_OAUTH_CLIENT_ID     OAuth client id. Shared with the Calendar
+//   GOOGLE_OAUTH_CLIENT_SECRET OAuth client secret. integration (same Google
+//                              Cloud project / same OAuth client), so the
+//                              credentials live under a single name and can
+//                              never drift across a rotation.
+//   GOOGLE_LOGIN_REDIRECT_URI  Login callback URL (exact match required by
+//                              Google). Kept SEPARATE from the Calendar callback
+//                              (GOOGLE_OAUTH_REDIRECT_URI) because the login
+//                              endpoint (/api/auth/google/callback) is a
+//                              different route. Defaults to
+//                              `${APP_URL}/api/auth/google/callback`.
 //
 // isConfigured() is false unless the client id + secret are present, so the app
 // (and the login page's Google button) degrades cleanly when Google login is
@@ -29,15 +36,15 @@ function redirectUri() {
 }
 
 function isConfigured() {
-  return !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+  return !!(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET);
 }
 
 function loginClient() {
-  const clientId     = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const clientId     = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
     throw new Error(
-      'Google login env vars missing. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.'
+      'Google login env vars missing. Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in .env.'
     );
   }
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri());
@@ -69,7 +76,7 @@ async function exchangeCodeForProfile(code) {
 
   const ticket = await client.verifyIdToken({
     idToken:  tokens.id_token,
-    audience: process.env.GOOGLE_CLIENT_ID,
+    audience: process.env.GOOGLE_OAUTH_CLIENT_ID,
   });
   const payload = ticket.getPayload() || {};
 
