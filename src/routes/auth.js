@@ -7,8 +7,20 @@ const { getDb }       = require('../db');
 const { sendOtpEmail} = require('../email');
 const { notifyNewSignup } = require('../telegram');
 const limits          = require('../middleware/rateLimits');
+const rateLimit       = require('express-rate-limit');
 const { csrfProtect } = require('../middleware/security');
 const { createPersonalWorkspace } = require('../lib/workspace');
+const googleLogin     = require('../googleLoginOAuth');
+
+// Dedicated limiter for the Google OAuth callback — discourages anyone trying to
+// brute-force state values. Mirrors the calendar callback limiter.
+const googleCallbackLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => res.redirect('/login?google_error=' + encodeURIComponent('Too many sign-in attempts. Try again in 15 minutes.')),
+});
 
 // ── Common weak passwords ──────────────────────────────────────────────────────
 
@@ -107,6 +119,24 @@ function validateFirstName(raw) {
   if (name.length > 50) return 'Name must be 50 characters or fewer';
   if (!FIRST_NAME_RE.test(name)) return 'Name can only contain letters, spaces, hyphens, apostrophes, and periods';
   return null;
+}
+
+// Best-effort friendly first name from a Google profile. Unlike the email-signup
+// path (where the user types a name we can reject), a Google login must never
+// fail just because the profile name has characters our FIRST_NAME_RE rejects,
+// so this coerces to a safe value and always returns a non-empty string:
+// given_name → full name → email local-part → 'there'. Stripped of characters
+// outside the allowed set and capped at 50 chars.
+function googleFirstName({ givenName, name, email }) {
+  const candidates = [givenName, name, String(email || '').split('@')[0], 'there'];
+  for (const c of candidates) {
+    const cleaned = String(c == null ? '' : c)
+      .replace(/[^\p{L}\p{M} .'\-]/gu, '') // keep only chars FIRST_NAME_RE allows
+      .trim()
+      .slice(0, 50);
+    if (cleaned) return cleaned;
+  }
+  return 'there';
 }
 
 // Normalize a client-supplied IANA timezone. Verified against the host's
@@ -447,6 +477,174 @@ router.post('/login', limits.login, async (req, res) => {
       res.json({ success: true, user: { id: user.id, email: user.email, name: user.name, tier: user.tier } });
     });
   });
+});
+
+// ── Sign in with Google (identity/login OAuth) ─────────────────────────────────
+// Separate from the Google Calendar integration: requests only basic profile +
+// email scopes, never Calendar. Standard authorization-code flow. CSRF is
+// protected by a random `state` round-tripped through the session (same model as
+// the calendar callback), so these navigational GETs don't use csrfProtect.
+
+// Public config probe so the login page can hide the Google button when the
+// feature isn't configured (no client id/secret set). Cheap, unauthenticated.
+router.get('/config', (_req, res) => {
+  res.json({ google: googleLogin.isConfigured() });
+});
+
+// Initiate: stash a random state (plus the client's timezone, remember-me choice
+// and returnTo) in the session, then redirect to Google's consent screen.
+router.get('/google/start', limits.login, (req, res) => {
+  if (!googleLogin.isConfigured()) {
+    return res.redirect('/login?google_error=' + encodeURIComponent('Google sign-in is not available right now.'));
+  }
+  // A safe same-origin relative path to land on after login (validated again on
+  // the callback). Anything cross-origin is dropped.
+  const rawReturn = String(req.query.returnTo || '');
+  const returnTo  = rawReturn.startsWith('/') && !rawReturn.startsWith('//') ? rawReturn.slice(0, 512) : null;
+
+  const state = crypto.randomBytes(24).toString('hex');
+  req.session.googleOAuthState = {
+    state,
+    tz:       sanitizeTimezone(req.query.tz),
+    remember: req.query.remember === '1' || req.query.remember === 'true',
+    returnTo,
+    issuedAt: Date.now(),
+  };
+  req.session.save((err) => {
+    if (err) {
+      console.error('[auth:google:start] session.save failed:', err.message);
+      return res.redirect('/login?google_error=' + encodeURIComponent('Session error. Please try again.'));
+    }
+    try {
+      res.redirect(googleLogin.getAuthUrl(state));
+    } catch (e) {
+      console.error('[auth:google:start] getAuthUrl failed:', e.message);
+      res.redirect('/login?google_error=' + encodeURIComponent('Google sign-in is not available right now.'));
+    }
+  });
+});
+
+// Callback: verify state, exchange the code, then create-or-link the account and
+// establish a session. Redirects back to the login page with ?google_error= on
+// any failure so the user is never left stranded.
+router.get('/google/callback', googleCallbackLimiter, async (req, res) => {
+  const fail = (msg) => res.redirect('/login?google_error=' + encodeURIComponent(String(msg).slice(0, 200)));
+
+  // Surface an explicit Google error (e.g. user hit "Cancel").
+  if (req.query.error) {
+    return fail(req.query.error === 'access_denied' ? 'Google sign-in was cancelled.' : String(req.query.error));
+  }
+
+  const expected      = req.session?.googleOAuthState;
+  const incomingState = String(req.query.state || '');
+  const incomingCode  = String(req.query.code  || '');
+
+  // Wipe the state slot before any failure path so a callback can't be replayed.
+  if (req.session) req.session.googleOAuthState = null;
+
+  if (!expected || !expected.state) return fail('Sign-in session expired. Please try again.');
+  const a = Buffer.from(expected.state, 'utf8');
+  const b = Buffer.from(incomingState, 'utf8');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return fail('Sign-in verification failed. Please try again.');
+  }
+  if (Date.now() - expected.issuedAt > 10 * 60 * 1000) return fail('Sign-in timed out. Please try again.');
+  if (!incomingCode) return fail('No authorization code returned by Google.');
+
+  let profile;
+  try {
+    profile = await googleLogin.exchangeCodeForProfile(incomingCode);
+  } catch (e) {
+    console.error('[auth:google:callback] token exchange failed:', e.message);
+    return fail('Could not complete Google sign-in. Please try again.');
+  }
+
+  if (!profile.sub || !profile.email) return fail('Google did not return a usable profile.');
+  // Nivaria requires a verified email. A Google-unverified address must never be
+  // auto-linked to (or create) an account.
+  if (!profile.emailVerified) return fail('Your Google email is not verified, so it cannot be used to sign in.');
+
+  const db = getDb();
+
+  // Establish a session for `userId` with the same fixation-prevention +
+  // remember-me mechanics as the email login, then redirect.
+  const establishSession = (userId, isNewSignup) => {
+    const freshUser = db.prepare('SELECT session_version FROM users WHERE id = ?').get(userId);
+    req.session.regenerate((err) => {
+      if (err) { console.error('[auth:google:callback] session.regenerate failed:', err.message); return fail('Session error. Please try again.'); }
+      if (expected.remember) req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
+      req.session.userId         = userId;
+      req.session.sessionVersion = freshUser?.session_version ?? 1;
+      req.session.csrfToken      = crypto.randomBytes(32).toString('hex');
+      req.session.save((err2) => {
+        if (err2) { console.error('[auth:google:callback] session.save failed:', err2.message); return fail('Session error. Please try again.'); }
+        // New Google signups land on the same onboarding step as email signups;
+        // returning/linked users go to their requested destination or the app.
+        const dest = isNewSignup ? '/app#/onboarding' : (expected.returnTo || '/app');
+        res.redirect(dest);
+      });
+    });
+  };
+
+  try {
+    // 1. Already linked to this Google identity → straight log in (repeat login).
+    const byGoogle = db.prepare('SELECT id FROM users WHERE google_id = ?').get(profile.sub);
+    if (byGoogle) {
+      db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(byGoogle.id);
+      return establishSession(byGoogle.id, false);
+    }
+
+    // 2. An account already exists with this email → LINK Google to it. Never
+    //    create a duplicate. Google verified the email, so it is safe to mark the
+    //    account verified and attach the Google id. Not a new signup → no Telegram.
+    const byEmail = db.prepare('SELECT id, first_name, name, timezone FROM users WHERE email = ?').get(profile.email);
+    if (byEmail) {
+      const firstName = byEmail.first_name || googleFirstName(profile);
+      db.prepare(
+        'UPDATE users SET google_id = ?, email_verified = 1, first_name = COALESCE(first_name, ?), last_login = CURRENT_TIMESTAMP WHERE id = ?'
+      ).run(profile.sub, firstName, byEmail.id);
+      // Backfill name if it was empty (defensive — name is NOT NULL so this is rare).
+      if (!byEmail.name) db.prepare('UPDATE users SET name = ? WHERE id = ?').run(firstName, byEmail.id);
+      // Ensure a workspace exists (older rows always have one; harmless + idempotent).
+      createPersonalWorkspace(byEmail.id, firstName, profile.email);
+      return establishSession(byEmail.id, false);
+    }
+
+    // 3. Genuinely new user → create the account from the Google profile.
+    //    Email is verified immediately (Google verified it): no verification email.
+    const firstName = googleFirstName(profile);
+    const apiKey    = 'cs-' + uuidv4().replace(/-/g, '');
+    // Record the SAME consent as an email signup: the login page shows the Terms/
+    // Privacy/Cookie consent language next to the Google button, so continuing
+    // with Google is an affirmative acceptance. Stamp a server-side timestamp +
+    // the policy version identifier so the consent record has no gap.
+    const consentGivenAt  = new Date().toISOString();
+    const consentVersions = consentPolicyVersions();
+    // password_hash is left NULL — Google accounts are passwordless. Login,
+    // change-password (forgot-password flow) and password-reset all handle a NULL
+    // hash without breaking; a Google user can later set a password via "Change
+    // password" if they want one.
+    const r = db.prepare(
+      'INSERT INTO users (email, name, first_name, timezone, tier, api_key, google_id, email_verified, consent_given_at, consent_policy_versions) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(profile.email, firstName, firstName, expected.tz || 'UTC', 'free', apiKey, profile.sub, 1, consentGivenAt, consentVersions);
+    const userId = r.lastInsertRowid;
+    db.prepare('INSERT INTO settings (user_id) VALUES (?)').run(userId);
+
+    // Same workspace/tier bootstrap as an email signup, so trial/Dodo billing
+    // works identically and the account is never half-initialized.
+    createPersonalWorkspace(userId, firstName, profile.email);
+
+    // Fire the founder Telegram heads-up ONLY for genuinely new signups (this
+    // path), matching the /register/complete behavior. Fire-and-forget and
+    // never-throws (no-op unless the Telegram env vars are set).
+    const totalUsers = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+    notifyNewSignup(profile.email, totalUsers);
+
+    return establishSession(userId, true);
+  } catch (e) {
+    console.error('[auth:google:callback] account create/link failed:', e.message);
+    return fail('Could not complete Google sign-in. Please try again.');
+  }
 });
 
 // ── Logout ─────────────────────────────────────────────────────────────────────

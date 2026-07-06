@@ -461,6 +461,20 @@
       transition: background 0.3s;
     }
 
+    /* ── Sign in with Google ─────────────────────────────────────────── */
+    .btn-google {
+      background: var(--a-card);
+      color: var(--a-txt);
+      border: 1px solid var(--a-border-input);
+    }
+    .btn-google:not(:disabled):hover {
+      border-color: var(--a-ghost-h-bdr);
+      background: var(--a-accent-dim);
+    }
+    .btn-google .g-logo { width: 18px; height: 18px; flex-shrink: 0; }
+    /* Hidden until /api/auth/config confirms Google login is configured. */
+    .google-block { display: none; }
+
     /* ── Signup consent text ─────────────────────────────────────────── */
     .auth-consent {
       margin-top: 16px;
@@ -635,6 +649,7 @@ const State = {
   expiryTimer: null,
   expirySeconds: 0,
   codeExpired: false,
+  googleEnabled: false,    // set true once /api/auth/config confirms Google login
 };
 
 // OTP validity must mirror the backend (10 min); resend cooldown is anti-spam.
@@ -660,8 +675,13 @@ function init() {
     if (prefill && emailInput) emailInput.value = prefill;
   }
 
+  // Ask the server whether Google login is configured, then reveal the button.
+  fetchGoogleConfig();
+
   // Show contextual messages from URL params
-  if (params.get('loggedout')) {
+  if (params.get('google_error')) {
+    setTimeout(() => showMsg(params.get('google_error')), 60);
+  } else if (params.get('loggedout')) {
     setTimeout(() => showMsg("You've been signed out.", 'success'), 60);
   } else if (params.get('expired')) {
     setTimeout(() => showMsg('Your session expired. Please sign in again.'), 60);
@@ -699,6 +719,44 @@ function render() {
       ? `<button class="link-btn" onclick="switchMode('login')">Back to sign in</button>`
       : '';
   }
+  applyGoogleVisibility();
+}
+
+// Reveal any Google block on the current screen once we know the feature is
+// configured. Toggling display (rather than re-rendering) avoids clobbering any
+// text the user has already typed.
+function applyGoogleVisibility() {
+  document.querySelectorAll('.google-block').forEach(el => {
+    el.style.display = State.googleEnabled ? 'block' : 'none';
+  });
+}
+
+// One-shot probe: is "Sign in with Google" configured on the server?
+async function fetchGoogleConfig() {
+  try {
+    const res = await fetch('/api/auth/config');
+    const data = await res.json().catch(() => ({}));
+    State.googleEnabled = !!data.google;
+  } catch (_) {
+    State.googleEnabled = false;
+  }
+  applyGoogleVisibility();
+}
+
+// Kick off Google login: carry the browser timezone (for new-account
+// personalization), the remember-me choice, and any returnTo through to the
+// server, then navigate to the OAuth start endpoint (which 302s to Google).
+function startGoogle() {
+  let tz = 'UTC';
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (_) {}
+  const remember = document.getElementById('inp-remember')?.checked ? '1' : '';
+  const params = new URLSearchParams(window.location.search);
+  const returnTo = params.get('returnTo') || '';
+  const qs = new URLSearchParams();
+  qs.set('tz', tz);
+  if (remember) qs.set('remember', '1');
+  if (returnTo) qs.set('returnTo', returnTo);
+  window.location.href = '/api/auth/google/start?' + qs.toString();
 }
 
 function switchMode(mode) {
@@ -709,6 +767,30 @@ function switchMode(mode) {
 }
 
 // ── Screen templates ───────────────────────────────────────────────────────────
+
+// Google's multi-color "G" logo (inline so it works under the strict CSP).
+const GOOGLE_LOGO = `<svg class="g-logo" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.02-3.7H.96v2.34A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.98 10.72a5.4 5.4 0 0 1 0-3.44V4.94H.96a9 9 0 0 0 0 8.12l3.02-2.34z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.46 3.44 1.35l2.58-2.58C13.46.9 11.43 0 9 0A9 9 0 0 0 .96 4.94l3.02 2.34C4.68 5.16 6.66 3.58 9 3.58z"/></svg>`;
+
+// Divider + "Sign in with Google" button + consent language. Hidden by default
+// (.google-block { display:none }); revealed once /api/auth/config confirms the
+// feature is configured. The consent note is shown here because continuing with
+// Google can create a new account, so the same Terms/Privacy/Cookie acceptance
+// the email signup captures must be presented next to this button.
+function googleBlock() {
+  return `
+    <div class="google-block">
+      <div class="divider">or</div>
+      <button type="button" class="btn btn-google" onclick="startGoogle()">
+        ${GOOGLE_LOGO} Continue with Google
+      </button>
+      <p class="auth-consent">
+        By continuing with Google, you agree to our
+        <a href="/terms" target="_blank" rel="noopener">Terms of Use</a>,
+        <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>, and
+        <a href="/cookies" target="_blank" rel="noopener">Cookie Policy</a>.
+      </p>
+    </div>`;
+}
 
 function renderLogin() {
   return `
@@ -735,7 +817,8 @@ function renderLogin() {
         <label for="inp-remember" style="font-size:13px;color:var(--a-txt-3);cursor:pointer;user-select:none">Remember me for 30 days</label>
       </div>
       <button type="submit" class="btn btn-primary" id="submit-btn">Sign in</button>
-    </form>`;
+    </form>
+    ${googleBlock()}`;
 }
 
 function renderRegisterEmail() {
@@ -755,7 +838,8 @@ function renderRegisterEmail() {
       <div style="margin-top:20px">
         <button type="submit" class="btn btn-primary" id="submit-btn" ${State.consentChecked ? '' : 'disabled'}>Send verification code</button>
       </div>
-    </form>`;
+    </form>
+    ${googleBlock()}`;
 }
 
 function renderOtp(flow) {
@@ -1322,6 +1406,7 @@ window.goBack       = goBack;
 window.startOver    = startOver;
 window.checkPwRules = checkPwRules;
 window.toggleEye    = toggleEye;
+window.startGoogle  = startGoogle;
 
 init();
 </script>

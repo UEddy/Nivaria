@@ -587,6 +587,16 @@ async function initDb() {
   // record can be produced for a compliance audit. Enforced in routes/auth.
   if (!userCols.includes('consent_given_at'))        sqlDb.run('ALTER TABLE users ADD COLUMN consent_given_at DATETIME');
   if (!userCols.includes('consent_policy_versions')) sqlDb.run('ALTER TABLE users ADD COLUMN consent_policy_versions TEXT');
+  // "Sign in with Google": the Google account's stable subject id ("sub" claim),
+  // recorded to link a Nivaria account to a Google identity. Nullable (email/
+  // password accounts never have one); set the first time a user authenticates
+  // with Google, either on a brand-new signup or when linking Google to an
+  // existing account matched by verified email. UNIQUE so one Google identity
+  // maps to at most one account.
+  if (!userCols.includes('google_id')) {
+    sqlDb.run('ALTER TABLE users ADD COLUMN google_id TEXT');
+    sqlDb.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL');
+  }
 
   // Security: per-email OTP verification lockout counter (additive; existing DBs
   // created the otp_codes table before this column existed).
