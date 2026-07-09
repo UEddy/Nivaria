@@ -272,9 +272,10 @@ window.Billing = Billing;
 const GATE_BY_TIER = {
   free: {
     title: 'Upgrade to Pro',
-    desc: "You’ve reached your Free plan’s limit. Upgrade to Pro to track up to 10 competitors with automatic daily monitoring.",
+    desc: "You’ve reached your Free plan’s limit. Upgrade to Pro to monitor up to 15 pages with automatic daily monitoring.",
     features: [
-      '10 competitors',
+      'Monitor up to 15 pages',
+      'Group pages under each competitor',
       'Automatic daily monitoring',
       'Slack & Discord alerts',
       'Calendar briefings',
@@ -286,9 +287,9 @@ const GATE_BY_TIER = {
   },
   pro: {
     title: 'Join the Team Waitlist',
-    desc: "You’ve reached your Pro plan’s limit. Join the Team waitlist to be notified when team features launch.",
+    desc: "You’ve reached your Pro plan’s page limit. Join the Team waitlist to be notified when team features launch.",
     features: [
-      '60 competitors with automatic monitoring, twice daily',
+      'A higher page volume with automatic monitoring',
       'Multi-user workspace with shared competitive intelligence',
       "Outreach drafts in each team member's own voice",
       'Role permissions and team collaboration',
@@ -329,7 +330,7 @@ function gateConfigForTier(tier) {
 window.gateConfigForTier = gateConfigForTier;
 
 // Central upgrade-gate modal — invoked by api.js on any 402 upgrade_required.
-// Tier-aware: a Pro user who hits the 10-competitor cap sees the Team waitlist,
+// Tier-aware: a Pro user who hits the 15-page cap sees the Team waitlist,
 // not a nonsensical "Upgrade to Pro".
 function showUpgradeModal(info) {
   // Authoritative tier is workspace-driven (App.subscription.effectiveTier), not

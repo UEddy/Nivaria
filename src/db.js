@@ -178,9 +178,34 @@ const SCHEMA = `
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  -- Grouped-competitor model: a competitor (company) is a NAME that groups one
+  -- or more monitored pages. Each monitored page is a row in the competitors
+  -- table below (that table is the per-PAGE unit: it carries the URL, selector,
+  -- render mode, and baseline hash, and is scraped/briefed individually). A
+  -- group is purely organizational: pages, not groups, count toward the plan
+  -- limit (see src/lib/tierLimits.js). One group has at most
+  -- MAX_PAGES_PER_COMPETITOR pages.
+  CREATE TABLE IF NOT EXISTS competitor_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    workspace_id INTEGER,
+    name TEXT NOT NULL,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_competitor_groups_user ON competitor_groups(user_id);
+
   CREATE TABLE IF NOT EXISTS competitors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
+    -- group_id links this page to its competitor (company). page_label is an
+    -- optional per-page label ("Pricing", "Changelog"). name mirrors the group's
+    -- company name so every existing consumer that reads competitors.name keeps
+    -- showing the company, unchanged, after grouping.
+    group_id INTEGER,
+    page_label TEXT,
     name TEXT NOT NULL,
     url TEXT NOT NULL,
     description TEXT,
@@ -194,8 +219,10 @@ const SCHEMA = `
     last_check_at DATETIME,
     check_count INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (group_id) REFERENCES competitor_groups(id)
   );
+  CREATE INDEX IF NOT EXISTS idx_competitors_group ON competitors(group_id);
 
   CREATE TABLE IF NOT EXISTS changes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -654,6 +681,15 @@ async function initDb() {
     }
   }
 
+  // Grouped-competitor model: add the new columns here (nullable, so the ALTER
+  // is safe on an existing DB). The DATA backfill that places each existing flat
+  // competitor into its own one-page group runs at the END of initDb via
+  // backfillCompetitorGroups(), after the Phase 10 workspace migration has
+  // populated workspace_id and after any dev seeding, so it covers real rows and
+  // seeded demo rows alike. Loss-free and idempotent (only touches group_id IS NULL).
+  if (!compCols.includes('group_id'))   sqlDb.run('ALTER TABLE competitors ADD COLUMN group_id INTEGER');
+  if (!compCols.includes('page_label')) sqlDb.run('ALTER TABLE competitors ADD COLUMN page_label TEXT');
+
   // Phase 7: per-user briefing preferences. Lives on the existing settings
   // table to avoid duplicating webhook config — slack_webhook/discord_webhook
   // already exist here and are reused as the briefing delivery channel.
@@ -783,9 +819,41 @@ async function initDb() {
     console.warn('[CLEANUP] Demo-user cleanup skipped (non-fatal):', e.message);
   }
 
+  // Grouped-competitor data backfill. Runs last so it sees workspace_id (set by
+  // the Phase 10 migration) and any dev-seeded competitors. Each competitor row
+  // still lacking a group is placed into its own one-page group named after it.
+  try {
+    backfillCompetitorGroups(db);
+  } catch (e) {
+    console.warn('Grouped-competitor backfill skipped (non-fatal):', e.message);
+  }
+
   saveDb();
   console.log('✅ Database initialized');
   return db;
+}
+
+// Place every competitor row that has no group_id into its OWN competitor_groups
+// row (named after the competitor), then link it. Loss-free and idempotent: it
+// only touches rows where group_id IS NULL, so re-running never merges, deletes,
+// or duplicates. This is the migration path for pre-grouping flat competitors and
+// the safety net for any competitor created outside the grouped-add route.
+function backfillCompetitorGroups(db) {
+  const orphans = db.prepare(
+    'SELECT id, user_id, workspace_id, name FROM competitors WHERE group_id IS NULL'
+  ).all();
+  let created = 0;
+  for (const o of orphans) {
+    const g = db.prepare(
+      'INSERT INTO competitor_groups (user_id, workspace_id, name) VALUES (?, ?, ?)'
+    ).run(o.user_id, o.workspace_id, o.name);
+    db.prepare('UPDATE competitors SET group_id = ? WHERE id = ?').run(g.lastInsertRowid, o.id);
+    created++;
+  }
+  if (created > 0) {
+    console.log(`✅ Grouped-competitor migration: ${created} competitor(s) each migrated into a one-page group (no data removed)`);
+  }
+  return created;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

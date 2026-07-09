@@ -1,4 +1,5 @@
-// Screenshots + checks for the Team=60 / Business API-access copy pass.
+// Screenshots + checks for the page-based pricing copy: Pro reads in pages,
+// Team/Business commit to no specific page/competitor number (waitlist).
 const { chromium } = require('playwright');
 const fs = require('fs');
 
@@ -26,11 +27,14 @@ const check = (n, p, d = '') => { results.push({ n, p }); console.log(`${p ? 'âœ
   })));
   const team = cards.find(c => c.name === 'Team');
   const biz  = cards.find(c => c.name === 'Business');
-  check('Team card first bullet is the 60-competitor line', team.feats[0] === '60 competitors with automatic daily monitoring', team.feats[0]);
+  // Team is waitlist-only: its page cap is TODO pending cost analysis, so the
+  // copy must NOT commit to a specific page/competitor number.
+  check('Team card first bullet is the neutral higher-page-volume line', team.feats[0] === 'A higher page volume with automatic monitoring', team.feats[0]);
+  check('Team card commits to no specific page/competitor number', !/\b\d+\s+(competitors|pages)\b/i.test(team.feats.join(' ')));
   check('Team card has no "unlimited"', !team.feats.join(' ').toLowerCase().includes('unlimited'));
   check('Business card lists API access bullet', biz.feats.includes('API access and advanced webhook delivery'), biz.feats.join(' | '));
   check('Business card has no "custom integration"', !biz.feats.join(' ').toLowerCase().includes('custom integration'));
-  check('Business bullets exact', JSON.stringify(biz.feats) === JSON.stringify(['Everything in Team','Monitoring of bot-protected sites','API access and advanced webhook delivery','Priority support']), biz.feats.join(' | '));
+  check('Business card commits to no specific page/competitor number', !/\b\d+\s+(competitors|pages)\b/i.test(biz.feats.join(' ')));
 
   await page.$eval('#pricing', el => el.scrollIntoView());
   await (await page.$('#pricing')).screenshot({ path: `${OUT}/landing-cards-desktop.png` });
@@ -68,7 +72,7 @@ const check = (n, p, d = '') => { results.push({ n, p }); console.log(`${p ? 'âœ
   }
 
   const proHtml = await renderGate('pro', 'gate-pro-to-team.png');
-  check('Proâ†’Team modal shows "60 competitors with automatic daily monitoring"', proHtml.includes('60 competitors with automatic daily monitoring'));
+  check('Proâ†’Team modal shows neutral higher-page-volume copy', proHtml.includes('A higher page volume with automatic monitoring'));
   check('Proâ†’Team modal has no "unlimited"', !/unlimited/i.test(proHtml));
   await app.evaluate(() => window.closeModal && window.closeModal());
   await app.waitForTimeout(200);

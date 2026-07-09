@@ -354,7 +354,7 @@ const App = {
     if (!s) return;
     const cc = el('nav-competitor-count');
     const ac = el('nav-alert-count');
-    if (cc) cc.textContent = s.total_competitors || '';
+    if (cc) cc.textContent = (s.competitor_count ?? s.total_competitors) || '';
     if (ac) ac.textContent = s.high_threats > 0 ? s.high_threats : '';
   },
 
@@ -743,7 +743,7 @@ const Pricing = {
       {
         id: 'pro', name: 'Pro', price: 20, desc: 'For active sales teams', popular: true,
         features: [
-          '10 competitors monitored',
+          'Monitor up to 15 pages, across as many competitors as you like',
           'Automatic daily monitoring',
           'AI briefs with sales talking points and recommended responses',
           'AI outreach playbook drafts in your voice',
@@ -755,7 +755,7 @@ const Pricing = {
       {
         id: 'team', name: 'Team', price: 49, desc: 'For collaborative teams', badge: 'Launching soon',
         features: [
-          '60 competitors with automatic monitoring, twice daily',
+          'A higher page volume with automatic monitoring',
           'Multi-user workspace with shared competitive intelligence',
           "Outreach drafts in each team member's own voice",
           'Role permissions and team collaboration',

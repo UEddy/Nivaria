@@ -2,7 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const { getDb, extractDomainFromUrl } = require('../db');
 const { checkCompetitor }  = require('../scheduler');
-const { canAddCompetitor, upgradeRequired } = require('../lib/tierLimits');
+const { canAddPage, canAddPageToCompetitor, MAX_PAGES_PER_COMPETITOR, upgradeRequired } = require('../lib/tierLimits');
 const { logAudit } = require('../lib/audit');
 const { getCompetitorHistory, generatePatternCallouts } = require('../historicalContext');
 const { normalizeCompetitorUrl, canonicalUrlKey } = require('../lib/urlNormalize');
@@ -22,6 +22,32 @@ function findDuplicateUrl(db, userId, url, excludeId = null) {
     if (canonicalUrlKey(r.url) === key) return r.id;
   }
   return null;
+}
+
+// ── Grouped-competitor helpers ────────────────────────────────────────────────
+// A competitor (company) is a competitor_groups row; each monitored page is a
+// competitors row linked by group_id. Pages, not groups, count toward the plan
+// page limit (see src/lib/tierLimits.js).
+
+// Number of monitored pages currently under one competitor (group).
+function pagesInGroup(db, groupId) {
+  if (!groupId) return 0;
+  return db.prepare('SELECT COUNT(*) AS n FROM competitors WHERE group_id = ?').get(groupId).n;
+}
+
+// Total monitored pages in the workspace — the value compared against the plan
+// page limit.
+function workspacePageCount(db, workspaceId) {
+  return db.prepare('SELECT COUNT(*) AS n FROM competitors WHERE workspace_id = ?').get(workspaceId).n;
+}
+
+// Find an existing competitor (group) for this user by case-insensitive name, or
+// null. Lets "attach a page" reuse a company the user already tracks instead of
+// creating a duplicate group.
+function findGroupByName(db, userId, name) {
+  return db.prepare(
+    'SELECT * FROM competitor_groups WHERE user_id = ? AND LOWER(name) = LOWER(?) ORDER BY id LIMIT 1'
+  ).get(userId, name) || null;
 }
 
 // Returns { value, error }. value is always 'fetch' or 'js'; defaults to 'fetch' when missing.
@@ -56,31 +82,60 @@ router.get('/', (req, res) => {
   // Those rows are retained in the table for audit but never surfaced to users.
   // (MEANINGFUL is a fixed literal, not user input — no injection surface.)
   const MEANINGFUL = '(is_meaningful IS NULL OR is_meaningful = 1)';
+  // Each row is a monitored PAGE. group_id + group_name identify the competitor
+  // (company) it belongs to; the frontend groups pages by group_id. group_name
+  // comes from the canonical competitor_groups row so a rename stays consistent.
   const rows = db.prepare(`
     SELECT c.*,
+      g.name        AS group_name,
+      g.description AS group_description,
       (SELECT COUNT(*) FROM changes WHERE competitor_id = c.id AND ${MEANINGFUL}) AS change_count,
       (SELECT headline     FROM changes WHERE competitor_id = c.id AND ${MEANINGFUL} ORDER BY detected_at DESC LIMIT 1) AS last_headline,
       (SELECT threat_level FROM changes WHERE competitor_id = c.id AND ${MEANINGFUL} ORDER BY detected_at DESC LIMIT 1) AS last_threat,
       (SELECT detected_at  FROM changes WHERE competitor_id = c.id AND ${MEANINGFUL} ORDER BY detected_at DESC LIMIT 1) AS last_change_at
     FROM competitors c
+    LEFT JOIN competitor_groups g ON g.id = c.group_id
     WHERE c.user_id = ?
-    ORDER BY c.created_at DESC
+    ORDER BY COALESCE(g.name, c.name) COLLATE NOCASE ASC, c.created_at DESC
   `).all(req.userId);
   res.json(rows);
 });
 
+// Add a monitored PAGE. Two ways to say which competitor (company) it belongs to:
+//   • group_id  → attach the page to an existing competitor the user owns.
+//   • name      → create a new competitor, or reuse an existing one of the same
+//                 name (case-insensitive) if it already exists.
+// page_label is an optional per-page label ("Pricing", "Changelog"). Pages, not
+// competitors, count toward the plan page limit; a single competitor holds at
+// most MAX_PAGES_PER_COMPETITOR pages.
 router.post('/', (req, res) => {
   const db          = getDb();
   const name        = String(req.body.name        || '').trim();
   const url         = String(req.body.url         || '').trim();
   const description = String(req.body.description || '').trim();
+  const pageLabel   = String(req.body.page_label  || '').trim();
+  const rawGroupId  = req.body.group_id;
 
-  // Required fields
-  if (!name || !url) return res.status(400).json({ error: 'name and url are required' });
-
-  // Length limits
-  if (name.length        > 100)  return res.status(400).json({ error: 'name must be 100 characters or fewer' });
+  // URL is always required.
+  if (!url) return res.status(400).json({ error: 'url is required' });
+  if (pageLabel.length   > 100)  return res.status(400).json({ error: 'page label must be 100 characters or fewer' });
   if (description.length > 500)  return res.status(400).json({ error: 'description must be 500 characters or fewer' });
+
+  // Resolve the target competitor (group). Either an existing group_id the user
+  // owns, or a name (reused if present, otherwise created after the cap checks).
+  let group = null;      // existing group row, if any
+  let createName = null; // name to create a new group with, if group is null
+  if (rawGroupId !== undefined && rawGroupId !== null && String(rawGroupId) !== '') {
+    const gid = parseInt(rawGroupId, 10);
+    if (!Number.isInteger(gid)) return res.status(400).json({ error: 'invalid group_id' });
+    group = db.prepare('SELECT * FROM competitor_groups WHERE id = ? AND user_id = ?').get(gid, req.userId);
+    if (!group) return res.status(404).json({ error: 'Competitor not found' });
+  } else {
+    if (!name) return res.status(400).json({ error: 'name (or group_id) is required' });
+    if (name.length > 100) return res.status(400).json({ error: 'name must be 100 characters or fewer' });
+    group = findGroupByName(db, req.userId, name); // reuse if the company already exists
+    if (!group) createName = name;
+  }
 
   // URL normalization + completion. The user may type a bare domain ("apple.com")
   // or a full URL; we complete a missing scheme to https and store the cleaned,
@@ -88,12 +143,6 @@ router.post('/', (req, res) => {
   const norm = normalizeCompetitorUrl(url);
   if (norm.error) return res.status(400).json({ error: norm.error });
   const normalizedUrl = norm.url;
-
-  // Duplicate detection uses the same normalization, so "apple.com" is caught as
-  // a duplicate of an existing "https://www.apple.com".
-  if (findDuplicateUrl(db, req.userId, normalizedUrl) != null) {
-    return res.status(409).json({ error: 'You are already monitoring this URL.' });
-  }
 
   // Optional CSS selector
   const sel = validateCssSelector(req.body.css_selector);
@@ -103,20 +152,51 @@ router.post('/', (req, res) => {
   const rm = validateRenderMode(req.body.render_mode);
   if (rm.error) return res.status(400).json({ error: rm.error });
 
-  // Phase 10: competitor cap is enforced by the workspace's effective tier.
-  const count = db.prepare('SELECT COUNT(*) AS n FROM competitors WHERE workspace_id = ?').get(req.workspaceId).n;
-  if (!canAddCompetitor(req.workspaceId, count)) {
-    logAudit({ workspaceId: req.workspaceId, userId: req.userId, eventType: 'gate_violation', eventData: { feature: 'add_competitor', count }, req });
+  // Duplicate detection uses the same normalization, so "apple.com" is caught as
+  // a duplicate of an existing "https://www.apple.com".
+  if (findDuplicateUrl(db, req.userId, normalizedUrl) != null) {
+    return res.status(409).json({ error: 'You are already monitoring this URL.' });
+  }
+
+  // Cost-safe cap 1: total PAGES against the plan page limit. Pages are the
+  // billable unit, so grouping never grants extra monitoring.
+  const pageCount = workspacePageCount(db, req.workspaceId);
+  if (!canAddPage(req.workspaceId, pageCount)) {
+    logAudit({ workspaceId: req.workspaceId, userId: req.userId, eventType: 'gate_violation', eventData: { feature: 'add_competitor', pages: pageCount }, req });
     return upgradeRequired(res, 'add_competitor');
+  }
+
+  // Cost-safe cap 2: at most MAX_PAGES_PER_COMPETITOR pages under one competitor.
+  // Upgrading does not lift this structural cap, so it is a plain 400 (not a 402
+  // upgrade gate) with a clear, actionable message.
+  const groupPages = group ? pagesInGroup(db, group.id) : 0;
+  if (!canAddPageToCompetitor(req.workspaceId, groupPages)) {
+    return res.status(400).json({
+      error: 'per_competitor_limit',
+      message: `This competitor already has the maximum of ${MAX_PAGES_PER_COMPETITOR} monitored pages. Create a separate competitor to track more pages.`,
+    });
+  }
+
+  // Create the competitor (group) now that both caps have passed, so a blocked
+  // add never leaves an empty group behind.
+  if (!group) {
+    const g = db.prepare(
+      'INSERT INTO competitor_groups (user_id, workspace_id, name, description) VALUES (?, ?, ?, ?)'
+    ).run(req.userId, req.workspaceId, createName, description || null);
+    group = db.prepare('SELECT * FROM competitor_groups WHERE id = ?').get(g.lastInsertRowid);
   }
 
   const domain = extractDomainFromUrl(normalizedUrl);
 
+  // competitors.name mirrors the group's company name so every existing consumer
+  // that reads competitors.name keeps showing the company. page_label labels the
+  // individual page.
   const result = db.prepare(
-    'INSERT INTO competitors (user_id, name, url, description, css_selector, render_mode, domain) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(req.userId, name, normalizedUrl, description || null, sel.value, rm.value, domain);
+    'INSERT INTO competitors (user_id, workspace_id, group_id, page_label, name, url, description, css_selector, render_mode, domain) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(req.userId, req.workspaceId, group.id, pageLabel || null, group.name, normalizedUrl, description || null, sel.value, rm.value, domain);
 
-  res.status(201).json(db.prepare('SELECT * FROM competitors WHERE id = ?').get(result.lastInsertRowid));
+  const created = db.prepare('SELECT * FROM competitors WHERE id = ?').get(result.lastInsertRowid);
+  res.status(201).json({ ...created, group_name: group.name });
 });
 
 router.put('/:id', (req, res) => {
@@ -129,12 +209,19 @@ router.put('/:id', (req, res) => {
   let description = row.description;
   let cssSelector = row.css_selector;
   let renderMode  = row.render_mode || 'fetch';
+  let pageLabel   = row.page_label;
   let resetHash   = false;
 
   if (req.body.name !== undefined) {
     name = String(req.body.name).trim();
     if (!name) return res.status(400).json({ error: 'name cannot be empty' });
     if (name.length > 100) return res.status(400).json({ error: 'name must be 100 characters or fewer' });
+  }
+
+  if (req.body.page_label !== undefined) {
+    const pl = String(req.body.page_label).trim();
+    if (pl.length > 100) return res.status(400).json({ error: 'page label must be 100 characters or fewer' });
+    pageLabel = pl || null;
   }
 
   if (req.body.url !== undefined) {
@@ -187,16 +274,24 @@ router.put('/:id', (req, res) => {
   if (resetHash) {
     db.prepare(`
       UPDATE competitors
-      SET name = ?, url = ?, description = ?, css_selector = ?, render_mode = ?, domain = ?,
+      SET name = ?, url = ?, description = ?, css_selector = ?, render_mode = ?, domain = ?, page_label = ?,
           last_content_hash = NULL, last_check_status = NULL, last_check_error = NULL
       WHERE id = ?
-    `).run(name, url, description, cssSelector, renderMode, domain, row.id);
+    `).run(name, url, description, cssSelector, renderMode, domain, pageLabel, row.id);
   } else {
     db.prepare(`
       UPDATE competitors
-      SET name = ?, url = ?, description = ?, css_selector = ?, render_mode = ?, domain = ?
+      SET name = ?, url = ?, description = ?, css_selector = ?, render_mode = ?, domain = ?, page_label = ?
       WHERE id = ?
-    `).run(name, url, description, cssSelector, renderMode, domain, row.id);
+    `).run(name, url, description, cssSelector, renderMode, domain, pageLabel, row.id);
+  }
+
+  // The company name is denormalized onto every page in the group, so a rename
+  // must propagate to the canonical group row and all sibling pages to keep the
+  // grouped list consistent.
+  if (req.body.name !== undefined && name !== row.name && row.group_id) {
+    db.prepare('UPDATE competitor_groups SET name = ? WHERE id = ? AND user_id = ?').run(name, row.group_id, req.userId);
+    db.prepare('UPDATE competitors SET name = ? WHERE group_id = ? AND user_id = ?').run(name, row.group_id, req.userId);
   }
 
   res.json(db.prepare('SELECT * FROM competitors WHERE id = ?').get(row.id));

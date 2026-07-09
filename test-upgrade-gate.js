@@ -93,7 +93,8 @@ console.log('\n── showUpgradeModal rendered HTML (per current tier) ──')
   check('pro: ignores tier-wrong backend message',    !html.includes('competitor limit. Upgrade to Pro to track more'));
   check('pro: tier-aware Pro-plan-limit copy',        html.includes("reached your Pro plan"));
   check('pro: lists multi-user workspace',            html.includes('Multi-user workspace'));
-  check('pro: Team gate shows the 60-cap, twice daily', html.includes('60 competitors with automatic monitoring, twice daily'));
+  check('pro: Team gate uses neutral higher-page-volume copy (no committed number)', html.includes('A higher page volume with automatic monitoring'));
+  check('pro: Team gate commits to no specific page/competitor number', !/\b\d+\s+(competitors|pages)\b/i.test(html));
   check('pro: Team gate lists Everything in Pro',     html.includes('Everything in Pro'));
   check('pro: Team gate never says "unlimited"',      !/unlimited/i.test(html));
   check('pro: CTA opens Team waitlist',               html.includes("Billing.openWaitlist('team')"));

@@ -248,7 +248,7 @@ const Dashboard = {
       : 0;
 
     const targets = {
-      'stat-val-competitors': stats.total_competitors,
+      'stat-val-competitors': stats.competitor_count ?? stats.total_competitors,
       'stat-val-changes': stats.changes_this_week,
       'stat-val-threats': stats.high_threats,
       'stat-val-score': score,
@@ -340,20 +340,22 @@ const Dashboard = {
       ? Math.min(100, Math.round((stats.total_changes / Math.max(1, stats.total_competitors)) * 12 + stats.active_competitors * 8))
       : 0;
 
-    // The competitor cap comes from the server (stats.max_competitors), derived
-    // from the workspace's authoritative effective tier (getWorkspaceTier), NOT
-    // the deprecated App.user.tier. A value of -1 means unlimited (team/business).
-    // If the field is somehow absent (e.g. a stale cached stats response), fall
-    // back to the same app-wide effectiveTier the sidebar/Settings use, rather
-    // than silently defaulting to the most restrictive Free cap of 1 (which would
-    // misreport a Pro account as "/ 1"). Mirrors the server TIER_LIMITS caps.
-    const CAP_BY_TIER = { free: 1, pro: 10, team: -1, business: -1 };
-    const rawCap = (stats.max_competitors !== undefined && stats.max_competitors !== null)
-      ? stats.max_competitors
+    // The billable unit is a PAGE. The page cap comes from the server
+    // (stats.max_pages), derived from the workspace's authoritative effective
+    // tier (getWorkspaceTier), NOT the deprecated App.user.tier. -1 means
+    // unlimited; null means a not-yet-configured (TODO) tier cap (team/business),
+    // also shown as no enforced cap. If the field is somehow absent (stale cached
+    // stats), fall back to the same app-wide effectiveTier the sidebar/Settings
+    // use rather than the most restrictive Free cap of 1. Mirrors server
+    // TIER_LIMITS page caps (team/business intentionally uncapped-for-now).
+    const CAP_BY_TIER = { free: 1, pro: 15, team: -1, business: -1 };
+    const pagesUsed = stats.pages_used ?? stats.total_competitors ?? 0;
+    const rawCap = (stats.max_pages !== undefined && stats.max_pages !== null)
+      ? stats.max_pages
       : (CAP_BY_TIER[App.subscription?.effectiveTier] ?? CAP_BY_TIER.free);
-    const slotMax = rawCap === -1 ? null : rawCap;
-    const slotPct = slotMax ? Math.min(100, (stats.total_competitors / slotMax) * 100) : 20;
-    const slotWarn = slotMax && stats.total_competitors / slotMax > 0.8;
+    const slotMax = (rawCap === -1 || rawCap === null) ? null : rawCap;
+    const slotPct = slotMax ? Math.min(100, (pagesUsed / slotMax) * 100) : 20;
+    const slotWarn = slotMax && pagesUsed / slotMax > 0.8;
 
     return `
       ${Dashboard.greetingHtml()}
@@ -502,8 +504,8 @@ const Dashboard = {
           ${competitors.length > 0 ? `
             <div class="usage-wrap">
               <div class="usage-label">
-                <span>Competitor slots</span>
-                <span>${stats.total_competitors} / ${slotMax === null ? '∞' : slotMax}</span>
+                <span>Pages monitored</span>
+                <span>${pagesUsed} / ${slotMax === null ? '∞' : slotMax}</span>
               </div>
               <div class="usage-bar">
                 <div class="usage-fill ${slotWarn ? 'warn' : ''}" style="width:${slotPct}%"></div>

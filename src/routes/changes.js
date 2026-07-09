@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db');
-const { getWorkspaceTier, maxCompetitors } = require('../lib/tierLimits');
+const { getWorkspaceTier, maxPages } = require('../lib/tierLimits');
 
 function parseChange(c) {
   return {
@@ -64,8 +64,15 @@ router.get('/stats', (req, res) => {
   const db = getDb();
   const uid = req.userId;
 
+  // Each competitors row is a monitored PAGE. pages_used is the billable count
+  // (what the plan page limit caps); competitor_count is the number of distinct
+  // companies (groups) those pages are organized under.
   const total_competitors = db.prepare('SELECT COUNT(*) AS n FROM competitors WHERE user_id = ?').get(uid).n;
   const active_competitors = db.prepare('SELECT COUNT(*) AS n FROM competitors WHERE user_id = ? AND active = 1').get(uid).n;
+  const pages_used = total_competitors;
+  const competitor_count = db.prepare(
+    'SELECT COUNT(DISTINCT COALESCE(group_id, -id)) AS n FROM competitors WHERE user_id = ?'
+  ).get(uid).n;
   // Phase 4: dashboard counters reflect MEANINGFUL changes only — trivial
   // gated rows shouldn't inflate the "high threats" and "changes this week"
   // numbers users glance at. Legacy NULL rows count as meaningful so the
@@ -98,11 +105,19 @@ router.get('/stats', (req, res) => {
   // deprecated users.tier column. This keeps the dashboard slot counter in sync
   // with the sidebar/Settings/Profile plan labels and survives the Dodo
   // migration (Dodo writes subscription_tier via webhook → getWorkspaceTier).
-  // maxCompetitors of -1 means unlimited (team/business).
+  // The billable unit is a PAGE. max_pages of -1 means unlimited; null means a
+  // not-yet-configured (TODO) tier cap (team/business), also treated as no cap.
   const tier = getWorkspaceTier(req.workspaceId);
-  const max_competitors = maxCompetitors(req.workspaceId);
+  const max_pages = maxPages(req.workspaceId);
 
-  res.json({ total_competitors, active_competitors, total_changes, changes_this_week, high_threats, medium_threats, trivial_changes, tier, max_competitors });
+  res.json({
+    total_competitors, active_competitors, total_changes, changes_this_week,
+    high_threats, medium_threats, trivial_changes, tier,
+    // Page-based fields (billable unit) plus the company count for display.
+    pages_used, max_pages, competitor_count,
+    // Deprecated alias kept for any older consumer; equals max_pages now.
+    max_competitors: max_pages,
+  });
 });
 
 router.get('/:id', (req, res) => {

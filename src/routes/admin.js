@@ -183,7 +183,7 @@ function renderStats(s) {
     <div class="stat-grid">
       ${statCard(s.totalUsers, 'Total users')}
       ${statCard(s.newUsers7d, 'New users (7 days)')}
-      ${statCard(s.activeCompetitors, 'Competitors monitored')}
+      ${statCard(s.activeCompetitors, 'Pages monitored')}
     </div>
 
     <p class="stat-section-title">Workspaces by tier</p>
@@ -322,7 +322,7 @@ function renderSetTierForm(csrfToken, note, prefillEmail, grantedRows) {
       <div class="field">
         <label for="tier">Tier</label>
         <select id="tier" name="tier">
-          <option value="pro">Grant Pro (10 competitors, daily monitoring, full features)</option>
+          <option value="pro">Grant Pro (15 pages, daily monitoring, full features)</option>
           <option value="free">Revert to Free</option>
         </select>
       </div>
@@ -543,7 +543,7 @@ function registerAdminRoutes(app) {
       // Grant a real Pro experience via the authoritative fields: active status,
       // no end date, no pending cancellation. tier_granted_at records WHEN, for
       // the future paid transition. getWorkspaceTier now returns 'pro' for this
-      // workspace, so every surface shows Pro / 10 competitors.
+      // workspace, so every surface shows Pro / 15 pages.
       db.prepare(`
         UPDATE workspaces SET
           subscription_tier = 'pro',
@@ -583,7 +583,7 @@ function registerAdminRoutes(app) {
     });
 
     const text = tier === 'pro'
-      ? `Pro access GRANTED to ${user.email}. Their workspace now has full Pro: 10 competitors, daily monitoring, and all features.`
+      ? `Pro access GRANTED to ${user.email}. Their workspace now has full Pro: 15 pages, daily monitoring, and all features.`
       : `Reverted ${user.email} to Free. Pro features no longer apply.`;
     res.type('html').send(reform({ type: 'ok', text }, email));
   });

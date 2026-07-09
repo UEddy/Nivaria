@@ -142,10 +142,10 @@ const Settings = {
       body = `
         <div class="set-plan-row">
           ${badge}
-          <span class="set-plan-meta">1 competitor · manual checks</span>
+          <span class="set-plan-meta">1 page · manual checks</span>
           <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="Billing.subscribe(this)">Upgrade to Pro ($20/mo)</button>
         </div>
-        <span class="form-hint">Unlock 10 competitors, daily monitoring, alerts, calendar briefings, outreach playbooks, and win/loss correlation.</span>`;
+        <span class="form-hint">Unlock 15 monitored pages, daily monitoring, alerts, calendar briefings, outreach playbooks, and win/loss correlation.</span>`;
     } else if (status === 'past_due') {
       body = `
         <div class="set-plan-row">
