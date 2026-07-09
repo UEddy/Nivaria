@@ -222,7 +222,11 @@ const SCHEMA = `
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (group_id) REFERENCES competitor_groups(id)
   );
-  CREATE INDEX IF NOT EXISTS idx_competitors_group ON competitors(group_id);
+  -- NOTE: the index on competitors(group_id) is intentionally NOT defined here.
+  -- On an existing database this CREATE TABLE is a no-op (the table predates the
+  -- grouped-page model and lacks group_id), so indexing group_id at schema time
+  -- would throw "no such column: group_id". The index is created in initDb's
+  -- migration block AFTER the ALTER that adds the column. See idx_competitors_group.
 
   CREATE TABLE IF NOT EXISTS changes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -682,13 +686,24 @@ async function initDb() {
   }
 
   // Grouped-competitor model: add the new columns here (nullable, so the ALTER
-  // is safe on an existing DB). The DATA backfill that places each existing flat
-  // competitor into its own one-page group runs at the END of initDb via
-  // backfillCompetitorGroups(), after the Phase 10 workspace migration has
-  // populated workspace_id and after any dev seeding, so it covers real rows and
-  // seeded demo rows alike. Loss-free and idempotent (only touches group_id IS NULL).
-  if (!compCols.includes('group_id'))   sqlDb.run('ALTER TABLE competitors ADD COLUMN group_id INTEGER');
-  if (!compCols.includes('page_label')) sqlDb.run('ALTER TABLE competitors ADD COLUMN page_label TEXT');
+  // is safe on an existing DB), THEN create the group_id index. This ordering is
+  // load-bearing: on an existing prod DB the competitors table predates the
+  // grouped-page model, so the column must be added by ALTER before anything
+  // indexes or queries it (the index was previously in SCHEMA, which runs before
+  // this migration and crashed with "no such column: group_id"). Wrapped so a
+  // migration hiccup degrades gracefully instead of taking the whole app down.
+  // The DATA backfill that places each existing flat competitor into its own
+  // one-page group runs at the END of initDb via backfillCompetitorGroups(),
+  // after the Phase 10 workspace migration has populated workspace_id and after
+  // any dev seeding. Loss-free and idempotent (only touches group_id IS NULL).
+  try {
+    if (!compCols.includes('group_id'))   sqlDb.run('ALTER TABLE competitors ADD COLUMN group_id INTEGER');
+    if (!compCols.includes('page_label')) sqlDb.run('ALTER TABLE competitors ADD COLUMN page_label TEXT');
+    // Idempotent (IF NOT EXISTS) and safe now that group_id is guaranteed to exist.
+    sqlDb.run('CREATE INDEX IF NOT EXISTS idx_competitors_group ON competitors(group_id)');
+  } catch (e) {
+    console.warn('Grouped-competitor column migration issue (non-fatal):', e.message);
+  }
 
   // Phase 7: per-user briefing preferences. Lives on the existing settings
   // table to avoid duplicating webhook config — slack_webhook/discord_webhook
