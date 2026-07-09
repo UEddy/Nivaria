@@ -7,6 +7,7 @@
 
 const { getDb } = require('../db');
 const { logAudit } = require('./audit');
+const { isAdminEmail } = require('./adminEmails');
 
 const TIER_LIMITS = {
   free:     { maxCompetitors: 1,  dailyMonitoring: false, webhooks: false, calendar: false, playbooks: false, winLossCorrelation: false, historicalContext: false },
@@ -60,6 +61,20 @@ function workspaceOwnerIsDeveloper(workspaceId) {
   return w ? isDeveloperUser(w.owner_user_id) : false;
 }
 
+// ── Admin-account override (competitor cap only) ──────────────────────────────
+// A workspace whose OWNER is an admin (their email is in ADMIN_EMAILS, the same
+// gate that guards /admin/*) has NO cap on the number of competitors it can add.
+// This is a per-account override keyed off the existing admin mechanism, NOT a
+// tier change: TIER_LIMITS and getWorkspaceTier are untouched, so Pro/Team/
+// Business keep their exact competitor caps and all billing logic is unaffected.
+function workspaceOwnerIsAdmin(workspaceId) {
+  if (!workspaceId) return false;
+  const w = getDb().prepare('SELECT owner_user_id FROM workspaces WHERE id = ?').get(workspaceId);
+  if (!w || !w.owner_user_id) return false;
+  const u = getDb().prepare('SELECT email FROM users WHERE id = ?').get(w.owner_user_id);
+  return u ? isAdminEmail(u.email) : false;
+}
+
 // Effective tier, accounting for cancellation grace periods.
 function getWorkspaceTier(workspaceId) {
   if (!workspaceId) return 'free';
@@ -102,6 +117,9 @@ function maxCompetitors(workspaceId) {
 function canAddCompetitor(workspaceId, currentCount) {
   // Developer override: no competitor cap.
   if (workspaceOwnerIsDeveloper(workspaceId)) return true;
+  // Admin-account override: an ADMIN_EMAILS owner has no competitor cap. Tier
+  // caps are unchanged for every non-admin account.
+  if (workspaceOwnerIsAdmin(workspaceId)) return true;
   const max = maxCompetitors(workspaceId);
   if (max === -1) return true;
   return currentCount < max;
@@ -133,5 +151,5 @@ module.exports = {
   TIER_LIMITS, FEATURE_INFO,
   getWorkspaceTier, getLimits, canWorkspaceAccess,
   maxCompetitors, canAddCompetitor, upgradeRequired, requireFeature,
-  isDeveloperUser, workspaceOwnerIsDeveloper,
+  isDeveloperUser, workspaceOwnerIsDeveloper, workspaceOwnerIsAdmin,
 };

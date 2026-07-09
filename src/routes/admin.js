@@ -18,21 +18,9 @@ const { logAudit } = require('../lib/audit');
 // Authoritative effective-tier source (same one the dashboard/sidebar/Settings
 // read). Tallied per workspace for the stats breakdown so every surface agrees.
 const { getWorkspaceTier } = require('../lib/tierLimits');
-
-// Parse ADMIN_EMAILS at call time (so an env change takes effect on restart
-// without code edits). Comma-separated, case-insensitive, whitespace-trimmed.
-// Empty/unset → nobody is an admin (safe default).
-function getAdminEmails() {
-  return String(process.env.ADMIN_EMAILS || '')
-    .split(',')
-    .map(e => e.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-function isAdminEmail(email) {
-  if (!email) return false;
-  return getAdminEmails().includes(String(email).trim().toLowerCase());
-}
+// Admin identification (ADMIN_EMAILS) now lives in lib/ so the tier-limit layer
+// can share the exact same gate. Re-exported below to keep this module's API.
+const { getAdminEmails, isAdminEmail } = require('../lib/adminEmails');
 
 // Minimal HTML escaper for user-controlled values rendered into pages.
 function esc(v) {
