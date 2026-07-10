@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db');
-const { getWorkspaceTier, maxPages } = require('../lib/tierLimits');
+const { getWorkspaceTier, maxPages, workspaceOwnerIsPrivileged } = require('../lib/tierLimits');
 
 function parseChange(c) {
   return {
@@ -108,7 +108,11 @@ router.get('/stats', (req, res) => {
   // The billable unit is a PAGE. max_pages of -1 means unlimited; null means a
   // not-yet-configured (TODO) tier cap (team/business), also treated as no cap.
   const tier = getWorkspaceTier(req.workspaceId);
-  const max_pages = maxPages(req.workspaceId);
+  // A privileged workspace (admin / developer override) has no enforced page cap
+  // in canAddPage, so it can legitimately exceed the nominal tier limit. Report
+  // -1 (unlimited) here so the usage banner shows the uncapped state instead of a
+  // false over-limit reading like "17 of 15". Normal accounts get the tier cap.
+  const max_pages = workspaceOwnerIsPrivileged(req.workspaceId) ? -1 : maxPages(req.workspaceId);
 
   res.json({
     total_competitors, active_competitors, total_changes, changes_this_week,

@@ -65,6 +65,9 @@ const Competitors = {
     // max === null/undefined (TODO tier) or -1 means no enforced cap.
     const unlimited = max === null || max === undefined || max === -1;
     const limitText = unlimited ? '∞' : max;
+    const over = !unlimited && used > max;
+    // Bar is always capped at 100% so an over-limit count can never render a
+    // bar that overflows its track or implies a broken value.
     const pct = unlimited ? 12 : Math.min(100, Math.round((used / Math.max(1, max)) * 100));
     const warn = !unlimited && used / Math.max(1, max) > 0.8;
     return `
@@ -78,6 +81,7 @@ const Competitors = {
         <div style="height:6px;border-radius:4px;background:var(--bg-3, rgba(148,163,184,.18));margin-top:10px;overflow:hidden">
           <div style="height:100%;width:${pct}%;border-radius:4px;background:${warn ? 'var(--red, #ef4444)' : 'var(--accent, #6366f1)'};transition:width .3s"></div>
         </div>
+        ${over ? `<div class="text-sm" style="margin-top:8px;color:var(--red, #ef4444);font-weight:500">You are over your plan limit. <a href="#/pricing" style="color:inherit;text-decoration:underline">Upgrade</a> to keep monitoring every page.</div>` : ''}
       </div>`;
   },
 
@@ -150,7 +154,7 @@ const Competitors = {
           </button>
         </header>
         <div class="comp-group-body" data-body="${esc(gid)}">
-          <div class="table-wrap">
+          <div class="table-wrap cards-sm">
             <table>
               <thead>
                 <tr>
@@ -170,7 +174,7 @@ const Competitors = {
     const label = Competitors.pageLabel(c);
     return `
       <tr>
-        <td>
+        <td class="cell-title" data-label="Page">
           <div class="td-primary">
             <a href="#/competitors/${c.id}" style="color:inherit;text-decoration:none">${esc(label)}</a>
             ${c.css_selector ? `<span class="scoped-badge" title="Monitoring scoped to: ${esc(c.css_selector)}">
@@ -179,27 +183,27 @@ const Competitors = {
             </span>` : ''}
           </div>
         </td>
-        <td>
+        <td class="cell-full" data-label="URL">
           <a href="${esc(c.url)}" target="_blank" class="comp-url-link" title="${esc(c.url)}">
-            ${esc(c.url.replace(/^https?:\/\//, '').substring(0, 42))}${c.url.length > 48 ? '…' : ''}
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            <span class="comp-url-text">${esc(c.url.replace(/^https?:\/\//, '').substring(0, 42))}${c.url.length > 48 ? '…' : ''}</span>
+            <svg class="comp-url-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           </a>
         </td>
-        <td>${Competitors.statusPill(c)}</td>
-        <td class="text-muted text-sm">${c.last_checked ? timeAgo(c.last_checked) : 'Pending first check'}</td>
-        <td>
+        <td data-label="Status">${Competitors.statusPill(c)}</td>
+        <td class="text-muted text-sm" data-label="Last checked">${c.last_checked ? timeAgo(c.last_checked) : 'Pending first check'}</td>
+        <td data-label="Changes">
           ${c.change_count > 0
             ? `<a href="#/history?competitor_id=${c.id}" class="change-count-link">${c.change_count}</a>`
             : `<span class="text-muted">0</span>`}
         </td>
-        <td>
+        <td data-label="Last alert">
           ${c.last_threat ? `
             <div style="display:flex;flex-direction:column;gap:4px">
               ${threatBadge(c.last_threat)}
               <span class="text-sm" style="color:var(--txt-3)">${timeAgo(c.last_change_at)}</span>
             </div>` : '<span class="text-muted">-</span>'}
         </td>
-        <td>
+        <td class="cell-full" data-label="Actions">
           <div class="td-actions">
             <button class="btn btn-secondary btn-sm" onclick="Competitors.check(${c.id}, this)" title="Check now">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>

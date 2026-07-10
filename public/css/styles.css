@@ -830,7 +830,11 @@ img, svg { display: block; }
 .table-wrap {
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  overflow: hidden;
+  /* Scroll horizontally rather than clip: on a wide desktop the table is
+     width:100% so no scrollbar appears (desktop unchanged), but in the
+     tablet zone a wide table scrolls instead of losing columns off-screen. */
+  overflow-x: auto;
+  overflow-y: hidden;
   box-shadow: var(--shadow-sm);
 }
 
@@ -3278,188 +3282,134 @@ html       { overflow-x: hidden; }
 }
 
 /* ═════════════════════════════════════════════════════════════════════════════
-   PHASE D — Mobile Competitors: table → card stack at <768px.
-   Both layouts render in the DOM; this block flips which one is visible. The
-   desktop .table-wrap above 768px is untouched.
+   RESPONSIVE DATA TABLES: stacked cards below the sm breakpoint (DEFINE ONCE).
+
+   The one pattern every data table in the app reuses so nothing clips on a
+   phone again. Add class "cards-sm" to any .table-wrap and, at <=640px, each
+   table row collapses into a self-contained card. Above 640px the table renders
+   exactly as before (desktop is untouched).
+
+   How each row maps to a card:
+     - Give every <td> a data-label="…"; below the breakpoint it becomes a
+       "LABEL   value" pair (the <thead> is visually hidden).
+     - td.cell-title  → full-width bold card title, no label (e.g. the row name).
+     - td.cell-full   → full-width value on its own line, no inline label
+                        (e.g. a URL row, or an actions row).
+     - td.cell-hide-sm → dropped on mobile if redundant.
+
+   Truncation rule (also define-once): any growable text that must not widen its
+   row uses .cell-truncate (ellipsis) and its flex parent sets min-width:0, so
+   long text truncates instead of overflowing. Applied here to URLs.
    ═════════════════════════════════════════════════════════════════════════════ */
 
-.competitors-card-view { display: none; }
-
-/* Card stack runs through tablet too — horizontal-scroll-inside-a-table is a
-   poor touch experience, and the table's density only earns its keep on a
-   real desktop with a mouse. Desktop table activates at 1024px+. */
-@media (max-width: 1023px) {
-  .competitors-table-view { display: none; }
-  .competitors-card-view  { display: flex; flex-direction: column; gap: 12px; }
-}
-
-.comp-card {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  position: relative;
-}
-[data-theme="light"] .comp-card { background: #fff; }
-
-.comp-card-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.comp-card-title {
-  flex: 1;
-  min-width: 0; /* lets ellipsis work in the URL line */
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.comp-card-name {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--txt);
-  letter-spacing: -0.2px;
-  text-decoration: none;
-  line-height: 1.25;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.comp-card-name:hover { color: var(--accent-2); }
-
-.comp-card-url {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--accent-2);
-  text-decoration: none;
+.cell-truncate {
+  min-width: 0;
   max-width: 100%;
-  min-height: 32px; /* breathing room for the tap without floor-promoting the link */
-}
-.comp-card-url:hover { color: var(--accent); text-decoration: underline; }
-.comp-card-url-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: calc(100% - 18px);
 }
 
-.comp-card-kebab {
-  width: 44px; height: 44px;
-  display: flex; align-items: center; justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-xs);
-  color: var(--txt-3);
-  cursor: pointer;
-  margin-right: -8px;        /* visual alignment, tap area stays 44 */
-  margin-top: -6px;
-  flex-shrink: 0;
-  transition: background 0.14s, color 0.14s;
-}
-.comp-card-kebab:hover { background: var(--bg-hover); color: var(--txt); }
-.comp-card-kebab[aria-expanded="true"] { background: var(--bg-hover); color: var(--txt); }
-.comp-card-kebab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 640px) {
+  /* The wrapper stops being a bordered table frame and becomes a card stack.
+     overflow-x:hidden guarantees nothing inside a card can bleed past 100vw. */
+  .table-wrap.cards-sm {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+  }
+  .table-wrap.cards-sm table,
+  .table-wrap.cards-sm thead,
+  .table-wrap.cards-sm tbody,
+  .table-wrap.cards-sm tr,
+  .table-wrap.cards-sm td {
+    display: block;
+    width: 100%;
+  }
 
-.comp-card-status-row { display: flex; }
+  /* Header row is redundant once each cell carries its own label. Keep it in the
+     DOM for a11y but pull it out of view. */
+  .table-wrap.cards-sm thead {
+    position: absolute;
+    width: 1px; height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
 
-.comp-card-desc {
-  color: var(--txt-2);
-  font-size: 13px;
-  line-height: 1.55;
-  margin: 0;
-}
+  /* One card per row. overflow-x:hidden is the hard stop against any child
+     (a long URL, a wide pill) pushing the card past the viewport. */
+  .table-wrap.cards-sm tr {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    overflow-x: hidden;
+  }
+  [data-theme="light"] .table-wrap.cards-sm tr { background: #fff; }
+  .table-wrap.cards-sm tr:last-child { margin-bottom: 0; }
+  .table-wrap.cards-sm tbody tr:hover td { background: transparent; }
 
-.comp-card-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  background: var(--bg);
-  border-radius: var(--radius-sm);
-  margin: 0;
-}
-[data-theme="light"] .comp-card-meta { background: var(--bg-elevated); }
+  /* Default cell: "LABEL" on the left, value on the right, both inside the card
+     padding so the value (e.g. a status pill) can never touch the card edge. */
+  .table-wrap.cards-sm td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    max-width: 100%;
+    padding: 6px 0;
+    border-bottom: none;
+  }
+  .table-wrap.cards-sm td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--txt-3);
+  }
+  /* Value side must be shrinkable so .cell-truncate can ellipsize. */
+  .table-wrap.cards-sm td > * { min-width: 0; max-width: 100%; }
 
-.comp-meta-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 0;
-}
-.comp-meta-label {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--txt-3);
-  font-weight: 600;
-  margin: 0;
-}
-.comp-meta-val {
-  font-size: 13px;
-  color: var(--txt);
-  font-weight: 500;
-  margin: 0;
-  display: inline-flex;
-  align-items: center;
-}
-.comp-meta-link {
-  color: var(--accent-2);
-  text-decoration: none;
-  font-weight: 600;
-}
-.comp-meta-link:hover { text-decoration: underline; }
+  /* Title cell: full-width bold heading, no label. */
+  .table-wrap.cards-sm td.cell-title {
+    display: block;
+    padding-top: 0;
+    padding-bottom: 10px;
+  }
+  .table-wrap.cards-sm td.cell-title::before { display: none; }
+  .table-wrap.cards-sm td.cell-title .td-primary { font-size: 15px; }
 
-.comp-card-actions { display: flex; }
-.comp-card-check {
-  width: 100%;
-  justify-content: center;
-  gap: 8px;
-}
+  /* Full-width value on its own line, no inline label. */
+  .table-wrap.cards-sm td.cell-full { display: block; }
+  .table-wrap.cards-sm td.cell-full::before { display: none; }
 
-/* Inline kebab menu — disclosure inside the card, no popover/modal. */
-.comp-card-menu {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  margin-top: 4px;
-}
-[data-theme="light"] .comp-card-menu { background: var(--bg-elevated); }
-.comp-card-menu[hidden] { display: none; }
+  .table-wrap.cards-sm td.cell-hide-sm { display: none; }
 
-.comp-card-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 12px;
-  min-height: 44px;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-xs);
-  color: var(--txt-2);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.12s, color 0.12s;
+  /* URL row: text flex-shrinks and truncates; the external-link icon is pinned
+     and never shrinks, so a long URL can never determine the card width. */
+  .table-wrap.cards-sm .comp-url-link {
+    display: flex;
+    align-items: center;
+    max-width: 100%;
+    padding: 4px 0;
+  }
+  .table-wrap.cards-sm .comp-url-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .table-wrap.cards-sm .comp-url-icon { flex-shrink: 0; }
+
+  /* Actions row: buttons wrap within the card instead of forcing a wide row. */
+  .table-wrap.cards-sm td.cell-full .td-actions { flex-wrap: wrap; }
 }
-.comp-card-menu-item:hover { background: var(--bg-hover); color: var(--txt); }
-.comp-card-menu-item--danger { color: var(--red-2); }
-.comp-card-menu-item--danger:hover { background: var(--red-dim); color: var(--red-2); }
-.comp-card-menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.comp-card-menu-item svg { flex-shrink: 0; opacity: 0.75; }
 
 /* The plan footnote sits below both layouts; keep it the same on mobile. */
 @media (max-width: 767px) {
