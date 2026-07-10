@@ -297,7 +297,7 @@ const Settings = {
             </div>
             <span class="form-hint">${briefEmailOn
               ? 'We email this address whenever a brief is generated for a tracked competitor.'
-              : 'Brief emails are off. Turn them on below to get each brief in your inbox.'} Set a different address in <a href="#/profile" class="link-accent">Profile</a>, or leave it blank to use your account email. Add Slack or Discord webhooks in <a href="#/profile/integrations" class="link-accent">Profile → Integrations</a>.</span>
+              : 'Brief emails are off. Turn them on below to get each brief in your inbox.'} Set a different address in <a href="#/profile" class="link-accent">Profile</a>, or leave it blank to use your account email. Add Slack or Discord webhooks in the <a href="#/profile/integrations" class="link-accent">Profile Integrations</a> tab.</span>
           </div>
 
           <!-- Brief email on/off -->

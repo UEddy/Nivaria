@@ -215,7 +215,7 @@ const Dashboard = {
                 </div>
                 ${statusBadge}
                 ${!m.matched_competitor_id ? `
-                  <select id="tag-meeting-${m.id}" class="form-input" style="max-width:180px;font-size:12px;padding:6px 8px">
+                  <select id="tag-meeting-${m.id}" class="form-input" style="max-width:180px;font-size:12px;padding:6px 34px 6px 8px">
                     <option value="">Tag manually…</option>
                     ${compOptions}
                   </select>
@@ -330,7 +330,7 @@ const Dashboard = {
                 : `${roiSummary.total_deals} deal${roiSummary.total_deals === 1 ? '' : 's'} logged. Keep logging losses tagged to competitors to surface revenue patterns.`}
             </div>
           </div>
-          <a href="#/deals?tab=roi" class="btn btn-ghost btn-sm" style="flex-shrink:0">Open ROI →</a>
+          <a href="#/deals?tab=roi" class="section-link">Open ROI</a>
         </div>
       </div>`;
   },
@@ -438,7 +438,7 @@ const Dashboard = {
               <div class="card-title">Recent Changes</div>
               <div class="card-sub">Latest competitor intelligence</div>
             </div>
-            <a href="#/history" class="btn btn-ghost btn-sm">View all →</a>
+            <a href="#/history" class="section-link">View all</a>
           </div>
           ${changes.length === 0
             ? `<div class="empty-state" style="padding:40px 0">
@@ -476,7 +476,7 @@ const Dashboard = {
               <div class="card-title">Active Competitors</div>
               <div class="card-sub">${competitors.filter(c => c.active).length} being monitored</div>
             </div>
-            <a href="#/competitors" class="btn btn-ghost btn-sm">Manage →</a>
+            <a href="#/competitors" class="section-link">Manage</a>
           </div>
           ${competitors.length === 0
             ? `<div class="empty-state" style="padding:32px 0">

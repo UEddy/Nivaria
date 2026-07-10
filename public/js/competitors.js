@@ -278,7 +278,7 @@ const Competitors = {
         <div class="form-group">
           <label class="form-label">Competitor <span style="color:var(--red)">*</span></label>
           <select class="form-input" id="comp-group" onchange="Competitors.onGroupChange()">
-            <option value="__new__" ${groups.length === 0 || preId === null ? 'selected' : ''}>+ New competitor</option>
+            <option value="__new__" ${groups.length === 0 || preId === null ? 'selected' : ''}>New competitor</option>
             ${groupOpts}
           </select>
           <span class="form-hint">Attach this page to a competitor you already track, or create a new one. Each page is monitored and briefed on its own. Up to 5 pages per competitor.</span>
