@@ -21,6 +21,9 @@ const { getWorkspaceTier } = require('../lib/tierLimits');
 // Admin identification (ADMIN_EMAILS) now lives in lib/ so the tier-limit layer
 // can share the exact same gate. Re-exported below to keep this module's API.
 const { getAdminEmails, isAdminEmail } = require('../lib/adminEmails');
+// Outbound admin page body (rendered inside renderShell below). The API lives in
+// routes/outbound.js; this is just the server-rendered page shell + client JS.
+const { renderOutboundBody } = require('../outbound/adminPage');
 
 // Minimal HTML escaper for user-controlled values rendered into pages.
 function esc(v) {
@@ -61,6 +64,7 @@ function requireAdmin(req, res, next) {
 function navHtml(active) {
   const links = [
     ['/admin/stats', 'Stats'],
+    ['/admin/outbound', 'Outbound'],
     ['/admin/waitlist', 'Waitlist'],
     ['/admin/users', 'Users'],
     ['/admin/set-tier', 'Grant Pro'],
@@ -406,6 +410,18 @@ function registerAdminRoutes(app) {
       totalUsers, newUsers7d, activeCompetitors,
       tierCounts, waitlistCounts, workspaceCount: wsIds.length,
     }));
+  });
+
+  // Outbound — admin-only lead-gen. Server-rendered page; all data flows through
+  // the /api/admin/outbound/* JSON API (see routes/outbound.js), which enforces
+  // the same admin gate. requireAdmin guarantees req.session.csrfToken for the
+  // page's fetch calls.
+  app.get('/admin/outbound', requireAdmin, (req, res) => {
+    logAudit({ userId: req.adminUser.id, workspaceId: req.workspaceId || null,
+      eventType: 'admin_view_outbound', eventData: {}, req });
+    res.type('html').send(
+      renderShell('Outbound', navHtml('/admin/outbound') + renderOutboundBody(req.session.csrfToken))
+    );
   });
 
   app.get('/admin/waitlist', requireAdmin, (req, res) => {

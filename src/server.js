@@ -32,6 +32,9 @@ const { getUserCurrentWorkspace } = require('./lib/workspace');
 const { registerLegalRoutes } = require('./routes/legal');
 // Phase 12 — developer-only admin views (waitlist), gated by ADMIN_EMAILS.
 const { registerAdminRoutes } = require('./routes/admin');
+// Outbound — admin-only lead-gen. API router + the single access gate.
+const outboundRouter = require('./routes/outbound');
+const { requireOutboundAccess } = require('./outbound/access');
 
 // ── DB-backed session store ────────────────────────────────────────────────────
 
@@ -271,6 +274,12 @@ app.use('/api/playbooks',          limits.api, requireAuth, csrfProtect, playboo
 // Phase 9 — win/loss deals + ROI dashboard. Standard protected mounting.
 app.use('/api/deals', limits.api, requireAuth, csrfProtect, dealsRouter);
 app.use('/api/roi',   limits.api, requireAuth, csrfProtect, roiRouter);
+
+// Outbound (admin-only) — standard protected mounting plus the single access
+// gate. requireOutboundAccess runs after requireAuth (so req.user is set) and is
+// the ONLY place the admin-only policy is enforced for these APIs; non-admins
+// get a JSON 403. See src/outbound/access.js to open this to the public later.
+app.use('/api/admin/outbound', limits.api, requireAuth, csrfProtect, requireOutboundAccess, outboundRouter);
 
 // Phase 10 — billing + GDPR account routes (protected). Per-endpoint rate
 // limits live inside the routers. The public email-link restore is registered

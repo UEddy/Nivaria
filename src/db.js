@@ -570,6 +570,58 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_audit_log_ws_time   ON audit_log(workspace_id, occurred_at DESC);
   CREATE INDEX IF NOT EXISTS idx_audit_log_user_time ON audit_log(user_id, occurred_at DESC);
   CREATE INDEX IF NOT EXISTS idx_audit_log_type      ON audit_log(event_type, occurred_at DESC);
+
+  -- ── Outbound (admin-only lead-generation feature) ────────────────────────────
+  -- A single discovery/scoring/drafting run and the leads it produced. Phase 1 is
+  -- admin-gated (see src/outbound/access.js); the tables are user-scoped via
+  -- created_by so opening the feature to all users later needs no schema change.
+  -- Runs are processed in a background task; the UI polls the run row for status.
+  CREATE TABLE IF NOT EXISTS outbound_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_by INTEGER NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status TEXT NOT NULL DEFAULT 'pending',   -- pending | running | done | error
+    params TEXT,                              -- JSON: { brief, targetCount, regionHints }
+    error_message TEXT,
+    total_found INTEGER DEFAULT 0,
+    total_kept INTEGER DEFAULT 0,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_outbound_runs_creator ON outbound_runs(created_by, created_at DESC);
+
+  -- One ranked lead. "trigger" is a SQLite keyword, so it is always double-quoted
+  -- in queries (see src/outbound/store.js). contact_status is never 'verified' in
+  -- Phase 1 (no email finder): every lead is 'manual' with a profile URL. No
+  -- contact is ever fabricated.
+  CREATE TABLE IF NOT EXISTS outbound_leads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    company TEXT,
+    domain TEXT,
+    category TEXT,
+    stage_size TEXT,
+    region TEXT,
+    "trigger" TEXT,
+    trigger_url TEXT,
+    score INTEGER DEFAULT 0,
+    score_breakdown TEXT,                     -- JSON: { fit, pain, reachability, timing }
+    why_now TEXT,
+    person_name TEXT,
+    person_title TEXT,
+    person_seniority TEXT,
+    channel TEXT,
+    handle_or_email TEXT,
+    contact_status TEXT DEFAULT 'manual',     -- verified | unverified | guessed | manual
+    backup_channel TEXT,
+    draft TEXT,
+    confidence TEXT,                          -- high | medium | low
+    status TEXT NOT NULL DEFAULT 'new',       -- new | contacted | replied | skipped
+    notes TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (run_id) REFERENCES outbound_runs(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_outbound_leads_run    ON outbound_leads(run_id, score DESC);
+  CREATE INDEX IF NOT EXISTS idx_outbound_leads_status ON outbound_leads(status, created_at DESC);
 `;
 
 async function initDb() {
