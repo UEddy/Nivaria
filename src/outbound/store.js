@@ -64,11 +64,25 @@ function hydrateRun(row) {
 
 const LEAD_INSERT_COLS = [
   'run_id', 'company', 'domain', 'category', 'stage_size', 'region',
-  'trigger', 'trigger_url', 'score', 'score_breakdown', 'why_now',
+  'trigger', 'trigger_url', 'trigger_at', 'score', 'score_breakdown', 'why_now',
   'person_name', 'person_title', 'person_seniority',
   'channel', 'handle_or_email', 'contact_status', 'backup_channel',
   'draft', 'confidence',
 ];
+
+// Freshness-first ranking (rule 3). Buckets a lead by how recent its trigger is,
+// so recency dominates the sort and score only breaks ties within a bucket:
+//   0 this week, 1 this month, 2 this quarter, 3 undated, 4 stale (>90 days).
+// `prefix` qualifies the column in a JOIN (e.g. 'l.').
+function freshnessRank(prefix = '') {
+  const col = `${prefix}"trigger_at"`;
+  return `CASE
+    WHEN ${col} IS NULL THEN 3
+    WHEN julianday('now') - julianday(${col}) <= 7  THEN 0
+    WHEN julianday('now') - julianday(${col}) <= 30 THEN 1
+    WHEN julianday('now') - julianday(${col}) <= 90 THEN 2
+    ELSE 4 END`;
+}
 
 function insertLead(runId, lead) {
   const row = {
@@ -80,6 +94,7 @@ function insertLead(runId, lead) {
     region: lead.region || null,
     trigger: lead.trigger || null,
     trigger_url: lead.trigger_url || null,
+    trigger_at: lead.trigger_at || null,
     score: Number.isFinite(lead.score) ? Math.round(lead.score) : 0,
     score_breakdown: JSON.stringify(lead.score_breakdown || {}),
     why_now: lead.why_now || null,
@@ -106,7 +121,10 @@ function insertLead(runId, lead) {
 
 function listLeadsForRun(runId) {
   return getDb()
-    .prepare('SELECT * FROM outbound_leads WHERE run_id = ? ORDER BY score DESC, id ASC')
+    .prepare(
+      `SELECT * FROM outbound_leads WHERE run_id = ?
+       ORDER BY ${freshnessRank()} ASC, score DESC, id ASC`
+    )
     .all(runId)
     .map(hydrateLead);
 }
@@ -120,7 +138,9 @@ function listLeadsForUser(userId, { status } = {}) {
              JOIN outbound_runs r ON r.id = l.run_id
              WHERE r.created_by = ?`;
   if (status) { sql += ' AND l.status = ?'; params.push(status); }
-  sql += ' ORDER BY l.run_id DESC, l.score DESC, l.id ASC';
+  // Freshness first (rule 3): newest triggers lead the pipeline, then score, then
+  // most recent run as the final tiebreaker.
+  sql += ` ORDER BY ${freshnessRank('l.')} ASC, l.score DESC, l.run_id DESC, l.id ASC`;
   return db.prepare(sql).all(...params).map(hydrateLead);
 }
 

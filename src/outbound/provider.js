@@ -20,6 +20,11 @@
 
 const axios = require('axios');
 const { structuredCall } = require('./ai');
+const { withRetry, sleep } = require('../lib/retry');
+
+// Pause between consecutive Serper searches in the discovery loop so one run
+// does not burst past the provider's per-minute limit.
+const SEARCH_GAP_MS = 400;
 
 class OutboundConfigError extends Error {
   constructor(message) { super(message); this.name = 'OutboundConfigError'; }
@@ -56,15 +61,16 @@ class SearchFirstProvider {
   }
 
   // One Serper web search. Returns a compact array of { title, link, snippet }.
+  // A 429 is retried with backoff (1s, 2s, 4s) before we give up on the query.
   async search(query, { num = 10, gl } = {}) {
     this.ensureConfigured();
     try {
       const body = { q: query, num };
       if (gl) body.gl = gl; // country bias, e.g. 'us'
-      const resp = await axios.post(this.endpoint, body, {
+      const resp = await withRetry(() => axios.post(this.endpoint, body, {
         headers: { 'X-API-KEY': this.serperKey, 'Content-Type': 'application/json' },
         timeout: 15000,
-      });
+      }), { label: 'serper search' });
       const organic = Array.isArray(resp.data?.organic) ? resp.data.organic : [];
       return organic.map(r => ({ title: r.title || '', link: r.link || '', snippet: r.snippet || '' }));
     } catch (err) {
@@ -88,7 +94,10 @@ class SearchFirstProvider {
     // 2) Run the searches and aggregate results (deduped by link).
     const seen = new Set();
     const results = [];
+    let first = true;
     for (const q of queries) {
+      if (!first) await sleep(SEARCH_GAP_MS);
+      first = false;
       const hits = await this.search(q, { num: 10, gl });
       for (const h of hits) {
         if (!h.link || seen.has(h.link)) continue;
@@ -108,13 +117,17 @@ class SearchFirstProvider {
       + 'connecting "+"; write "and" instead. Return JSON only.';
     const user = 'ICP brief:\n' + String(brief || '').slice(0, 2000)
       + '\n\nRegion hints: ' + (regionHints || 'none')
+      + '\n\nToday is ' + new Date().toISOString().slice(0, 10) + '.'
       + '\n\nSearch results (JSON):\n' + JSON.stringify(results.slice(0, 60))
       + `\n\nReturn up to ${Math.min(targetCount * 2, 40)} candidates as JSON:`
       + '\n{ "candidates": [ { "company": string, "domain": string|null, "category": string, '
       + '"stage_size": string, "region": string, "trigger": string (the ONE specific reason now), '
-      + '"trigger_url": string (MUST be one of the result links above) } ] }'
+      + '"trigger_url": string (MUST be one of the result links above), '
+      + '"trigger_date": string|null (ISO YYYY-MM-DD when the trigger happened, inferred from the '
+      + 'result; null if the result gives no date) } ] }'
       + '\nOnly include a candidate if you can point to a real trigger_url from the results. '
-      + 'Do not invent companies or URLs.';
+      + 'Prefer the freshest triggers (this week, this month) over older ones. '
+      + 'Do not invent companies, URLs, or dates.';
 
     const parsed = await structuredCall({ system, user, maxTokens: 3000 });
     const list = Array.isArray(parsed?.candidates) ? parsed.candidates : [];
@@ -137,10 +150,14 @@ class SearchFirstProvider {
         region: c.region || null,
         trigger: c.trigger || null,
         trigger_url: c.trigger_url,
+        trigger_date: normalizeTriggerDate(c.trigger_date),
       });
-      if (out.length >= targetCount) break;
     }
-    return out;
+    // Freshness first: surface the companies with the newest triggers before the
+    // older ones, then cap. Undated triggers sort after dated ones. Ranking and
+    // stale down-weighting happen again at persist/query time (see store.js).
+    out.sort((a, b) => triggerRecencyRank(a.trigger_date) - triggerRecencyRank(b.trigger_date));
+    return out.slice(0, targetCount);
   }
 
   // Model-expanded search queries, with a static fallback if the model is
@@ -171,23 +188,39 @@ class SearchFirstProvider {
     const hits = await this.search(q, { num: 10 });
     if (!hits.length) return [];
 
-    const system = 'From LinkedIn search results, identify the single best contact at the named '
-      + 'company for competitor-intelligence outreach, preferring the given roles. Return JSON only. '
-      + 'Never invent a person or a profile URL: use only what appears in the results.';
+    const system = 'From LinkedIn search results, identify the single best CURRENT contact at the '
+      + 'named company for competitor-intelligence outreach, preferring the given roles. Only choose '
+      + 'someone who still works at the company today: the result must show the role as current '
+      + '(present tense, no end date, and the headline is not prefixed "Ex-", "former", "formerly", '
+      + 'or "previously"), or a recent source must tie them to the company. If the only matches have '
+      + 'left the company (headline says "Ex-Company", "former", or "previously"), return '
+      + '{ "person": null }. Return JSON only. Never invent a person or a profile URL: use only what '
+      + 'appears in the results.';
     const user = `Company: ${company}\nPreferred roles: ${roleTerms.join(', ')}\n\n`
       + 'Results (JSON):\n' + JSON.stringify(hits)
-      + '\n\nReturn: { "person": { "person_name": string, "person_title": string, '
-      + '"person_seniority": string, "profileUrl": string (must be one of the result links), '
-      + '"channel": "linkedin" } } or { "person": null } if none fit.';
+      + '\n\nReturn: { "person": { "person_name": string, "person_title": string (their CURRENT '
+      + 'title at the company), "person_seniority": string, "profileUrl": string (must be one of the '
+      + 'result links), "channel": "linkedin", "employment_verified": boolean (true only if the '
+      + 'results show they currently work at the company), "employment_evidence": string (the exact '
+      + 'phrase from the result that shows current employment) } } or { "person": null } if no '
+      + 'current employee fits.';
     const parsed = await structuredCall({ system, user, maxTokens: 800 });
     const p = parsed?.person;
     if (!p || !p.profileUrl || !hits.some(h => h.link === p.profileUrl)) return [];
+    // Rule 1: never surface a past employee. Require the model's present-tense
+    // confirmation, and reject anyone whose own result still reads as a former
+    // employee of THIS company (a backstop for model slips).
+    if (p.employment_verified !== true) return [];
+    const matched = hits.find(h => h.link === p.profileUrl);
+    const evidence = `${p.person_title || ''} ${matched?.title || ''} ${matched?.snippet || ''}`;
+    if (looksFormerAtCompany(evidence, company)) return [];
     return [{
       person_name: p.person_name || null,
       person_title: p.person_title || null,
       person_seniority: p.person_seniority || null,
       profileUrl: p.profileUrl,
       channel: p.channel || 'linkedin',
+      employment_verified: true,
     }];
   }
 
@@ -207,6 +240,46 @@ class SearchFirstProvider {
 
 function domainFromUrl(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch (_) { return null; }
+}
+
+function escapeRegex(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// True when the text reads as a PAST employee of this specific company, e.g.
+// "Ex-Acme", "formerly at Acme", "previously Acme", "left Acme". Tied to the
+// company name within a short window so an unrelated "formerly at Google" on
+// someone who now works at Acme does not trip it.
+function looksFormerAtCompany(text, company) {
+  const t = ` ${String(text || '').toLowerCase()} `;
+  const c = String(company || '').toLowerCase().trim();
+  if (!c) return false;
+  const cq = escapeRegex(c);
+  return (
+    new RegExp(`\\bex[-\\s]?${cq}\\b`).test(t) ||
+    new RegExp(`\\b(former|formerly|previously)\\b[^.;|]{0,40}\\b${cq}\\b`).test(t) ||
+    new RegExp(`\\b(left|no longer (?:at|with))\\b[^.;|]{0,20}\\b${cq}\\b`).test(t)
+  );
+}
+
+// Normalize a model-supplied trigger date to an ISO YYYY-MM-DD string, or null.
+// Rejects unparseable, future (beyond today), or absurdly old (>10 years) values
+// so a hallucinated date cannot masquerade as fresh intel.
+function normalizeTriggerDate(v) {
+  if (!v) return null;
+  const t = Date.parse(String(v));
+  if (!Number.isFinite(t)) return null;
+  const now = Date.now();
+  if (t > now + 86400000) return null;                 // future
+  if (t < now - 10 * 365 * 86400000) return null;      // older than ~10 years
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+// Sort key for freshness-first ordering: newer dates rank lower (come first),
+// undated triggers rank last.
+function triggerRecencyRank(dateStr) {
+  const t = Date.parse(dateStr || '');
+  return Number.isFinite(t) ? -t : Infinity;
 }
 
 // Very light region -> Serper country-code hint.

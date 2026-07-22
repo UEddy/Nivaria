@@ -603,6 +603,7 @@ const SCHEMA = `
     region TEXT,
     "trigger" TEXT,
     trigger_url TEXT,
+    trigger_at DATETIME,                      -- when the trigger happened; drives freshness-first ranking
     score INTEGER DEFAULT 0,
     score_breakdown TEXT,                     -- JSON: { fit, pain, reachability, timing }
     why_now TEXT,
@@ -816,6 +817,16 @@ async function initDb() {
   // Phase 5: speed up per-competitor reverse-chronological lookups used by
   // historicalContext.getCompetitorHistory and the new timeline endpoints.
   sqlDb.exec('CREATE INDEX IF NOT EXISTS idx_changes_competitor_detected ON changes(competitor_id, detected_at DESC);');
+
+  // Outbound leads: trigger recency for freshness-first ranking (additive; existing
+  // DBs created the table before this column existed). Nullable, so leads whose
+  // trigger could not be dated sort below dated-fresh leads (see store.js
+  // freshnessRank). The table may not exist on a brand-new DB until SCHEMA runs
+  // above, so guard on it being present.
+  const outboundLeadCols = (sqlDb.exec('PRAGMA table_info(outbound_leads)')[0]?.values || []).map(v => v[1]);
+  if (outboundLeadCols.length && !outboundLeadCols.includes('trigger_at')) {
+    sqlDb.run('ALTER TABLE outbound_leads ADD COLUMN trigger_at DATETIME');
+  }
 
   saveDb();
 

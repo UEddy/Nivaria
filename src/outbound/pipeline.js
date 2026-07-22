@@ -14,9 +14,15 @@ const { getProvider, OutboundConfigError, rolesForStage } = require('./provider'
 const { structuredCall, draftCall } = require('./ai');
 const { getAgentPrompt } = require('./agentPrompt');
 const { sanitizeCopy, sanitizeCopyDeep } = require('../lib/sanitizeText');
+const { sleep } = require('../lib/retry');
 
 const SCORE_THRESHOLD = 60;   // drop candidates scoring below this
 const HARD_CAP = 25;          // never process more than this many companies
+
+// Each company costs one search plus two model calls. At the hard cap that is
+// 75 calls, so we space companies out to stay under provider per-minute limits.
+// withRetry() in lib/retry.js is the backstop when we still get a 429.
+const COMPANY_GAP_MS = 750;
 
 // Kick off a run in the background. Returns immediately.
 function startRun(runId) {
@@ -54,7 +60,10 @@ async function runPipeline(runId) {
   const totalFound = candidates.length;
   let kept = 0;
 
+  let firstCompany = true;
   for (const company of candidates) {
+    if (!firstCompany) await sleep(COMPANY_GAP_MS);
+    firstCompany = false;
     try {
       const lead = await buildLead(provider, brief, company);
       if (!lead) continue;                       // dropped below threshold
@@ -70,9 +79,11 @@ async function runPipeline(runId) {
 }
 
 // Build one persisted-shaped lead from a company candidate: person -> contact ->
-// score -> draft. Returns null if it scores below threshold.
+// score -> draft. Returns null when the company is not a lead: no verified
+// current person (rule 1), no usable contact (rule 2), or a below-threshold score.
 async function buildLead(provider, brief, company) {
-  // People + contact (never fabricated).
+  // People + contact (never fabricated). findPeople only returns a person whose
+  // current employment at the company is verified (see provider.findPeople).
   const roles = rolesForStage(company.stage_size);
   let person = null, contact = null;
   try {
@@ -81,22 +92,23 @@ async function buildLead(provider, brief, company) {
   } catch (err) {
     console.warn('[outbound.pipeline] findPeople failed:', company.company, '-', safeMsg(err));
   }
-  if (person) {
-    try { contact = await provider.findContact(person); } catch (_) { contact = null; }
-  }
+  // Rule 1 + 2: no verified current person means the company is not a lead.
+  if (!person) return null;
+
+  try { contact = await provider.findContact(person); } catch (_) { contact = null; }
+  // Rule 2: require a usable way to reach them (a valid profile URL or a found
+  // email). No reachable contact means the company is dropped, never shown blank.
+  if (!hasUsableContact(person, contact)) return null;
 
   // Score on the rubric (fit 30 / pain 30 / reachability 20 / timing 20).
   const scoreResult = await scoreCandidate(brief, company, person);
   const score = Number.isFinite(scoreResult?.score) ? scoreResult.score : 0;
   if (score < SCORE_THRESHOLD) return null;
 
-  // Draft (only if we have someone to write to).
-  let draft = null, confidence = scoreResult?.confidence || null;
-  if (person) {
-    const drafted = await draftMessage(company, person, contact);
-    draft = drafted?.text || null;
-    confidence = drafted?.confidence || confidence;
-  }
+  // Draft (we always have a verified someone to write to by this point).
+  const drafted = await draftMessage(company, person, contact);
+  const draft = drafted?.text || null;
+  const confidence = drafted?.confidence || scoreResult?.confidence || null;
 
   return {
     company: company.company,
@@ -106,6 +118,7 @@ async function buildLead(provider, brief, company) {
     region: company.region,
     trigger: company.trigger,
     trigger_url: company.trigger_url,
+    trigger_at: company.trigger_date || null,
     score,
     score_breakdown: scoreResult?.score_breakdown || {},
     why_now: scoreResult?.why_now || null,
@@ -130,9 +143,13 @@ async function scoreCandidate(brief, company, person) {
     + 'pain (0-30), reachability (0-20), timing (0-20). Be strict. Return JSON only. Never use '
     + 'em-dashes, en-dashes, or a connecting "+"; write "and" instead.';
   const user = 'ICP brief:\n' + String(brief || '').slice(0, 1500)
+    + '\n\nToday is ' + new Date().toISOString().slice(0, 10) + '. Weight timing on how recent the '
+    + 'trigger is: a trigger from the last few days scores near full timing, one older than about 90 '
+    + 'days scores near zero.'
     + '\n\nCandidate:\n' + JSON.stringify({
       company: company.company, category: company.category, stage_size: company.stage_size,
       region: company.region, trigger: company.trigger, trigger_url: company.trigger_url,
+      trigger_date: company.trigger_date || null,
       person: person ? { title: person.person_title, seniority: person.person_seniority } : null,
     })
     + '\n\nReturn: { "score": int 0-100, "score_breakdown": { "fit": int, "pain": int, '
@@ -203,6 +220,19 @@ function normalizeConfidence(c) {
 }
 function safeMsg(err) {
   return String(err?.message || err || 'unknown error').slice(0, 500);
+}
+
+// A usable contact is a valid profile URL or a found email. Anything else (empty,
+// "manual" with no link) means the company has no reachable contact and is dropped.
+function isUsableContactValue(v) {
+  if (!v) return false;
+  const s = String(v).trim();
+  return /^https?:\/\/\S+\.\S+/.test(s) || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+function hasUsableContact(person, contact) {
+  return isUsableContactValue(contact?.handle_or_email)
+    || isUsableContactValue(contact?.profileUrl)
+    || isUsableContactValue(person?.profileUrl);
 }
 
 module.exports = { startRun, redraftLead, SCORE_THRESHOLD, HARD_CAP };
