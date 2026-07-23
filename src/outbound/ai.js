@@ -8,9 +8,12 @@
 //
 // Every call is capped on max_tokens and never throws past the caller: the
 // pipeline wraps each lead in try/catch, so a single bad call degrades that lead
-// rather than failing the run.
+// rather than failing the run. Both shapes go through withRetry(), so a 429 or a
+// 529 overload backs off (1s, 2s, 4s) instead of degrading the lead on the first
+// rate-limit blip.
 
 const Anthropic = require('@anthropic-ai/sdk');
+const { withRetry } = require('../lib/retry');
 
 // Matches the model used elsewhere in the app (src/analyzer.js).
 const MODEL = 'claude-sonnet-4-6';
@@ -18,7 +21,10 @@ const MODEL = 'claude-sonnet-4-6';
 let client;
 function getClient() {
   if (!client) {
-    client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    // maxRetries: 0 because withRetry() owns the backoff for these calls. Left
+    // at the SDK default the two schemes would compound into a much longer,
+    // harder-to-reason-about wait.
+    client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 });
   }
   return client;
 }
@@ -56,12 +62,12 @@ function extractJson(text) {
 async function structuredCall({ system, user, maxTokens = 2000 }) {
   if (!hasKey()) return null;
   const attempt = async (extra) => {
-    const resp = await getClient().messages.create({
+    const resp = await withRetry(() => getClient().messages.create({
       model: MODEL,
       max_tokens: maxTokens,
       system,
       messages: [{ role: 'user', content: extra ? `${user}\n\n${extra}` : user }],
-    });
+    }), { label: 'anthropic structuredCall' });
     const text = resp?.content?.map(b => b.text || '').join('') || '';
     return extractJson(text);
   };
@@ -80,12 +86,12 @@ async function structuredCall({ system, user, maxTokens = 2000 }) {
 async function draftCall({ system, user, maxTokens = 700 }) {
   if (!hasKey()) return null;
   try {
-    const resp = await getClient().messages.create({
+    const resp = await withRetry(() => getClient().messages.create({
       model: MODEL,
       max_tokens: maxTokens,
       system,
       messages: [{ role: 'user', content: user }],
-    });
+    }), { label: 'anthropic draftCall' });
     return resp?.content?.map(b => b.text || '').join('').trim() || null;
   } catch (err) {
     console.warn('[outbound.ai] draftCall failed:', err?.message || err);
