@@ -13,7 +13,7 @@ const store = require('./store');
 const { getProvider, OutboundConfigError, rolesForStage } = require('./provider');
 const { structuredCall, draftCall } = require('./ai');
 const { getAgentPrompt } = require('./agentPrompt');
-const { makeFunnel, formatFunnel } = require('./funnel');
+const { makeFunnel, formatFunnel, totalRejectedPeople } = require('./funnel');
 const { sanitizeCopy, sanitizeCopyDeep } = require('../lib/sanitizeText');
 const { sleep } = require('../lib/retry');
 
@@ -64,13 +64,16 @@ async function runPipeline(runId) {
 
   const totalFound = candidates.length;
   let kept = 0;
+  // Every scored candidate (kept or dropped) so the score distribution can be
+  // inspected when below-threshold turns out to dominate the funnel.
+  const scoreLog = [];
 
   let firstCompany = true;
   for (const company of candidates) {
     if (!firstCompany) await sleep(COMPANY_GAP_MS);
     firstCompany = false;
     try {
-      const lead = await buildLead(provider, brief, company, funnel);
+      const lead = await buildLead(provider, brief, company, funnel, scoreLog);
       if (!lead) continue;                       // rejected upstream; funnel already tallied
       store.insertLead(runId, lead);
       kept += 1;
@@ -83,12 +86,44 @@ async function runPipeline(runId) {
   funnel.kept = kept;
   store.updateRun(runId, { status: 'done', total_found: totalFound, total_kept: kept, funnel });
   console.log(formatFunnel(funnel, runId));
+  logScoreDistributionIfBelowThresholdDominates(runId, funnel, scoreLog);
+}
+
+// Diagnostic: when below-threshold is the single largest funnel bucket, the
+// scores themselves are the thing to inspect, so dump the full distribution with
+// each candidate's sub-score breakdown. Inert (logs nothing) otherwise, to keep
+// the log quiet on healthy runs.
+function logScoreDistributionIfBelowThresholdDominates(runId, funnel, scoreLog) {
+  const buckets = {
+    no_person: funnel.no_person,
+    rejected: totalRejectedPeople(funnel),
+    no_contact: funnel.no_contact,
+    below_threshold: funnel.below_threshold,
+    kept: funnel.kept,
+  };
+  const dominant = Object.keys(buckets).reduce((a, b) => (buckets[b] > buckets[a] ? b : a));
+  if (dominant !== 'below_threshold' || !funnel.below_threshold || !scoreLog.length) return;
+
+  const rows = scoreLog.slice().sort((a, b) => b.score - a.score);
+  const lines = ['[outbound.pipeline] run #' + runId
+    + ' below-threshold dominates (' + funnel.below_threshold + ' dropped, threshold '
+    + SCORE_THRESHOLD + '). Score distribution:'];
+  for (const r of rows) {
+    const b = r.breakdown || {};
+    const g = (v) => (Number.isFinite(v) ? v : '?');
+    lines.push('  ' + String(r.score).padStart(3)
+      + '  fit ' + g(b.fit) + ', pain ' + g(b.pain) + ', reach ' + g(b.reachability)
+      + ', timing ' + g(b.timing)
+      + '  trigger_date=' + (r.trigger_date || 'null')
+      + '  ' + (r.company || '?'));
+  }
+  console.log(lines.join('\n'));
 }
 
 // Build one persisted-shaped lead from a company candidate: person -> contact ->
 // score -> draft. Returns null when the company is not a lead: no verified
 // current person (rule 1), no usable contact (rule 2), or a below-threshold score.
-async function buildLead(provider, brief, company, funnel) {
+async function buildLead(provider, brief, company, funnel, scoreLog) {
   // People + contact (never fabricated). findPeople only returns a person whose
   // current employment at the company is verified (see provider.findPeople), and
   // it records the per-gate rejection reason into the funnel itself.
@@ -114,6 +149,14 @@ async function buildLead(provider, brief, company, funnel) {
   // Score on the rubric (fit 30 / pain 30 / reachability 20 / timing 20).
   const scoreResult = await scoreCandidate(brief, company, person);
   const score = Number.isFinite(scoreResult?.score) ? scoreResult.score : 0;
+  if (scoreLog) {
+    scoreLog.push({
+      company: company.company,
+      score,
+      breakdown: scoreResult?.score_breakdown || {},
+      trigger_date: company.trigger_date || null,
+    });
+  }
   if (score < SCORE_THRESHOLD) { if (funnel) funnel.below_threshold += 1; return null; }
 
   // Draft (we always have a verified someone to write to by this point).
@@ -154,9 +197,12 @@ async function scoreCandidate(brief, company, person) {
     + 'pain (0-30), reachability (0-20), timing (0-20). Be strict. Return JSON only. Never use '
     + 'em-dashes, en-dashes, or a connecting "+"; write "and" instead.';
   const user = 'ICP brief:\n' + String(brief || '').slice(0, 1500)
-    + '\n\nToday is ' + new Date().toISOString().slice(0, 10) + '. Weight timing on how recent the '
-    + 'trigger is: a trigger from the last few days scores near full timing, one older than about 90 '
-    + 'days scores near zero.'
+    + '\n\nToday is ' + new Date().toISOString().slice(0, 10) + '. Score the timing sub-score (0 to '
+    + '20) on how recent the trigger is, scaled across a full 6 months: a trigger from the last few '
+    + 'days scores near the full 20, one about 3 months old scores around half, and one approaching '
+    + '6 months old scores low but not zero. If trigger_date is null the recency is UNKNOWN, not '
+    + 'old: give timing a neutral score of about 10 out of 20, and never score timing at 0 just '
+    + 'because the date is missing.'
     + '\n\nCandidate:\n' + JSON.stringify({
       company: company.company, category: company.category, stage_size: company.stage_size,
       region: company.region, trigger: company.trigger, trigger_url: company.trigger_url,

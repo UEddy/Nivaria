@@ -76,17 +76,22 @@ const LEAD_INSERT_COLS = [
 ];
 
 // Freshness-first ranking (rule 3). Buckets a lead by how recent its trigger is,
-// so recency dominates the sort and score only breaks ties within a bucket:
-//   0 this week, 1 this month, 2 this quarter, 3 undated, 4 stale (>90 days).
-// `prefix` qualifies the column in a JOIN (e.g. 'l.').
+// so recency dominates the sort and score only breaks ties within a bucket. The
+// window spans a full 6 months (triggers up to 180 days old stay valid):
+//   0 this week, 1 this month, 2 last 3 months, 3 three to six months,
+//   4 undated, 5 stale (>180 days).
+// Undated triggers rank above stale (a missing date is unknown recency, not old)
+// but below any dated-valid lead. Stale is down-ranked, not dropped, because the
+// dates are model-inferred. `prefix` qualifies the column in a JOIN (e.g. 'l.').
 function freshnessRank(prefix = '') {
   const col = `${prefix}"trigger_at"`;
   return `CASE
-    WHEN ${col} IS NULL THEN 3
-    WHEN julianday('now') - julianday(${col}) <= 7  THEN 0
-    WHEN julianday('now') - julianday(${col}) <= 30 THEN 1
-    WHEN julianday('now') - julianday(${col}) <= 90 THEN 2
-    ELSE 4 END`;
+    WHEN ${col} IS NULL THEN 4
+    WHEN julianday('now') - julianday(${col}) <= 7   THEN 0
+    WHEN julianday('now') - julianday(${col}) <= 30  THEN 1
+    WHEN julianday('now') - julianday(${col}) <= 90  THEN 2
+    WHEN julianday('now') - julianday(${col}) <= 180 THEN 3
+    ELSE 5 END`;
 }
 
 function insertLead(runId, lead) {

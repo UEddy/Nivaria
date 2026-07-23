@@ -127,8 +127,9 @@ class SearchFirstProvider {
       + '"trigger_date": string|null (ISO YYYY-MM-DD when the trigger happened, inferred from the '
       + 'result; null if the result gives no date) } ] }'
       + '\nOnly include a candidate if you can point to a real trigger_url from the results. '
-      + 'Prefer the freshest triggers (this week, this month) over older ones. '
-      + 'Do not invent companies, URLs, or dates.';
+      + 'Triggers up to 6 months old are acceptable: prefer the freshest (this week, this month) '
+      + 'over older ones, but do NOT discard a candidate just because its trigger is a few months '
+      + 'old. Do not invent companies, URLs, or dates.';
 
     const parsed = await structuredCall({ system, user, maxTokens: 3000 });
     const list = Array.isArray(parsed?.candidates) ? parsed.candidates : [];
