@@ -54,6 +54,16 @@ function renderOutboundBody(csrfToken) {
       .why-now { color: var(--txt-2); font-size: 0.8125rem; }
       #ob-error { display: none; }
       .ob-inline-note { font-size: 0.75rem; color: var(--txt-3); margin-top: 6px; }
+      .ob-funnel { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-2); padding: 14px 16px; margin: 0 0 16px; }
+      .ob-funnel-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--txt-3); font-weight: 700; margin-bottom: 12px; }
+      .ob-funnel-row { display: flex; flex-wrap: wrap; gap: 10px; }
+      .ob-stat { flex: 1 1 92px; min-width: 92px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; }
+      .ob-stat-v { font-size: 1.15rem; font-weight: 800; color: var(--txt); line-height: 1.1; }
+      .ob-stat.kept .ob-stat-v { color: #34D399; }
+      .ob-stat.drop .ob-stat-v { color: #FBBF24; }
+      .ob-stat-l { font-size: 0.7rem; color: var(--txt-3); margin-top: 3px; }
+      .ob-funnel-break { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+      .ob-break-chip { font-size: 0.72rem; color: var(--txt-2); background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.25); border-radius: 999px; padding: 3px 9px; }
     </style>
 
     <div id="ob-error" class="note note-err"></div>
@@ -84,6 +94,7 @@ function renderOutboundBody(csrfToken) {
 
       <div>
         <div class="admin-head"><h1 style="font-size:1.05rem" id="ob-leads-title">Leads</h1></div>
+        <div id="ob-funnel"></div>
         <div id="ob-leads-wrap">
           <p class="empty">Start a run to see ranked leads here.</p>
         </div>
@@ -99,6 +110,7 @@ function renderOutboundBody(csrfToken) {
       var BASE = '/api/admin/outbound';
       var pollTimer = null;
       var activeRunId = null;
+      var runsById = {};
 
       function el(id) { return document.getElementById(id); }
       function showError(msg) { var e = el('ob-error'); e.textContent = msg; e.style.display = 'block'; }
@@ -130,6 +142,8 @@ function renderOutboundBody(csrfToken) {
       function renderRuns(runs) {
         var ul = el('ob-runs');
         ul.textContent = '';
+        runsById = {};
+        runs.forEach(function (run) { runsById[run.id] = run; });
         if (!runs.length) { var li = document.createElement('li'); li.className = 'muted'; li.style.padding = '8px'; li.textContent = 'No runs yet.'; ul.appendChild(li); return; }
         runs.forEach(function (run) {
           var li = document.createElement('li');
@@ -154,8 +168,8 @@ function renderOutboundBody(csrfToken) {
         activeRunId = runId;
         el('ob-leads-title').textContent = 'Leads · Run #' + runId;
         loadRuns();
-        if (status === 'running' || status === 'pending') { startPolling(runId); renderLeadsLoading(); }
-        else { stopPolling(); loadLeads(runId); }
+        if (status === 'running' || status === 'pending') { renderFunnel(null); startPolling(runId); renderLeadsLoading(); }
+        else { stopPolling(); renderFunnel(runsById[runId]); loadLeads(runId); }
       }
 
       function startPolling(runId) {
@@ -166,13 +180,66 @@ function renderOutboundBody(csrfToken) {
             loadRuns();
             if (run.status === 'done' || run.status === 'error') {
               stopPolling();
-              if (run.status === 'error') { renderLeadsError(run.error_message || 'Run failed.'); }
-              else { loadLeads(runId); }
+              if (run.status === 'error') { renderFunnel(null); renderLeadsError(run.error_message || 'Run failed.'); }
+              else { renderFunnel(run); loadLeads(runId); }
             }
           }).catch(function (e) { stopPolling(); showError(e.message); });
         }, 2500);
       }
       function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+      // ── Funnel ────────────────────────────────────────────────────────────────
+      // Per-run funnel summary: where candidates died on their way to a lead.
+      var REJ_LABELS = {
+        not_in_hits: 'Profile not in results',
+        employment_unverified: 'Employment not verified',
+        former_employee: 'Former employee',
+        company_match_false: 'Company not affirmed',
+        employer_mismatch: 'Employer name mismatch'
+      };
+      var REJ_ORDER = ['not_in_hits', 'employment_unverified', 'former_employee', 'company_match_false', 'employer_mismatch'];
+
+      function funnelStat(label, value, cls) {
+        var s = document.createElement('div'); s.className = 'ob-stat' + (cls ? ' ' + cls : '');
+        var v = document.createElement('div'); v.className = 'ob-stat-v'; v.textContent = (value == null ? 0 : value);
+        var l = document.createElement('div'); l.className = 'ob-stat-l'; l.textContent = label;
+        s.appendChild(v); s.appendChild(l); return s;
+      }
+
+      function renderFunnel(run) {
+        var wrap = el('ob-funnel');
+        wrap.textContent = '';
+        if (!run || !run.funnel) return;
+        var f = run.funnel;
+        var rej = f.rejected || {};
+        var rejTotal = REJ_ORDER.reduce(function (n, k) { return n + (rej[k] || 0); }, 0);
+
+        var panel = document.createElement('div'); panel.className = 'ob-funnel';
+        var title = document.createElement('div'); title.className = 'ob-funnel-title'; title.textContent = 'Run funnel';
+        panel.appendChild(title);
+
+        var row = document.createElement('div'); row.className = 'ob-funnel-row';
+        row.appendChild(funnelStat('Discovered (raw)', f.discovered_raw));
+        row.appendChild(funnelStat('After dedupe', f.after_dedupe));
+        row.appendChild(funnelStat('No person', f.no_person, 'drop'));
+        row.appendChild(funnelStat('People rejected', rejTotal, 'drop'));
+        row.appendChild(funnelStat('No contact', f.no_contact, 'drop'));
+        row.appendChild(funnelStat('Below score', f.below_threshold, 'drop'));
+        row.appendChild(funnelStat('Kept', f.kept, 'kept'));
+        panel.appendChild(row);
+
+        if (rejTotal) {
+          var br = document.createElement('div'); br.className = 'ob-funnel-break';
+          REJ_ORDER.forEach(function (k) {
+            if (!rej[k]) return;
+            var chip = document.createElement('span'); chip.className = 'ob-break-chip';
+            chip.textContent = REJ_LABELS[k] + ': ' + rej[k];
+            br.appendChild(chip);
+          });
+          panel.appendChild(br);
+        }
+        wrap.appendChild(panel);
+      }
 
       // ── Leads ─────────────────────────────────────────────────────────────────
       function renderLeadsLoading() { el('ob-leads-wrap').innerHTML = '<p class="empty">Finding leads… this can take a minute.</p>'; }
@@ -323,6 +390,7 @@ function renderOutboundBody(csrfToken) {
         }).then(function (data) {
           activeRunId = data.id;
           el('ob-leads-title').textContent = 'Leads · Run #' + data.id;
+          renderFunnel(null);
           renderLeadsLoading();
           loadRuns();
           startPolling(data.id);

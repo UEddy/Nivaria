@@ -585,6 +585,7 @@ const SCHEMA = `
     error_message TEXT,
     total_found INTEGER DEFAULT 0,
     total_kept INTEGER DEFAULT 0,
+    funnel TEXT,                              -- JSON: per-stage rejection counters (see src/outbound/funnel.js)
     FOREIGN KEY (created_by) REFERENCES users(id)
   );
   CREATE INDEX IF NOT EXISTS idx_outbound_runs_creator ON outbound_runs(created_by, created_at DESC);
@@ -826,6 +827,14 @@ async function initDb() {
   const outboundLeadCols = (sqlDb.exec('PRAGMA table_info(outbound_leads)')[0]?.values || []).map(v => v[1]);
   if (outboundLeadCols.length && !outboundLeadCols.includes('trigger_at')) {
     sqlDb.run('ALTER TABLE outbound_leads ADD COLUMN trigger_at DATETIME');
+  }
+
+  // Outbound runs: per-stage funnel counters (additive; existing DBs created the
+  // table before this column existed). Nullable JSON text; null on older runs
+  // that predate funnel tracking. Guard on the table being present.
+  const outboundRunCols = (sqlDb.exec('PRAGMA table_info(outbound_runs)')[0]?.values || []).map(v => v[1]);
+  if (outboundRunCols.length && !outboundRunCols.includes('funnel')) {
+    sqlDb.run('ALTER TABLE outbound_runs ADD COLUMN funnel TEXT');
   }
 
   saveDb();

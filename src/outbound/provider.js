@@ -20,6 +20,7 @@
 
 const axios = require('axios');
 const { structuredCall } = require('./ai');
+const { recordRejection } = require('./funnel');
 const { withRetry, sleep } = require('../lib/retry');
 
 // Pause between consecutive Serper searches in the discovery loop so one run
@@ -84,7 +85,7 @@ class SearchFirstProvider {
   }
 
   // ── Discover ─────────────────────────────────────────────────────────────────
-  async discoverCompanies(brief, { targetCount = 10, regionHints = '' } = {}) {
+  async discoverCompanies(brief, { targetCount = 10, regionHints = '', funnel = null } = {}) {
     this.ensureConfigured();
     const gl = regionHintToGl(regionHints);
 
@@ -131,6 +132,7 @@ class SearchFirstProvider {
 
     const parsed = await structuredCall({ system, user, maxTokens: 3000 });
     const list = Array.isArray(parsed?.candidates) ? parsed.candidates : [];
+    if (funnel) funnel.discovered_raw = list.length; // raw, pre-dedupe
 
     // 4) Keep only candidates whose trigger_url actually appeared in results.
     const validLinks = seen;
@@ -153,6 +155,7 @@ class SearchFirstProvider {
         trigger_date: normalizeTriggerDate(c.trigger_date),
       });
     }
+    if (funnel) funnel.after_dedupe = out.length; // survivors of dedupe + exclusion rules
     // Freshness first: surface the companies with the newest triggers before the
     // older ones, then cap. Undated triggers sort after dated ones. Ranking and
     // stale down-weighting happen again at persist/query time (see store.js).
@@ -181,47 +184,57 @@ class SearchFirstProvider {
   }
 
   // ── People ────────────────────────────────────────────────────────────────────
-  async findPeople(company, roles) {
+  // opts.funnel (optional) is a per-run counter object (see funnel.js). When
+  // present, this records why a company yields no person: no search hits or a
+  // model that named no one (no_person), or a candidate that failed a specific
+  // gate in classifyPersonResult (rejected.<reason>).
+  async findPeople(company, roles, { funnel = null } = {}) {
     this.ensureConfigured();
     const roleTerms = (roles && roles.length ? roles : ['Founder', 'Product Marketing']).slice(0, 4);
     const q = `"${company}" (${roleTerms.map(r => `"${r}"`).join(' OR ')}) site:linkedin.com/in`;
     const hits = await this.search(q, { num: 10 });
-    if (!hits.length) return [];
+    if (!hits.length) { if (funnel) funnel.no_person += 1; return []; }
 
     const system = 'From LinkedIn search results, identify the single best CURRENT contact at the '
-      + 'named company for competitor-intelligence outreach, preferring the given roles. Only choose '
-      + 'someone who still works at the company today: the result must show the role as current '
-      + '(present tense, no end date, and the headline is not prefixed "Ex-", "former", "formerly", '
-      + 'or "previously"), or a recent source must tie them to the company. If the only matches have '
-      + 'left the company (headline says "Ex-Company", "former", or "previously"), return '
-      + '{ "person": null }. Return JSON only. Never invent a person or a profile URL: use only what '
-      + 'appears in the results.';
+      + 'named company for competitor-intelligence outreach, preferring the given roles. Two '
+      + 'separate checks must BOTH pass. (1) Employment is current: the result shows the role as '
+      + 'present (present tense, no end date, and the headline is not prefixed "Ex-", "former", '
+      + '"formerly", or "previously"), or a recent source ties them to the company today. (2) The '
+      + 'company is the RIGHT one: the employer named on the person\'s own profile must be the '
+      + 'target company. A matching job title at some OTHER company is never enough. Report '
+      + 'current_employer exactly as it appears on the profile, and set company_match=true ONLY '
+      + 'when that employer is the target company (allowing casing, domain forms, and legal-entity '
+      + 'variants like "Labs", "Association", or "Inc"). If the only matches have left the company '
+      + 'or work somewhere else, return { "person": null }. When in doubt, return null rather than '
+      + 'guess. Never invent a person, an employer, or a profile URL: use only what appears in the '
+      + 'results. Never use em-dashes, en-dashes, or a connecting "+"; write "and" instead. Return '
+      + 'JSON only.';
     const user = `Company: ${company}\nPreferred roles: ${roleTerms.join(', ')}\n\n`
       + 'Results (JSON):\n' + JSON.stringify(hits)
       + '\n\nReturn: { "person": { "person_name": string, "person_title": string (their CURRENT '
       + 'title at the company), "person_seniority": string, "profileUrl": string (must be one of the '
-      + 'result links), "channel": "linkedin", "employment_verified": boolean (true only if the '
-      + 'results show they currently work at the company), "employment_evidence": string (the exact '
-      + 'phrase from the result that shows current employment) } } or { "person": null } if no '
-      + 'current employee fits.';
+      + 'result links), "channel": "linkedin", "current_employer": string (the employer named on '
+      + 'their profile, exactly as written), "company_match": boolean (true only if current_employer '
+      + 'is the target company), "employment_verified": boolean (true only if the results show they '
+      + 'currently work at the company), "employment_evidence": string (the exact phrase from the '
+      + 'result that shows current employment) } } or { "person": null } if no verified current '
+      + 'employee of THIS company fits.';
     const parsed = await structuredCall({ system, user, maxTokens: 800 });
     const p = parsed?.person;
-    if (!p || !p.profileUrl || !hits.some(h => h.link === p.profileUrl)) return [];
-    // Rule 1: never surface a past employee. Require the model's present-tense
-    // confirmation, and reject anyone whose own result still reads as a former
-    // employee of THIS company (a backstop for model slips).
-    if (p.employment_verified !== true) return [];
-    const matched = hits.find(h => h.link === p.profileUrl);
-    const evidence = `${p.person_title || ''} ${matched?.title || ''} ${matched?.snippet || ''}`;
-    if (looksFormerAtCompany(evidence, company)) return [];
-    return [{
-      person_name: p.person_name || null,
-      person_title: p.person_title || null,
-      person_seniority: p.person_seniority || null,
-      profileUrl: p.profileUrl,
-      channel: p.channel || 'linkedin',
-      employment_verified: true,
-    }];
+    // Model named no one at this company: no candidate to even evaluate.
+    if (!p) { if (funnel) funnel.no_person += 1; return []; }
+
+    const { person, reason } = classifyPersonResult(company, p, hits);
+    if (!person) {
+      recordRejection(funnel, reason);
+      // Log the target company and the employer the model returned, so a bad
+      // name match (right title, wrong company) is visible at a glance.
+      console.warn('[outbound.provider] rejected person for ' + JSON.stringify(company)
+        + ': gate=' + reason
+        + ' current_employer=' + JSON.stringify(p.current_employer || null));
+      return [];
+    }
+    return [person];
   }
 
   // ── Contact ────────────────────────────────────────────────────────────────────
@@ -262,6 +275,87 @@ function looksFormerAtCompany(text, company) {
   );
 }
 
+// Decide whether the model's person result is a real, attach-able lead for THIS
+// company, and report WHICH gate it failed. Two independent checks must BOTH
+// pass — "has the right title" and "actually works at this company" are
+// separate, and a title match alone is never enough. Returns
+// { person, reason }: on acceptance person is the normalized object and reason
+// is null; on rejection person is null and reason is one of funnel.js's
+// REJECTION_REASONS. Keep the reason strings in sync with that list.
+function classifyPersonResult(company, p, hits) {
+  const list = Array.isArray(hits) ? hits : [];
+  // Must be a real result the search actually returned (no fabricated profile).
+  if (!p || !p.profileUrl || !list.some(h => h.link === p.profileUrl)) {
+    return { person: null, reason: 'not_in_hits' };
+  }
+
+  // Check 1 — employment is current. Require the model's present-tense
+  // confirmation, and reject anyone whose own result still reads as a former
+  // employee of THIS company (a backstop for model slips).
+  if (p.employment_verified !== true) return { person: null, reason: 'employment_unverified' };
+  const matched = list.find(h => h.link === p.profileUrl);
+  const evidence = `${p.person_title || ''} ${matched?.title || ''} ${matched?.snippet || ''}`;
+  if (looksFormerAtCompany(evidence, company)) return { person: null, reason: 'former_employee' };
+
+  // Check 2 — the company is the RIGHT one. The model must both claim a match
+  // and hand back the employer it read off the profile; the programmatic
+  // backstop then confirms that employer normalizes to the target company. A
+  // missing or mismatched employer is a rejection, no matter how good the title.
+  if (p.company_match !== true) return { person: null, reason: 'company_match_false' };
+  if (!companyNamesMatch(p.current_employer, company)) return { person: null, reason: 'employer_mismatch' };
+
+  return {
+    reason: null,
+    person: {
+      person_name: p.person_name || null,
+      person_title: p.person_title || null,
+      person_seniority: p.person_seniority || null,
+      profileUrl: p.profileUrl,
+      channel: p.channel || 'linkedin',
+      employment_verified: true,
+      current_employer: p.current_employer || null,
+      company_match: true,
+    },
+  };
+}
+
+// Thin wrapper: the accepted person object, or null. Kept for callers/tests that
+// only care about the decision, not the rejection reason.
+function evaluatePersonResult(company, p, hits) {
+  return classifyPersonResult(company, p, hits).person;
+}
+
+// Normalize a company name for comparison: lowercase, drop a domain's TLD, strip
+// punctuation and common legal/entity suffix words (Inc, Labs, Foundation,
+// Association, Ltd, and friends), then remove whitespace. So "Morpho",
+// "Morpho Labs", "Morpho Association", "MORPHO", and "morpho.org" all collapse to
+// "morpho", while "Aware, Inc." collapses to "aware".
+function normalizeCompanyName(name) {
+  let s = String(name || '').toLowerCase().trim();
+  if (!s) return '';
+  // Domain / URL form: strip protocol, www, and any path, then drop the TLD.
+  // Split on "/" only (a URL path), never on whitespace, so a multi-word company
+  // name like "Morpho Genetics" is not truncated to its first word.
+  s = s.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].trim();
+  if (/\.[a-z]{2,}$/.test(s)) s = s.replace(/\.[a-z.]+$/, '');
+  // Keep only letters, digits, and spaces.
+  s = s.replace(/[^a-z0-9\s]/g, ' ');
+  // Strip common legal / entity suffix words wherever they appear as whole words.
+  s = s.replace(/\b(inc|incorporated|llc|ltd|limited|labs?|foundation|association|corp|corporation|co|company|gmbh|ag|sa|plc|group|holdings?)\b/g, ' ');
+  // Collapse to a single token for a lenient, order-preserving comparison.
+  return s.replace(/\s+/g, '');
+}
+
+// True when two company names refer to the same company after normalization.
+// Exact normalized equality only — never substring/containment, so "Morpho"
+// does not falsely match an unrelated "Morpho Genetics". An empty side (e.g. no
+// verifiable employer) never matches.
+function companyNamesMatch(a, b) {
+  const na = normalizeCompanyName(a);
+  const nb = normalizeCompanyName(b);
+  return Boolean(na) && Boolean(nb) && na === nb;
+}
+
 // Normalize a model-supplied trigger date to an ISO YYYY-MM-DD string, or null.
 // Rejects unparseable, future (beyond today), or absurdly old (>10 years) values
 // so a hallucinated date cannot masquerade as fresh intel.
@@ -299,4 +393,8 @@ function getProvider() {
   return new SearchFirstProvider();
 }
 
-module.exports = { SearchFirstProvider, getProvider, OutboundConfigError, rolesForStage };
+module.exports = {
+  SearchFirstProvider, getProvider, OutboundConfigError, rolesForStage,
+  classifyPersonResult, evaluatePersonResult, normalizeCompanyName, companyNamesMatch,
+  looksFormerAtCompany,
+};

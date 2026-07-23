@@ -45,11 +45,16 @@ function listRunsForUser(userId, limit = 20) {
 }
 
 function updateRun(id, fields) {
-  const allowed = ['status', 'error_message', 'total_found', 'total_kept'];
+  const allowed = ['status', 'error_message', 'total_found', 'total_kept', 'funnel'];
   const sets = [];
   const vals = [];
   for (const k of allowed) {
-    if (k in fields) { sets.push(`${k} = ?`); vals.push(fields[k]); }
+    if (!(k in fields)) continue;
+    let v = fields[k];
+    // funnel is stored as JSON text; accept either an object or a ready string.
+    if (k === 'funnel' && v != null && typeof v !== 'string') v = JSON.stringify(v);
+    sets.push(`${k} = ?`);
+    vals.push(v);
   }
   if (!sets.length) return;
   vals.push(id);
@@ -57,7 +62,7 @@ function updateRun(id, fields) {
 }
 
 function hydrateRun(row) {
-  return { ...row, params: parseJson(row.params, {}) };
+  return { ...row, params: parseJson(row.params, {}), funnel: parseJson(row.funnel, null) };
 }
 
 // ── Leads ────────────────────────────────────────────────────────────────────────

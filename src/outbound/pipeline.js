@@ -13,6 +13,7 @@ const store = require('./store');
 const { getProvider, OutboundConfigError, rolesForStage } = require('./provider');
 const { structuredCall, draftCall } = require('./ai');
 const { getAgentPrompt } = require('./agentPrompt');
+const { makeFunnel, formatFunnel } = require('./funnel');
 const { sanitizeCopy, sanitizeCopyDeep } = require('../lib/sanitizeText');
 const { sleep } = require('../lib/retry');
 
@@ -47,9 +48,13 @@ async function runPipeline(runId) {
 
   const provider = getProvider();
 
+  // Per-run funnel: every stage records where candidates die so a run that
+  // yields zero leads is diagnosable (see funnel.js, and the admin UI).
+  const funnel = makeFunnel();
+
   let candidates;
   try {
-    candidates = await provider.discoverCompanies(brief, { targetCount, regionHints });
+    candidates = await provider.discoverCompanies(brief, { targetCount, regionHints, funnel });
   } catch (err) {
     // Config errors (missing/invalid SERPER key) surface as a clean run error.
     const msg = err instanceof OutboundConfigError ? err.message : `Discovery failed: ${safeMsg(err)}`;
@@ -65,8 +70,8 @@ async function runPipeline(runId) {
     if (!firstCompany) await sleep(COMPANY_GAP_MS);
     firstCompany = false;
     try {
-      const lead = await buildLead(provider, brief, company);
-      if (!lead) continue;                       // dropped below threshold
+      const lead = await buildLead(provider, brief, company, funnel);
+      if (!lead) continue;                       // rejected upstream; funnel already tallied
       store.insertLead(runId, lead);
       kept += 1;
     } catch (err) {
@@ -75,35 +80,41 @@ async function runPipeline(runId) {
     }
   }
 
-  store.updateRun(runId, { status: 'done', total_found: totalFound, total_kept: kept });
+  funnel.kept = kept;
+  store.updateRun(runId, { status: 'done', total_found: totalFound, total_kept: kept, funnel });
+  console.log(formatFunnel(funnel, runId));
 }
 
 // Build one persisted-shaped lead from a company candidate: person -> contact ->
 // score -> draft. Returns null when the company is not a lead: no verified
 // current person (rule 1), no usable contact (rule 2), or a below-threshold score.
-async function buildLead(provider, brief, company) {
+async function buildLead(provider, brief, company, funnel) {
   // People + contact (never fabricated). findPeople only returns a person whose
-  // current employment at the company is verified (see provider.findPeople).
+  // current employment at the company is verified (see provider.findPeople), and
+  // it records the per-gate rejection reason into the funnel itself.
   const roles = rolesForStage(company.stage_size);
   let person = null, contact = null;
   try {
-    const people = await provider.findPeople(company.company, roles);
+    const people = await provider.findPeople(company.company, roles, { funnel });
     person = people[0] || null;
   } catch (err) {
     console.warn('[outbound.pipeline] findPeople failed:', company.company, '-', safeMsg(err));
+    // Error path: findPeople never reached its own accounting, so count it here.
+    if (funnel) funnel.no_person += 1;
   }
-  // Rule 1 + 2: no verified current person means the company is not a lead.
+  // Rule 1 + 2: no verified current person means the company is not a lead. The
+  // reason was already tallied (inside findPeople, or the catch above).
   if (!person) return null;
 
   try { contact = await provider.findContact(person); } catch (_) { contact = null; }
   // Rule 2: require a usable way to reach them (a valid profile URL or a found
   // email). No reachable contact means the company is dropped, never shown blank.
-  if (!hasUsableContact(person, contact)) return null;
+  if (!hasUsableContact(person, contact)) { if (funnel) funnel.no_contact += 1; return null; }
 
   // Score on the rubric (fit 30 / pain 30 / reachability 20 / timing 20).
   const scoreResult = await scoreCandidate(brief, company, person);
   const score = Number.isFinite(scoreResult?.score) ? scoreResult.score : 0;
-  if (score < SCORE_THRESHOLD) return null;
+  if (score < SCORE_THRESHOLD) { if (funnel) funnel.below_threshold += 1; return null; }
 
   // Draft (we always have a verified someone to write to by this point).
   const drafted = await draftMessage(company, person, contact);
