@@ -24,6 +24,7 @@ eq(f.after_dedupe, 0, 'fresh: after_dedupe 0');
 eq(f.no_person, 0, 'fresh: no_person 0');
 eq(f.no_contact, 0, 'fresh: no_contact 0');
 eq(f.below_threshold, 0, 'fresh: below_threshold 0');
+eq(f.capped, 0, 'fresh: capped 0');
 eq(f.kept, 0, 'fresh: kept 0');
 eq(Object.keys(f.rejected).length, REJECTION_REASONS.length, 'fresh: one bucket per rejection reason');
 eq(REJECTION_REASONS.every(r => f.rejected[r] === 0), true, 'fresh: every rejection bucket 0');
@@ -41,11 +42,12 @@ eq(totalRejectedPeople(f), 3, 'totalRejectedPeople sums all gates');
 
 // ── formatFunnel renders every stage and is dash-free ─────────────────────────
 f.discovered_raw = 12; f.after_dedupe = 8; f.no_person = 2; f.no_contact = 1;
-f.below_threshold = 1; f.kept = 1;
+f.below_threshold = 1; f.capped = 3; f.kept = 1;
 const text = formatFunnel(f, 7);
 ok(/run #7 funnel/.test(text), 'formatFunnel names the run id');
 ok(/discovered \(raw\)\s*:?\s*12/.test(text), 'formatFunnel shows discovered_raw');
 ok(/people rejected/.test(text), 'formatFunnel shows rejected total');
+ok(/capped \(over target\)\s*:?\s*3/.test(text), 'formatFunnel shows capped');
 ok(/kept \(leads\)/.test(text), 'formatFunnel shows kept');
 eq(/[–—]/.test(text), false, 'formatFunnel output has no em/en dashes');
 

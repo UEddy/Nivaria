@@ -39,6 +39,7 @@ function makeFunnel() {
     rejected,              // people rejected, counted per gate (see REJECTION_REASONS)
     no_contact: 0,         // companies dropped for no usable contact
     below_threshold: 0,    // leads dropped below the score threshold
+    capped: 0,             // gate survivors dropped only by the targetCount cap
     kept: 0,               // leads persisted
   };
 }
@@ -72,6 +73,7 @@ function formatFunnel(funnel, runId) {
   }
   lines.push('  ' + pad('no usable contact') + f.no_contact);
   lines.push('  ' + pad('below score threshold') + f.below_threshold);
+  lines.push('  ' + pad('capped (over target)') + (f.capped || 0));
   lines.push('  ' + pad('kept (leads)') + f.kept);
   return lines.join('\n');
 }

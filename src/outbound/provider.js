@@ -27,6 +27,31 @@ const { withRetry, sleep } = require('../lib/retry');
 // does not burst past the provider's per-minute limit.
 const SEARCH_GAP_MS = 400;
 
+// Over-discovery. The people, company-match, contact, and score gates each shed
+// candidates, so discovering exactly targetCount companies leaves near zero
+// survivors after the gates run. Instead we discover a pool several times larger
+// than targetCount and let the pipeline apply the targetCount cap LAST, to the
+// survivors. DISCOVERY_MULTIPLIER is configurable (env override), default 8.
+const DISCOVERY_MULTIPLIER = Math.max(1, Number(process.env.OUTBOUND_DISCOVERY_MULTIPLIER) || 8);
+
+// Upper bound on the discovered pool (and therefore on companies processed and
+// on the extraction token budget), so a large targetCount cannot blow up cost.
+const MAX_POOL = 50;
+
+// Cap on Serper searches per run, raised to feed the larger pool. The inter-call
+// delay (SEARCH_GAP_MS) and the withRetry backoff are unchanged.
+const MAX_SEARCHES_PER_RUN = 12;
+
+// Cap on raw search results gathered and handed to the extraction model.
+const MAX_RAW_RESULTS = 120;
+
+// Size the discovered pool for a requested targetCount: multiplied up, then
+// bounded by MAX_POOL.
+function poolSizeFor(targetCount) {
+  const t = Number.isFinite(targetCount) && targetCount > 0 ? targetCount : 10;
+  return Math.min(t * DISCOVERY_MULTIPLIER, MAX_POOL);
+}
+
 class OutboundConfigError extends Error {
   constructor(message) { super(message); this.name = 'OutboundConfigError'; }
 }
@@ -85,27 +110,34 @@ class SearchFirstProvider {
   }
 
   // ── Discover ─────────────────────────────────────────────────────────────────
+  // Returns a POOL of up to poolSizeFor(targetCount) candidates, deliberately
+  // larger than targetCount. The pipeline runs the gates over the whole pool and
+  // applies the targetCount cap last (see runPipeline). Do NOT truncate to
+  // targetCount here.
   async discoverCompanies(brief, { targetCount = 10, regionHints = '', funnel = null } = {}) {
     this.ensureConfigured();
     const gl = regionHintToGl(regionHints);
+    const poolSize = poolSizeFor(targetCount);
 
     // 1) Ask the model to expand the brief into concrete ICP/pain search queries.
     const queries = await this.buildQueries(brief, regionHints);
 
-    // 2) Run the searches and aggregate results (deduped by link).
+    // 2) Run the searches and aggregate results (deduped by link). Bounded by
+    //    MAX_SEARCHES_PER_RUN searches and MAX_RAW_RESULTS raw hits.
     const seen = new Set();
     const results = [];
-    let first = true;
+    let searchCount = 0;
     for (const q of queries) {
-      if (!first) await sleep(SEARCH_GAP_MS);
-      first = false;
+      if (searchCount >= MAX_SEARCHES_PER_RUN) break;
+      if (searchCount > 0) await sleep(SEARCH_GAP_MS);
+      searchCount += 1;
       const hits = await this.search(q, { num: 10, gl });
       for (const h of hits) {
         if (!h.link || seen.has(h.link)) continue;
         seen.add(h.link);
         results.push(h);
       }
-      if (results.length >= 60) break; // enough raw material
+      if (results.length >= MAX_RAW_RESULTS) break; // enough raw material
     }
     if (!results.length) return [];
 
@@ -119,8 +151,8 @@ class SearchFirstProvider {
     const user = 'ICP brief:\n' + String(brief || '').slice(0, 2000)
       + '\n\nRegion hints: ' + (regionHints || 'none')
       + '\n\nToday is ' + new Date().toISOString().slice(0, 10) + '.'
-      + '\n\nSearch results (JSON):\n' + JSON.stringify(results.slice(0, 60))
-      + `\n\nReturn up to ${Math.min(targetCount * 2, 40)} candidates as JSON:`
+      + '\n\nSearch results (JSON):\n' + JSON.stringify(results.slice(0, MAX_RAW_RESULTS))
+      + `\n\nReturn up to ${poolSize} candidates as JSON:`
       + '\n{ "candidates": [ { "company": string, "domain": string|null, "category": string, '
       + '"stage_size": string, "region": string, "trigger": string (the ONE specific reason now), '
       + '"trigger_url": string (MUST be one of the result links above), '
@@ -131,7 +163,9 @@ class SearchFirstProvider {
       + 'over older ones, but do NOT discard a candidate just because its trigger is a few months '
       + 'old. Do not invent companies, URLs, or dates.';
 
-    const parsed = await structuredCall({ system, user, maxTokens: 3000 });
+    // Budget enough output tokens for the larger pool so the JSON is not
+    // truncated (a truncated response fails to parse and yields zero candidates).
+    const parsed = await structuredCall({ system, user, maxTokens: 8000 });
     const list = Array.isArray(parsed?.candidates) ? parsed.candidates : [];
     if (funnel) funnel.discovered_raw = list.length; // raw, pre-dedupe
 
@@ -158,10 +192,11 @@ class SearchFirstProvider {
     }
     if (funnel) funnel.after_dedupe = out.length; // survivors of dedupe + exclusion rules
     // Freshness first: surface the companies with the newest triggers before the
-    // older ones, then cap. Undated triggers sort after dated ones. Ranking and
-    // stale down-weighting happen again at persist/query time (see store.js).
+    // older ones, then cap to the POOL size (not targetCount). Undated triggers
+    // sort after dated ones. Ranking and stale down-weighting happen again at
+    // persist/query time (see store.js).
     out.sort((a, b) => triggerRecencyRank(a.trigger_date) - triggerRecencyRank(b.trigger_date));
-    return out.slice(0, targetCount);
+    return out.slice(0, poolSize);
   }
 
   // Model-expanded search queries, with a static fallback if the model is
@@ -173,15 +208,21 @@ class SearchFirstProvider {
       `"/compare" OR "/alternatives" page SaaS pricing${region}`,
       `SaaS startup raised seed funding crowded market${region}`,
       `founder "tracking competitors" spreadsheet manual${region}`,
+      `B2B SaaS "battlecard" OR "win/loss" competitive teardown${region}`,
+      `SaaS "Series A" OR "Series B" launched competitor to${region}`,
+      `SaaS pricing page relaunch OR repositioning crowded category${region}`,
+      `product marketing manager "competitive analysis" SaaS hiring${region}`,
     ];
-    const system = 'Turn an ICP brief into 6 concise Google search queries that surface companies '
-      + 'feeling competitor-monitoring pain. Return JSON only. No em-dashes, en-dashes, or connecting "+".';
+    const system = `Turn an ICP brief into up to ${MAX_SEARCHES_PER_RUN} concise, varied Google `
+      + 'search queries that surface companies feeling competitor-monitoring pain. Vary the angle '
+      + '(hiring signals, compare/alternatives pages, funding, founder pain, repositioning) so the '
+      + 'queries do not overlap. Return JSON only. No em-dashes, en-dashes, or connecting "+".';
     const user = 'Brief:\n' + String(brief || '').slice(0, 1500)
       + '\nRegion hints: ' + (regionHints || 'none')
-      + '\n\nReturn: { "queries": [ up to 6 short query strings ] }';
-    const parsed = await structuredCall({ system, user, maxTokens: 600 });
+      + `\n\nReturn: { "queries": [ up to ${MAX_SEARCHES_PER_RUN} short query strings ] }`;
+    const parsed = await structuredCall({ system, user, maxTokens: 800 });
     const qs = Array.isArray(parsed?.queries) ? parsed.queries.filter(q => typeof q === 'string' && q.trim()) : [];
-    return (qs.length ? qs : fallback).slice(0, 6);
+    return (qs.length ? qs : fallback).slice(0, MAX_SEARCHES_PER_RUN);
   }
 
   // ── People ────────────────────────────────────────────────────────────────────
@@ -397,5 +438,6 @@ function getProvider() {
 module.exports = {
   SearchFirstProvider, getProvider, OutboundConfigError, rolesForStage,
   classifyPersonResult, evaluatePersonResult, normalizeCompanyName, companyNamesMatch,
-  looksFormerAtCompany,
+  looksFormerAtCompany, poolSizeFor,
+  DISCOVERY_MULTIPLIER, MAX_POOL, MAX_SEARCHES_PER_RUN, MAX_RAW_RESULTS,
 };

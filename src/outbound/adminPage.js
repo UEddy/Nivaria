@@ -225,6 +225,7 @@ function renderOutboundBody(csrfToken) {
         row.appendChild(funnelStat('People rejected', rejTotal, 'drop'));
         row.appendChild(funnelStat('No contact', f.no_contact, 'drop'));
         row.appendChild(funnelStat('Below score', f.below_threshold, 'drop'));
+        row.appendChild(funnelStat('Over target', f.capped, 'drop'));
         row.appendChild(funnelStat('Kept', f.kept, 'kept'));
         panel.appendChild(row);
 

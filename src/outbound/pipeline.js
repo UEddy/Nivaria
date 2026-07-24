@@ -18,11 +18,13 @@ const { sanitizeCopy, sanitizeCopyDeep } = require('../lib/sanitizeText');
 const { sleep } = require('../lib/retry');
 
 const SCORE_THRESHOLD = 60;   // drop candidates scoring below this
-const HARD_CAP = 25;          // never process more than this many companies
+const HARD_CAP = 25;          // max FINAL leads a run may request (targetCount ceiling)
 
-// Each company costs one search plus two model calls. At the hard cap that is
-// 75 calls, so we space companies out to stay under provider per-minute limits.
-// withRetry() in lib/retry.js is the backstop when we still get a 429.
+// Over-discovery means the pipeline processes the whole discovered pool
+// (bounded by provider MAX_POOL), not just targetCount. Each company costs one
+// search plus a few model calls, so we space companies out to stay under
+// provider per-minute limits. withRetry() in lib/retry.js is the backstop when
+// we still get a 429.
 const COMPANY_GAP_MS = 750;
 
 // Kick off a run in the background. Returns immediately.
@@ -62,11 +64,12 @@ async function runPipeline(runId) {
     return;
   }
 
-  const totalFound = candidates.length;
-  let kept = 0;
+  const totalFound = candidates.length; // the discovered POOL size
   // Every scored candidate (kept or dropped) so the score distribution can be
   // inspected when below-threshold turns out to dominate the funnel.
   const scoreLog = [];
+  // Leads that clear EVERY gate. The targetCount cap is applied to these last.
+  const survivors = [];
 
   let firstCompany = true;
   for (const company of candidates) {
@@ -75,18 +78,52 @@ async function runPipeline(runId) {
     try {
       const lead = await buildLead(provider, brief, company, funnel, scoreLog);
       if (!lead) continue;                       // rejected upstream; funnel already tallied
-      store.insertLead(runId, lead);
-      kept += 1;
+      survivors.push(lead);
     } catch (err) {
       console.warn('[outbound.pipeline] company failed:', company?.company, '-', safeMsg(err));
       // continue on partial failure
     }
   }
 
-  funnel.kept = kept;
-  store.updateRun(runId, { status: 'done', total_found: totalFound, total_kept: kept, funnel });
+  // Cap LAST: order the gate survivors by freshness then score, keep the top
+  // targetCount, and persist only those. Anything beyond the cap is a valid lead
+  // dropped purely because the run asked for fewer (funnel.capped), not a
+  // quality rejection.
+  const { kept: keptLeads, capped } = selectTopLeads(survivors, targetCount);
+  for (const lead of keptLeads) store.insertLead(runId, lead);
+
+  funnel.kept = keptLeads.length;
+  funnel.capped = capped;
+  store.updateRun(runId, { status: 'done', total_found: totalFound, total_kept: keptLeads.length, funnel });
   console.log(formatFunnel(funnel, runId));
   logScoreDistributionIfBelowThresholdDominates(runId, funnel, scoreLog);
+}
+
+// Freshness bucket for a trigger date, matching store.js freshnessRank exactly:
+// 0 this week, 1 this month, 2 last 3 months, 3 three to six months, 4 undated,
+// 5 stale (>180 days). A missing/unparseable date is unknown recency (4), not
+// stale.
+function freshnessBucket(triggerDate) {
+  if (!triggerDate) return 4;
+  const t = Date.parse(triggerDate);
+  if (!Number.isFinite(t)) return 4;
+  const days = (Date.now() - t) / 86400000;
+  if (days <= 7) return 0;
+  if (days <= 30) return 1;
+  if (days <= 90) return 2;
+  if (days <= 180) return 3;
+  return 5;
+}
+
+// Apply the targetCount cap to gate survivors, ordered freshness-first then by
+// score (the same order the leads table uses). Returns the kept leads and how
+// many were dropped by the cap alone.
+function selectTopLeads(survivors, targetCount) {
+  const n = Number.isFinite(targetCount) && targetCount > 0 ? targetCount : 0;
+  const ordered = survivors.slice().sort((a, b) =>
+    freshnessBucket(a.trigger_at) - freshnessBucket(b.trigger_at) || (b.score || 0) - (a.score || 0));
+  const kept = ordered.slice(0, n);
+  return { kept, capped: ordered.length - kept.length };
 }
 
 // Diagnostic: when below-threshold is the single largest funnel bucket, the
@@ -292,4 +329,7 @@ function hasUsableContact(person, contact) {
     || isUsableContactValue(person?.profileUrl);
 }
 
-module.exports = { startRun, redraftLead, SCORE_THRESHOLD, HARD_CAP };
+module.exports = {
+  startRun, redraftLead, SCORE_THRESHOLD, HARD_CAP,
+  freshnessBucket, selectTopLeads,
+};
