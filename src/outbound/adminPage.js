@@ -221,6 +221,7 @@ function renderOutboundBody(csrfToken) {
         var row = document.createElement('div'); row.className = 'ob-funnel-row';
         row.appendChild(funnelStat('Discovered (raw)', f.discovered_raw));
         row.appendChild(funnelStat('After dedupe', f.after_dedupe));
+        row.appendChild(funnelStat('Peers', f.peer, 'drop'));
         row.appendChild(funnelStat('No person', f.no_person, 'drop'));
         row.appendChild(funnelStat('People rejected', rejTotal, 'drop'));
         row.appendChild(funnelStat('No contact', f.no_contact, 'drop'));

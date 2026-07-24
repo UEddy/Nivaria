@@ -10,7 +10,7 @@
 // persist. Anything below SCORE_THRESHOLD is dropped.
 
 const store = require('./store');
-const { getProvider, OutboundConfigError, rolesForStage } = require('./provider');
+const { getProvider, OutboundConfigError, rolesForStage, classifyCompany } = require('./provider');
 const { structuredCall, draftCall } = require('./ai');
 const { getAgentPrompt } = require('./agentPrompt');
 const { makeFunnel, formatFunnel, totalRejectedPeople } = require('./funnel');
@@ -161,6 +161,19 @@ function logScoreDistributionIfBelowThresholdDominates(runId, funnel, scoreLog) 
 // score -> draft. Returns null when the company is not a lead: no verified
 // current person (rule 1), no usable contact (rule 2), or a below-threshold score.
 async function buildLead(provider, brief, company, funnel, scoreLog) {
+  // Peer gate FIRST. Never pitch a company that itself sells competitor
+  // monitoring, whether as a core product or as a feature of a different core
+  // business (see provider.classifyCompany). Peers are excluded and logged, not
+  // shown as leads, and filtering here avoids wasting the people/contact/score
+  // calls on them.
+  const kind = classifyCompany(company);
+  if (kind.classification === 'peer') {
+    if (funnel) funnel.peer += 1;
+    console.log('[outbound.pipeline] peer (filtered): ' + JSON.stringify(company.company || '?')
+      + ' - ' + (kind.reason || 'sells competitor monitoring'));
+    return null;
+  }
+
   // People + contact (never fabricated). findPeople only returns a person whose
   // current employment at the company is verified (see provider.findPeople), and
   // it records the per-gate rejection reason into the funnel itself.
@@ -231,8 +244,12 @@ async function buildLead(provider, brief, company, funnel, scoreLog) {
 async function scoreCandidate(brief, company, person) {
   const system = 'You score outbound leads for Nivaria, a competitor-intelligence app for SaaS '
     + 'sales and product-marketing teams. Score each candidate 0-100 as the sum of: fit (0-30), '
-    + 'pain (0-30), reachability (0-20), timing (0-20). Be strict. Return JSON only. Never use '
-    + 'em-dashes, en-dashes, or a connecting "+"; write "and" instead.';
+    + 'pain (0-30), reachability (0-20), timing (0-20). Be strict. If the candidate itself BUILDS, '
+    + 'SHIPS, or SELLS competitor-analysis, competitor-tracking, price-monitoring, or '
+    + 'market-intelligence capability (as a core product OR as a feature of a different core '
+    + 'business), it is a peer, not a prospect: score it near 0. Shipping such a feature is a '
+    + 'DISQUALIFIER, not evidence of pain, because a company that builds it will not buy it. '
+    + 'Return JSON only. Never use em-dashes, en-dashes, or a connecting "+"; write "and" instead.';
   const user = 'ICP brief:\n' + String(brief || '').slice(0, 1500)
     + '\n\nToday is ' + new Date().toISOString().slice(0, 10) + '. Score the timing sub-score (0 to '
     + '20) on how recent the trigger is, scaled across a full 6 months: a trigger from the last few '

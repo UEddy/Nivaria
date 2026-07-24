@@ -161,7 +161,17 @@ class SearchFirstProvider {
       + '\nOnly include a candidate if you can point to a real trigger_url from the results. '
       + 'Triggers up to 6 months old are acceptable: prefer the freshest (this week, this month) '
       + 'over older ones, but do NOT discard a candidate just because its trigger is a few months '
-      + 'old. Do not invent companies, URLs, or dates.';
+      + 'old. Do not invent companies, URLs, or dates.'
+      + '\n\nEXCLUDE peers: never include a company that BUILDS, SHIPS, or SELLS '
+      + 'competitor-monitoring capability in any form. That covers core products (competitive '
+      + 'intelligence, competitor price tracking, market or media intelligence, SEO and traffic '
+      + 'tools, social listening) AND a monitoring FEATURE inside a product with a different core '
+      + 'business, in any vertical (for example a POS or an e-commerce platform that ships '
+      + 'competitor price or menu tracking, or a marketing suite with competitor dashboards). A '
+      + 'company launching, announcing, or marketing such a feature is a peer, not a prospect: it '
+      + 'will not buy what it already builds. A company that does competitor tracking MANUALLY, '
+      + 'hires for it, keeps a /compare page, or loses deals to competitors IS a prospect and '
+      + 'should be included.';
 
     // Budget enough output tokens for the larger pool so the JSON is not
     // truncated (a truncated response fails to parse and yields zero candidates).
@@ -398,6 +408,114 @@ function companyNamesMatch(a, b) {
   return Boolean(na) && Boolean(nb) && na === nb;
 }
 
+// ── Peer / competitor classification ──────────────────────────────────────────
+// Nivaria must never pitch a company that itself SELLS competitor monitoring.
+// The test is CAPABILITY, not category: any company that BUILDS OR SHIPS
+// competitor-monitoring in any form is a peer, whether that is its core product
+// (Crayon, Klue), a FEATURE bolted onto a product with a different core business
+// (a POS that tracks rival menus and prices, an e-commerce platform with rival
+// price monitoring, a marketing suite with competitor dashboards), or an
+// adjacent monitoring product (price tracking, SEO/traffic, social listening,
+// market/media intelligence). The question is "does this company sell competitor
+// monitoring to anyone?", not "is it their main business?".
+//
+// The opposite is a PROSPECT: a company that does competitor tracking MANUALLY,
+// HIRES for it, has a /compare page, or LOSES deals to rivals. They need the
+// product. Shipping the capability is the disqualifier, not the pain.
+
+// Companies whose product is (or includes) competitor monitoring. Matched on a
+// word boundary against the company name so a prospect is not tripped by a
+// coincidental substring.
+const KNOWN_PEER_VENDORS = [
+  // core competitive-intelligence products
+  'crayon', 'klue', 'kompyte', 'contify', 'nektar', 'gong', 'cluedin',
+  // competitor price tracking
+  'prisync', 'competera', 'price2spy', 'wiser', 'intelligence node', 'dealavo',
+  // SEO / traffic / market intelligence
+  'semrush', 'ahrefs', 'similarweb', 'spyfu',
+  // social listening / media intelligence
+  'brandwatch', 'meltwater', 'sprout social', 'sprinklr', 'talkwalker',
+];
+
+// The monitoring capability itself, in its many phrasings.
+const CAPABILITY_RE = new RegExp(
+  '(?:competitor|competitors|competitive|rival|rivals)[\\s-]*'
+    + '(?:analysis|analytics|intelligence|tracking|track|monitoring|monitor|insights?|benchmark\\w*|price\\w*|pricing|menu\\w*|dashboards?)'
+  + '|(?:price|pricing)[\\s-]*(?:monitoring|monitor|tracking|track|intelligence)'
+  + '|(?:market|media)[\\s-]*intelligence'
+  + '|social[\\s-]*listening',
+  'i',
+);
+
+// Nouns that mark a capability as a SHIPPED thing (a product or a feature).
+const PRODUCT_NOUN_RE = /\b(?:features?|tools?|toolkit|products?|platform|modules?|suite|dashboards?|capabilit(?:y|ies)|functionality|add[\s-]?ons?|integration|software|apps?|solutions?|offering|service)\b/i;
+
+// Nouns that mark a capability as an INTERNAL role/team/hire, i.e. a prospect
+// that does it by hand or is staffing up for it, not one that sells it.
+const ROLE_NOUN_RE = /\b(?:analysts?|hire|hires|hiring|roles?|managers?|teams?|leads?|directors?|specialists?|headcount|positions?|functions?|departments?|staff)\b/i;
+
+// Verbs that mean the company put the capability into market.
+const SHIP_VERB_RE = /\b(?:launch\w*|announc\w*|introduc\w*|unveil\w*|ship\w*|releas\w*|roll(?:ing|ed|s)?\s*out|debut\w*|add(?:s|ed|ing)?|built|build\w*|offer\w*|provid\w*|sell\w*|sold|power\w*|bring\w*|new)\b/i;
+
+function escapeRegexWord(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Does this trigger text describe the company SHIPPING competitor-monitoring
+// capability (the inverted signal)? Returns the matched capability phrase, or
+// null. A capability that is productized (a product noun in or right after the
+// phrase) or introduced by a ship verb is shipping; a capability attached to a
+// role/team/hire is an internal prospect signal, not shipping.
+function shipsCapability(text) {
+  const t = String(text || '').toLowerCase();
+  const m = CAPABILITY_RE.exec(t);
+  if (!m) return null;
+  const end = m.index + m[0].length;
+  const before = t.slice(Math.max(0, m.index - 24), m.index);
+  const after = t.slice(end, end + 35);
+  // Productized: a product noun inside the matched phrase ("competitor
+  // dashboards") or immediately after it ("price-monitoring feature").
+  if (PRODUCT_NOUN_RE.test(m[0]) || PRODUCT_NOUN_RE.test(after)) return m[0].trim();
+  // Role/team/hire after the capability -> prospect, not a shipped product.
+  if (ROLE_NOUN_RE.test(after)) return null;
+  // Otherwise a ship verb introducing the capability means they built it.
+  if (SHIP_VERB_RE.test(before)) return m[0].trim();
+  return null;
+}
+
+// Classify a discovered company as a 'peer' (sells competitor monitoring, must
+// never be pitched) or a 'prospect' (a valid lead). Pure and deterministic so it
+// is cheap and testable; the discovery prompt also excludes peers at the source.
+// Returns { classification, reason }.
+function classifyCompany(company) {
+  const name = String(company?.company || '');
+  const category = String(company?.category || '');
+  const trigger = String(company?.trigger || '');
+
+  // 1) Known vendor whose product is competitor monitoring.
+  const nameL = name.toLowerCase();
+  for (const v of KNOWN_PEER_VENDORS) {
+    if (new RegExp('\\b' + escapeRegexWord(v) + '\\b', 'i').test(nameL)) {
+      return { classification: 'peer', reason: 'known competitor-monitoring vendor (' + v + ')' };
+    }
+  }
+
+  // 2) The category itself names a monitoring product line.
+  if (CAPABILITY_RE.test(category)) {
+    return { classification: 'peer', reason: 'category is a competitor-monitoring product: ' + category };
+  }
+
+  // 3) Inverted signal: the trigger says the company BUILDS or SHIPS the
+  //    capability (as a product or a feature). Building it is proof they will
+  //    not buy it, so it disqualifies rather than signalling pain.
+  const shipped = shipsCapability(trigger);
+  if (shipped) {
+    return { classification: 'peer', reason: 'ships competitor-monitoring capability: "' + shipped + '"' };
+  }
+
+  return { classification: 'prospect', reason: null };
+}
+
 // Normalize a model-supplied trigger date to an ISO YYYY-MM-DD string, or null.
 // Rejects unparseable, future (beyond today), or absurdly old (>10 years) values
 // so a hallucinated date cannot masquerade as fresh intel.
@@ -438,6 +556,6 @@ function getProvider() {
 module.exports = {
   SearchFirstProvider, getProvider, OutboundConfigError, rolesForStage,
   classifyPersonResult, evaluatePersonResult, normalizeCompanyName, companyNamesMatch,
-  looksFormerAtCompany, poolSizeFor,
+  looksFormerAtCompany, classifyCompany, poolSizeFor,
   DISCOVERY_MULTIPLIER, MAX_POOL, MAX_SEARCHES_PER_RUN, MAX_RAW_RESULTS,
 };

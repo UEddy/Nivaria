@@ -21,6 +21,7 @@ function ok(actual, label) {
 const f = makeFunnel();
 eq(f.discovered_raw, 0, 'fresh: discovered_raw 0');
 eq(f.after_dedupe, 0, 'fresh: after_dedupe 0');
+eq(f.peer, 0, 'fresh: peer 0');
 eq(f.no_person, 0, 'fresh: no_person 0');
 eq(f.no_contact, 0, 'fresh: no_contact 0');
 eq(f.below_threshold, 0, 'fresh: below_threshold 0');
@@ -41,11 +42,12 @@ recordRejection(null, 'employer_mismatch'); // missing funnel is a safe no-op
 eq(totalRejectedPeople(f), 3, 'totalRejectedPeople sums all gates');
 
 // ── formatFunnel renders every stage and is dash-free ─────────────────────────
-f.discovered_raw = 12; f.after_dedupe = 8; f.no_person = 2; f.no_contact = 1;
+f.discovered_raw = 12; f.after_dedupe = 8; f.peer = 2; f.no_person = 2; f.no_contact = 1;
 f.below_threshold = 1; f.capped = 3; f.kept = 1;
 const text = formatFunnel(f, 7);
 ok(/run #7 funnel/.test(text), 'formatFunnel names the run id');
 ok(/discovered \(raw\)\s*:?\s*12/.test(text), 'formatFunnel shows discovered_raw');
+ok(/peers filtered\s*:?\s*2/.test(text), 'formatFunnel shows peers');
 ok(/people rejected/.test(text), 'formatFunnel shows rejected total');
 ok(/capped \(over target\)\s*:?\s*3/.test(text), 'formatFunnel shows capped');
 ok(/kept \(leads\)/.test(text), 'formatFunnel shows kept');

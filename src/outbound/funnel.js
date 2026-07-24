@@ -35,6 +35,7 @@ function makeFunnel() {
   return {
     discovered_raw: 0,     // candidates the model proposed, before dedupe
     after_dedupe: 0,       // survivors of dedupe and the exclusion rules
+    peer: 0,               // companies filtered as peers (they sell competitor monitoring)
     no_person: 0,          // companies where findPeople returned no person at all
     rejected,              // people rejected, counted per gate (see REJECTION_REASONS)
     no_contact: 0,         // companies dropped for no usable contact
@@ -66,6 +67,7 @@ function formatFunnel(funnel, runId) {
   lines.push('[outbound.pipeline] run ' + (runId != null ? '#' + runId + ' ' : '') + 'funnel');
   lines.push('  ' + pad('discovered (raw)') + f.discovered_raw);
   lines.push('  ' + pad('after dedupe/exclusion') + f.after_dedupe);
+  lines.push('  ' + pad('peers filtered') + (f.peer || 0));
   lines.push('  ' + pad('no person found') + f.no_person);
   lines.push('  ' + pad('people rejected') + totalRejectedPeople(f));
   for (const r of REJECTION_REASONS) {
