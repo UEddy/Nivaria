@@ -20,7 +20,7 @@ I built Nivaria from the ground up as a full-stack solution to help B2B business
 - Slack and Discord webhook alerts when changes are detected
 - Daily scheduled checks via cron, with per-competitor manual re-check
 - Pre-meeting briefings: connect Google Calendar and get a brief pushed to your webhook 30 min before any meeting that mentions a tracked competitor (by title or attendee domain)
-- Win/loss logging and an ROI dashboard: tag deal outcomes to competitors (in-app or via a Slack slash command) and Nivaria correlates losses with competitor activity to estimate revenue at risk
+- Win/loss logging and a Revenue Impact Dashboard: tag deal outcomes to competitors (in-app or via a Slack slash command) and Nivaria correlates losses with competitor activity to estimate revenue at risk
 - Slack deal logging: `/foresight lost-deal Acme $40K vs BambooHR` logs a deal in one line, with request-signature verification and replay protection
 - Three-mode theme system (system, light, dark) with anti-flash inline detection
 
@@ -96,7 +96,7 @@ Sales reps log deal outcomes and Nivaria quantifies what competitors cost the bu
 
 - The math is pure data analysis, no AI: simple correlation and counting, which is the honest ceiling for the sample sizes these teams have. Confidence is a function of supporting-deal count (low 3 to 5, medium 6 to 14, high 15+), every finding says "correlates with" rather than "caused", and small samples are flagged.
 - Two logging paths, both optimized for speed: an inline form on the Deals page (no modal), and the Slack slash command below.
-- Correlations recompute nightly per user (2:30 AM) and on demand when the ROI dashboard is opened.
+- Correlations recompute nightly per user (2:30 AM) and on demand when the Revenue Impact Dashboard is opened.
 
 ## Plans & billing (Lemon Squeezy)
 

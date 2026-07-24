@@ -51,7 +51,7 @@ const API = (() => {
     setTier: (tier) => API.put('/auth/me/tier', { tier }),
     logout:  ()     => API.post('/auth/logout'),
 
-    // Phase 10 — billing (Lemon Squeezy). State is webhook-driven server-side.
+    // Phase 10 — billing. State is webhook-driven server-side.
     getSubscription:     ()           => API.get('/billing/subscription'),
     checkout:            (tier='pro') => API.post('/billing/checkout', { tier }),
     billingPortal:       ()           => API.post('/billing/portal'),
@@ -110,7 +110,7 @@ const API = (() => {
     regeneratePlaybook:     (playbookId)      => API.post(`/playbooks/${playbookId}/regenerate`),
     getRecentPlaybooks:     (limit = 5)       => API.get(`/playbooks/recent?limit=${limit}`),
 
-    // Win/loss deals + ROI dashboard (Phase 9)
+    // Win/loss deals + Revenue Impact Dashboard (Phase 9)
     getDeals:        (params = {}) => {
       const qs = new URLSearchParams(params).toString();
       return API.get(`/deals${qs ? '?' + qs : ''}`);

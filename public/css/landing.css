@@ -1163,3 +1163,86 @@ img, svg { display: block; }
   color: var(--lp-txt-2);
   line-height: 1.6;
 }
+
+/* ══════════════════════════════════════════════════════════
+   Pricing: seat-based tiers, Planned badges, comparison table
+   ══════════════════════════════════════════════════════════ */
+a.lp-plan-cta { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+
+/* Multi-line bullets: top-align the icon and let the label take the row. */
+.lp-plan-feat { align-items: flex-start; }
+.lp-plan-feat-icon { margin-top: 3px; }
+.lp-plan-feat > span:first-of-type { flex: 1 1 auto; }
+
+.lp-plan-seat { font-size: 0.8125rem; color: var(--lp-txt-2); margin: 0 0 12px; }
+.lp-plan-card.featured .lp-plan-seat { color: rgba(255,255,255,0.7); }
+
+.lp-plan-banner {
+  font-size: 0.6875rem; line-height: 1.45; color: var(--lp-txt-2);
+  background: var(--lp-bg-2); border: 1px solid var(--lp-border);
+  border-radius: 10px; padding: 8px 10px; margin: 0 0 16px;
+}
+
+.lp-plan-inherit { font-size: 0.8125rem; font-weight: 700; color: var(--lp-txt); margin: 0 0 12px; }
+.lp-plan-card.featured .lp-plan-inherit { color: #fff; }
+
+.lp-plan-seeall {
+  display: inline-block; font-size: 0.8125rem; font-weight: 600;
+  color: var(--lp-accent-2); background: none; border: none; cursor: pointer;
+  padding: 0; margin: 0 0 18px; text-decoration: none; align-self: flex-start;
+}
+.lp-plan-seeall:hover { text-decoration: underline; }
+.lp-plan-card.featured .lp-plan-seeall { color: #fff; }
+
+/* Muted "Planned" pill for any unshipped bullet. */
+.lp-plan-pill-planned {
+  flex: 0 0 auto; align-self: flex-start; margin-top: 1px;
+  display: inline-block; font-size: 0.5625rem; font-weight: 800;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--lp-txt-2);
+  background: var(--lp-bg-2); border: 1px solid var(--lp-border);
+  border-radius: 20px; padding: 2px 7px; white-space: nowrap;
+}
+.lp-plan-card.featured .lp-plan-pill-planned {
+  color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.22);
+}
+
+/* Comparison table below the cards. */
+.lp-compare { margin: 52px auto 0; max-width: 1120px; }
+.lp-compare-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.lp-compare-title { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em; color: var(--lp-txt); }
+.lp-compare-toggle { display: none; }
+.lp-compare-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--lp-border); border-radius: var(--lp-radius); }
+.lp-compare-table { width: 100%; border-collapse: collapse; min-width: 680px; font-size: 0.8125rem; }
+.lp-compare-table th, .lp-compare-table td { text-align: center; padding: 11px 12px; border-bottom: 1px solid var(--lp-border); }
+.lp-compare-table thead th { background: var(--lp-bg-2); color: var(--lp-txt); font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.lp-compare-table th.lp-ct-feature { text-align: left; }
+.lp-compare-table tbody th[scope="row"] { text-align: left; color: var(--lp-txt-2); font-weight: 500; }
+.lp-ct-group th { text-align: left; background: var(--lp-bg-card); color: var(--lp-txt); font-weight: 800; font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.08em; padding: 10px 12px; }
+.lp-ct-yes { color: var(--lp-accent-2); font-weight: 800; }
+.lp-ct-no { color: var(--lp-txt-3); }
+.lp-ct-planned {
+  display: inline-block; font-size: 0.5625rem; font-weight: 800; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--lp-txt-2); background: var(--lp-bg-2);
+  border: 1px solid var(--lp-border); border-radius: 20px; padding: 2px 6px; white-space: nowrap;
+}
+.lp-compare-foot { font-size: 0.8125rem; color: var(--lp-txt-2); margin-top: 14px; text-align: center; }
+
+/* Collapsed by default under 768px, behind a toggle. Horizontally scrollable. */
+@media (max-width: 767px) {
+  .lp-compare-head { flex-direction: column; align-items: flex-start; }
+  .lp-compare-toggle {
+    display: inline-flex; align-items: center; height: 38px; padding: 0 16px;
+    border: 1.5px solid var(--lp-border); border-radius: 10px; background: var(--lp-bg-card);
+    color: var(--lp-txt); font-weight: 700; font-size: 0.8125rem; cursor: pointer;
+  }
+  .lp-compare-scroll { display: none; }
+  .lp-compare.is-open .lp-compare-scroll { display: block; }
+}
+
+/* "What makes Nivaria different" grid. */
+.lp-diff-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 1000px; margin: 0 auto; }
+@media (max-width: 860px) { .lp-diff-grid { grid-template-columns: repeat(2, 1fr); max-width: 680px; } }
+@media (max-width: 560px) { .lp-diff-grid { grid-template-columns: 1fr; max-width: 420px; } }
+.lp-diff-card { background: var(--lp-bg-card); border: 1px solid var(--lp-border); border-radius: var(--lp-radius); padding: 24px 22px; }
+.lp-diff-name { font-size: 1rem; font-weight: 800; letter-spacing: -0.01em; color: var(--lp-txt); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lp-diff-desc { font-size: 0.875rem; line-height: 1.55; color: var(--lp-txt-2); }

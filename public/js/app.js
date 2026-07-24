@@ -749,7 +749,7 @@ const Pricing = {
           'AI outreach playbook drafts in your voice',
           'Email brief delivery',
           'Win/loss correlation and historical pattern analysis',
-          'ROI dashboard',
+          'Revenue Impact Dashboard',
         ],
       },
       {

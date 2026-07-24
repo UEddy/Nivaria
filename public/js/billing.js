@@ -1,11 +1,14 @@
-// Phase 10 — client-side billing: Lemon Squeezy overlay, upgrade-gate modal,
+// Phase 10 — client-side billing: checkout overlay, upgrade-gate modal,
 // Team/Business waitlist modals, and GDPR account controls. Subscription state
 // is owned by the server (webhook-driven); this file only triggers flows and
 // renders responses.
+//
+// The payment provider is reached through exactly one function, startCheckout()
+// below, so swapping providers later is a one-line change confined to it.
 
 const X_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
 
-// ── Lemon Squeezy overlay ──────────────────────────────────────────────────────
+// ── Checkout overlay ───────────────────────────────────────────────────────────
 function initLemon() {
   if (window.__lemonInited) return;
   if (typeof window.createLemonSqueezy === 'function') window.createLemonSqueezy();
@@ -14,6 +17,26 @@ function initLemon() {
     window.__lemonInited = true;
   }
 }
+
+// ── Checkout entry point ───────────────────────────────────────────────────────
+// The SINGLE place the app hands a paid plan to the payment provider. Everything
+// that starts a purchase (pricing page, Settings, upgrade gate) calls this, so
+// switching the provider later means rewriting only this function's body. Pro is
+// the only purchasable plan today; Team and Business are waitlist-only and never
+// reach here.
+async function startCheckout(planId) {
+  const plan = planId || 'pro';
+  const { checkoutUrl } = await API.checkout(plan);
+  if (!checkoutUrl) throw new Error('No checkout URL returned');
+  initLemon();
+  if (window.LemonSqueezy?.Url?.Open) {
+    window.LemonSqueezy.Url.Open(checkoutUrl);
+  } else {
+    // Overlay script blocked or unavailable: fall back to a hosted checkout tab.
+    window.open(checkoutUrl, '_blank', 'noopener');
+  }
+}
+window.startCheckout = startCheckout;
 
 // lemon.js emits e.g. { event: 'Checkout.Success', data: {...} } (older builds
 // used 'PaymentSuccess'); match any success signal defensively.
@@ -24,8 +47,8 @@ function onLemonEvent(event) {
     try { window.LemonSqueezy?.Url?.Close?.(); } catch (_) {}
     toast('Welcome to Pro! 🎉', 'success');
     // Safety net: if the subscription_created webhook hasn't flipped the
-    // workspace to Pro within 5s, reconcile directly against Lemon Squeezy so
-    // the user never sits in a "paid but shows Free" state.
+    // workspace to Pro within 5s, reconcile directly against the payment
+    // provider so the user never sits in a "paid but shows Free" state.
     setTimeout(async () => {
       try {
         const s = await API.getSubscription();
@@ -38,20 +61,12 @@ function onLemonEvent(event) {
 }
 
 const Billing = {
-  // Open the Pro checkout overlay. Used by the pricing page, Settings, and the
-  // upgrade-gate modal. Backend returns a Lemon Squeezy checkout URL.
+  // Open the Pro checkout. Used by the pricing page, Settings, and the
+  // upgrade-gate modal. Delegates to the single startCheckout() choke point.
   async subscribe(btn) {
     const restore = btn ? startBtn(btn, 'Opening…') : null;
     try {
-      const { checkoutUrl } = await API.checkout('pro');
-      if (!checkoutUrl) throw new Error('No checkout URL returned');
-      initLemon();
-      if (window.LemonSqueezy?.Url?.Open) {
-        window.LemonSqueezy.Url.Open(checkoutUrl);
-      } else {
-        // Overlay script blocked/unavailable — fall back to a hosted checkout tab.
-        window.open(checkoutUrl, '_blank', 'noopener');
-      }
+      await startCheckout('pro');
     } catch (e) {
       if (e.error !== 'upgrade_required') toast(e.message || 'Could not start checkout', 'error');
     } finally {
@@ -108,7 +123,7 @@ const Billing = {
     if (linkEl) linkEl.textContent = 'Checking…';
     try {
       const r = await API.reconcile();
-      toast(r.reconciled ? 'Subscription synced from Lemon Squeezy.' : (r.message || 'Your subscription is already up to date.'),
+      toast(r.reconciled ? 'Subscription synced.' : (r.message || 'Your subscription is already up to date.'),
         r.reconciled ? 'success' : 'info');
       if (window.Settings) Settings.render();
     } catch (e) {

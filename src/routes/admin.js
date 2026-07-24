@@ -298,7 +298,7 @@ function renderSetDeveloperForm(csrfToken, note, prefillEmail) {
         </select>
       </div>
       <button class="submit" type="submit">Apply</button>
-      <p class="warn">This override grants unlimited Pro features regardless of Lemon Squeezy subscription state. It does not change billing or the user's actual paid tier.</p>
+      <p class="warn">This override grants full Pro features regardless of subscription state. It does not change billing or the user's actual paid tier.</p>
     </form>
     <a class="back" href="/admin/users">&larr; Back to users</a>`);
 }

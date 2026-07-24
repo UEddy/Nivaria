@@ -2,7 +2,7 @@
 //
 // One nav item, two tabs:
 //   "Log & deals" — the fast inline logging form + the chronological deal list
-//   "ROI dashboard" — detected win/loss correlations and revenue at risk
+//   "Revenue Impact Dashboard" — detected win/loss correlations and revenue at risk
 //
 // Logging speed is the make-or-break constraint, so the form is inline (never a
 // modal), 3 primary fields, autocompleted, keyboard-friendly, save on the right.
@@ -50,7 +50,7 @@ const Deals = {
     el('page-root').innerHTML = `
       <div class="deals-tabs" role="tablist">
         <button class="deals-tab ${Deals._tab === 'log' ? 'active' : ''}" role="tab" aria-selected="${Deals._tab === 'log'}" aria-controls="deals-tab-content" onclick="Deals.switchTab('log')">Log &amp; deals</button>
-        <button class="deals-tab ${Deals._tab === 'roi' ? 'active' : ''}" role="tab" aria-selected="${Deals._tab === 'roi'}" aria-controls="deals-tab-content" onclick="Deals.switchTab('roi')">ROI dashboard</button>
+        <button class="deals-tab ${Deals._tab === 'roi' ? 'active' : ''}" role="tab" aria-selected="${Deals._tab === 'roi'}" aria-controls="deals-tab-content" onclick="Deals.switchTab('roi')">Revenue Impact Dashboard</button>
       </div>
       <div id="deals-tab-content" role="tabpanel"><div class="loading-state"><div class="spinner"></div><span>Loading...</span></div></div>
     `;
@@ -180,7 +180,7 @@ const Deals = {
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
           </div>
           <div class="empty-title">No deals logged yet</div>
-          <div class="empty-desc">Log your first win or loss above. Once you have a handful tagged to competitors, the ROI dashboard starts surfacing patterns.</div>
+          <div class="empty-desc">Log your first win or loss above. Once you have a handful tagged to competitors, the Revenue Impact Dashboard starts surfacing patterns.</div>
         </div>`;
     }
     return `

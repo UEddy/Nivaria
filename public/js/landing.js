@@ -266,6 +266,32 @@
     });
   }
 
+  // ── Pricing comparison table ───────────────────────────────
+  // The full table sits below the cards. Under 768px it is collapsed behind a
+  // toggle; at wider widths it is always shown. Every "See all features" link
+  // scrolls to it and opens it (so it is visible on mobile too).
+  function initPricingCompare() {
+    const compare = document.getElementById('lp-compare');
+    const toggle  = document.getElementById('lp-compare-toggle');
+    if (!compare) return;
+
+    function open() {
+      compare.classList.add('is-open');
+      if (toggle) { toggle.setAttribute('aria-expanded', 'true'); toggle.textContent = 'Hide full comparison'; }
+    }
+    function close() {
+      compare.classList.remove('is-open');
+      if (toggle) { toggle.setAttribute('aria-expanded', 'false'); toggle.textContent = 'Show full comparison'; }
+    }
+
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        compare.classList.contains('is-open') ? close() : open();
+      });
+    }
+    document.querySelectorAll('.lp-plan-seeall').forEach((a) => a.addEventListener('click', open));
+  }
+
   // ── Init ──────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     initTheme();
@@ -275,5 +301,6 @@
     initVideo();
     initDemoVideo();
     initWaitlist();
+    initPricingCompare();
   });
 })();

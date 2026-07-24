@@ -184,7 +184,7 @@ const Settings = {
       <div class="set-card">
         <div class="set-card__head">
           <div class="set-card__title">Plan &amp; billing</div>
-          <div class="set-card__desc">Your current plan and subscription. Billing is handled securely by Lemon Squeezy.</div>
+          <div class="set-card__desc">Your current plan and subscription. Billing and card details are handled securely by our payment processor.</div>
         </div>
         <div class="set-card__body">
           ${body}
