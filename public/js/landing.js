@@ -2,6 +2,39 @@
    the decorative dot maps and the one-click live demo. */
 
 (function () {
+  // ── Theme ────────────────────────────────────────────────────────────────
+  // Same saved choice as the app (localStorage cs-theme: light, dark or
+  // system; dark when unset). The inline script in <head> applies it before
+  // first paint; this keeps it in sync and wires the toggle.
+  const THEME_KEY = 'cs-theme';
+  function savedTheme() {
+    try { return localStorage.getItem(THEME_KEY) || 'dark'; } catch (_) { return 'dark'; }
+  }
+  function resolve(val) {
+    return val === 'system' ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : val;
+  }
+  function applyTheme(val) {
+    const theme = resolve(val);
+    document.documentElement.setAttribute('data-theme', theme);
+    const btn = document.getElementById('lp-theme-btn');
+    if (btn) btn.setAttribute('aria-label', theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode');
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme === 'light' ? '#ffffff' : '#000000');
+  }
+  function initTheme() {
+    applyTheme(savedTheme());
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+      if (savedTheme() === 'system') applyTheme('system');
+    });
+    const btn = document.getElementById('lp-theme-btn');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const next = resolve(savedTheme()) === 'light' ? 'dark' : 'light';
+      try { localStorage.setItem(THEME_KEY, next); } catch (_) {}
+      applyTheme(next);
+    });
+  }
+
   // ── Navbar border once the page scrolls ──────────────────────────────────
   function initNav() {
     const nav = document.getElementById('lp-nav');
@@ -71,19 +104,18 @@
 
   // ── Decorative dot maps ──────────────────────────────────────────────────
   // A fixed pattern in the map's colors (blue you lead, gray even, red rival
-  // leads). It is an illustration and carries no data.
+  // leads). It is an illustration and carries no data. Each dot blends its
+  // pole with the even gray in CSS (color-mix), so a theme switch recolors it.
   function initDots() {
-    const blue = [57, 135, 229], mid = [56, 56, 53], red = [230, 103, 103];
     document.querySelectorAll('.lp-dots').forEach(el => {
       const n = Number(getComputedStyle(el).getPropertyValue('--n')) || 12;
       const rows = el.classList.contains('lp-dots-sm') ? 2 : 6;
       for (let i = 0; i < n * rows; i += 1) {
         const x = i % n, y = Math.floor(i / n);
         const t = Math.max(-1, Math.min(1, Math.sin(x * 0.9 + y * 0.55) * 0.6 + Math.cos(x * 0.35 - y * 0.8) * 0.5));
-        const pole = t >= 0 ? red : blue;
-        const c = mid.map((m, k) => Math.round(m + (pole[k] - m) * Math.abs(t)));
         const d = document.createElement('span');
-        d.style.background = 'rgb(' + c.join(',') + ')';
+        d.className = t >= 0 ? 'pr' : 'po';
+        d.style.setProperty('--a', Math.round(Math.abs(t) * 100) + '%');
         d.style.transform = 'scale(' + (0.55 + ((Math.sin(i * 1.7) + 1) / 2) * 0.45).toFixed(2) + ')';
         el.appendChild(d);
       }
@@ -126,6 +158,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
     initNav();
     initMenu();
     initReveal();

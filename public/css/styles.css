@@ -4337,3 +4337,51 @@ body[data-mode="taste"] [data-surface="monitor"] { display: none; }
   border-bottom: 1px solid var(--border);
 }
 .demo-banner[hidden] { display: none; }
+
+/* ── Light theme: clean white, no blue tint ────────────────────────────────────
+   The counterpart of the dark block above, matching the landing page's light
+   theme: white surfaces, neutral greys, hairline borders and near-black
+   active states instead of the old indigo-tinted #F0F4FF palette. The
+   background glows, dot grid, floating shapes and scanline are off. Brand
+   color stays on primary buttons and links; chart and map colors are
+   unchanged. */
+[data-theme="light"] {
+  --bg:           #FFFFFF;
+  --bg-2:         #FAFAFA;
+  --bg-card:      rgba(255, 255, 255, 0.96);
+  --bg-elevated:  #F4F4F5;
+  --bg-hover:     rgba(0, 0, 0, 0.035);
+  --bg-active:    rgba(0, 0, 0, 0.06);
+  --border:       rgba(0, 0, 0, 0.08);
+  --border-2:     rgba(0, 0, 0, 0.13);
+  --border-accent:rgba(0, 0, 0, 0.22);
+  --txt:          #111111;
+  --txt-2:        #52525B;
+  --txt-3:        #6B6B73;
+  --shadow-xs:    0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow:       0 4px 20px rgba(0, 0, 0, 0.06);
+  --shadow-lg:    0 12px 40px rgba(0, 0, 0, 0.10);
+  --glow:         none;
+  --glow-lg:      none;
+  --orb-1: transparent;
+  --orb-2: transparent;
+  --orb-3: transparent;
+  --grid-dot: transparent;
+}
+[data-theme="light"] .bg-orb,
+[data-theme="light"] .bg-grid,
+[data-theme="light"] .particle-canvas,
+[data-theme="light"] .geo-shapes,
+[data-theme="light"] .scanline-overlay { display: none; }
+[data-theme="light"] body,
+[data-theme="light"] .bg-canvas { background: #fff; }
+[data-theme="light"] .sidebar { background: #fff; border-right-color: rgba(0, 0, 0, 0.08); box-shadow: none; }
+[data-theme="light"] .sidebar-logo,
+[data-theme="light"] .sidebar-footer { border-color: rgba(0, 0, 0, 0.08); }
+[data-theme="light"] .topbar { background: rgba(255, 255, 255, 0.92); border-bottom-color: rgba(0, 0, 0, 0.08); }
+[data-theme="light"] .nav-item:hover { background: rgba(0, 0, 0, 0.04); }
+[data-theme="light"] .nav-item.active { background: rgba(0, 0, 0, 0.06); color: #111; }
+[data-theme="light"] .nav-item.active::after { background: #111; box-shadow: none; }
+[data-theme="light"] .card::before { background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.06), transparent); }
+[data-theme="light"] .skeleton { background: linear-gradient(90deg, #f1f1f2 0%, #e7e7e9 45%, #f1f1f2 100%); background-size: 200% 100%; }
