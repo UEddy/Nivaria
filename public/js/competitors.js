@@ -79,7 +79,7 @@ const Competitors = {
           <div class="text-sm text-muted">${comps} competitor${comps === 1 ? '' : 's'}. Each page counts toward your plan limit.</div>
         </div>
         <div style="height:6px;border-radius:4px;background:var(--bg-3, rgba(148,163,184,.18));margin-top:10px;overflow:hidden">
-          <div style="height:100%;width:${pct}%;border-radius:4px;background:${warn ? 'var(--red, #ef4444)' : 'var(--accent, #6366f1)'};transition:width .3s"></div>
+          <div style="height:100%;width:${pct}%;border-radius:4px;background:${warn ? 'var(--red, #ef4444)' : 'var(--accent, #4C63EE)'};transition:width .3s"></div>
         </div>
         ${over ? `<div class="text-sm" style="margin-top:8px;color:var(--red, #ef4444);font-weight:500">You are over the plan limit. Remove a page before adding another.</div>` : ''}
       </div>`;

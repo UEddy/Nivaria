@@ -50,7 +50,7 @@ function buildCalendarReauthHtml({ name, provider, accountEmail, appUrl }) {
           Your ${providerName} Calendar connection (${acct}) expired and could not be refreshed automatically.
           Pre-meeting briefings will stop firing until you re-connect.
         </p>
-        <a href="${reconnectUrl}" style="display:inline-block;background:#4338CA;color:#FFFFFF;text-decoration:none;font-weight:700;font-size:14px;padding:13px 22px;border-radius:10px">Re-connect now</a>
+        <a href="${reconnectUrl}" style="display:inline-block;background:#2D46D6;color:#FFFFFF;text-decoration:none;font-weight:700;font-size:14px;padding:13px 22px;border-radius:10px">Re-connect now</a>
       </td></tr>
       ${brandFooter()}
     </table>
@@ -140,7 +140,7 @@ function buildHtml(code, purpose) {
           </p>
 
           <div style="background:#000000;border:1px solid #222222;border-radius:12px;padding:30px 20px;text-align:center;margin-bottom:28px">
-            <span style="font-size:46px;font-weight:800;letter-spacing:14px;color:#6366F1;font-family:'Courier New',Courier,monospace">
+            <span style="font-size:46px;font-weight:800;letter-spacing:14px;color:#4C63EE;font-family:'Courier New',Courier,monospace">
               ${code}
             </span>
           </div>
@@ -181,7 +181,7 @@ async function sendAccountDeletionEmail(toEmail, cancelUrl, scheduledDate) {
         <p style="margin:0 0 24px;font-size:14px;color:#94A3B8;line-height:1.65">
           If you did not request this, or you changed your mind, click below to cancel and keep your account.
         </p>
-        <a href="${cancelUrl}" style="display:inline-block;background:#6366F1;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:13px 22px;border-radius:10px">Cancel deletion &amp; keep my account</a>
+        <a href="${cancelUrl}" style="display:inline-block;background:#4C63EE;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:13px 22px;border-radius:10px">Cancel deletion &amp; keep my account</a>
         <p style="margin:24px 0 0;font-size:12px;color:#4B5563;line-height:1.6">If the button doesn't work, paste this link into your browser:<br>${cancelUrl}</p>
       </td></tr>
       ${brandFooter()}
@@ -257,7 +257,7 @@ function buildBriefHtml(competitor, analysis, changeId) {
 
   const THREAT_HEX = { low: '#10B981', medium: '#F59E0B', high: '#EF4444' };
   const level = String(analysis.threat_level || 'medium').toLowerCase();
-  const threatColor = THREAT_HEX[level] || '#6366F1';
+  const threatColor = THREAT_HEX[level] || '#4C63EE';
   const threatLabel = level.toUpperCase();
 
   // Sanitize every model-authored field before it reaches the inbox.
@@ -271,14 +271,14 @@ function buildBriefHtml(competitor, analysis, changeId) {
     ? `<table cellpadding="0" cellspacing="0" style="margin:8px 0 0">
         ${points.map(p => `
           <tr>
-            <td style="vertical-align:top;padding:4px 10px 4px 0;color:#6366F1;font-size:14px;line-height:1.6">&bull;</td>
+            <td style="vertical-align:top;padding:4px 10px 4px 0;color:#4C63EE;font-size:14px;line-height:1.6">&bull;</td>
             <td style="padding:4px 0;color:#94A3B8;font-size:14px;line-height:1.6">${sanitizeCopy(String(p))}</td>
           </tr>`).join('')}
       </table>`
     : '';
 
   const section = (label, body) => body
-    ? `<p style="margin:24px 0 6px;font-size:11px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#6366F1">${label}</p>
+    ? `<p style="margin:24px 0 6px;font-size:11px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#4C63EE">${label}</p>
        <p style="margin:0;font-size:14px;color:#94A3B8;line-height:1.65">${body}</p>`
     : '';
 
@@ -304,15 +304,15 @@ function buildBriefHtml(competitor, analysis, changeId) {
             </td>
           </tr></table>
 
-          <p style="margin:0 0 2px;font-size:11px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#6366F1">What changed</p>
+          <p style="margin:0 0 2px;font-size:11px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#4C63EE">What changed</p>
           <p style="margin:0;font-size:16px;font-weight:700;color:#F1F5F9;line-height:1.5">${headline}</p>
 
           ${section('Executive summary', summary)}
           ${section('Recommended response', action)}
-          ${points.length ? `<p style="margin:24px 0 0;font-size:11px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#6366F1">Key talking points</p>${pointsHtml}` : ''}
+          ${points.length ? `<p style="margin:24px 0 0;font-size:11px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#4C63EE">Key talking points</p>${pointsHtml}` : ''}
 
           <table cellpadding="0" cellspacing="0" style="margin:30px 0 0"><tr><td>
-            <a href="${briefUrl}" style="display:inline-block;background:#4338CA;color:#FFFFFF;text-decoration:none;font-weight:700;font-size:14px;padding:13px 24px;border-radius:10px">View full brief</a>
+            <a href="${briefUrl}" style="display:inline-block;background:#2D46D6;color:#FFFFFF;text-decoration:none;font-weight:700;font-size:14px;padding:13px 24px;border-radius:10px">View full brief</a>
           </td></tr></table>
           <p style="margin:18px 0 0;font-size:12px;color:#4B5563;line-height:1.6">
             You receive this because brief notifications are on for your workspace. You can turn them off in Settings, Notifications.

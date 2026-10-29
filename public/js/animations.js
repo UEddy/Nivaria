@@ -44,8 +44,7 @@ class ConstellationSystem {
   }
 
   rgb() {
-    return document.documentElement.getAttribute('data-theme') === 'light'
-      ? '79,70,229' : '99,102,241';
+    return '45,70,214'; // brand cobalt in both themes
   }
 
   tick() {

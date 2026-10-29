@@ -100,7 +100,7 @@ function renderPage(title, articleHtml) {
       --lg-txt:     #E8ECF4;
       --lg-txt-2:   #94A3B8;
       --lg-txt-3:   #64748B;
-      --lg-accent:  #818CF8;
+      --lg-accent:  #A9B8FF;
       --lg-nav-h:   64px;
       color-scheme: dark;
     }
@@ -111,7 +111,7 @@ function renderPage(title, articleHtml) {
       --lg-txt:     #0C0C14;
       --lg-txt-2:   #475569;
       --lg-txt-3:   #64748B;
-      --lg-accent:  #4F46E5;
+      --lg-accent:  #3550E8;
       color-scheme: light;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

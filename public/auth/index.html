@@ -28,7 +28,7 @@
        worker by design). iOS ignores the manifest for icon/standalone, so the
        apple-* meta tags below are required for Add to Home Screen there. -->
   <link rel="manifest" href="/manifest.webmanifest">
-  <meta name="theme-color" content="#4338CA">
+  <meta name="theme-color" content="#2D46D6">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -49,18 +49,18 @@
       --a-txt-muted:       #4B5563;
       --a-input-bg:        #000000;
       --a-placeholder:     #374151;
-      --a-accent:          #4338CA;
-      --a-accent-hover:    #818CF8;
-      --a-accent-dim:      rgba(99,102,241,0.12);
-      --a-accent-dim-bdr:  rgba(99,102,241,0.25);
-      --a-otp-filled:      #4338CA;
+      --a-accent:          #2D46D6;
+      --a-accent-hover:    #A9B8FF;
+      --a-accent-dim:      rgba(45, 70, 214,0.12);
+      --a-accent-dim-bdr:  rgba(45, 70, 214,0.25);
+      --a-otp-filled:      #2D46D6;
       --a-pw-dot:          #1E1E1E;
       --a-ghost-bdr:       #1A1A1A;
       --a-ghost-txt:       #94A3B8;
       --a-ghost-h-bdr:     #333333;
       --a-ghost-h-txt:     #F1F5F9;
       --a-logo-txt:        #F1F5F9;
-      --a-orb-1:           rgba(99,102,241,0.22);
+      --a-orb-1:           rgba(45, 70, 214,0.22);
       --a-orb-2:           rgba(6,182,212,0.15);
       /* messages */
       --a-err-bg:          rgba(239,68,68,0.10);
@@ -69,13 +69,13 @@
       --a-ok-bg:           rgba(16,185,129,0.10);
       --a-ok-bdr:          rgba(16,185,129,0.25);
       --a-ok-txt:          #34D399;
-      --a-info-bg:         rgba(99,102,241,0.10);
-      --a-info-bdr:        rgba(99,102,241,0.25);
-      --a-info-txt:        #A5B4FC;
+      --a-info-bg:         rgba(45, 70, 214,0.10);
+      --a-info-bdr:        rgba(45, 70, 214,0.25);
+      --a-info-txt:        #BCC8FF;
       /* email tag */
-      --a-tag-bg:          rgba(99,102,241,0.12);
-      --a-tag-bdr:         rgba(99,102,241,0.25);
-      --a-tag-txt:         #A5B4FC;
+      --a-tag-bg:          rgba(45, 70, 214,0.12);
+      --a-tag-bdr:         rgba(45, 70, 214,0.25);
+      --a-tag-txt:         #BCC8FF;
       color-scheme: dark;
     }
 
@@ -92,18 +92,18 @@
       --a-txt-muted:       #6B7280;
       --a-input-bg:        #FFFFFF;
       --a-placeholder:     #9CA3AF;
-      --a-accent:          #4338CA;
-      --a-accent-hover:    #4F46E5;
-      --a-accent-dim:      rgba(99,102,241,0.08);
-      --a-accent-dim-bdr:  rgba(99,102,241,0.20);
-      --a-otp-filled:      #4338CA;
+      --a-accent:          #2D46D6;
+      --a-accent-hover:    #3550E8;
+      --a-accent-dim:      rgba(45, 70, 214,0.08);
+      --a-accent-dim-bdr:  rgba(45, 70, 214,0.20);
+      --a-otp-filled:      #2D46D6;
       --a-pw-dot:          #D1D5DB;
       --a-ghost-bdr:       #E5E7EB;
       --a-ghost-txt:       #6B7280;
-      --a-ghost-h-bdr:     #C7D2FE;
-      --a-ghost-h-txt:     #4F46E5;
+      --a-ghost-h-bdr:     #D3DBFF;
+      --a-ghost-h-txt:     #3550E8;
       --a-logo-txt:        #0F172A;
-      --a-orb-1:           rgba(99,102,241,0.07);
+      --a-orb-1:           rgba(45, 70, 214,0.07);
       --a-orb-2:           rgba(6,182,212,0.04);
       /* messages */
       --a-err-bg:          rgba(239,68,68,0.07);
@@ -112,12 +112,12 @@
       --a-ok-bg:           rgba(16,185,129,0.07);
       --a-ok-bdr:          rgba(16,185,129,0.20);
       --a-ok-txt:          #047857;
-      --a-info-bg:         rgba(99,102,241,0.07);
-      --a-info-bdr:        rgba(99,102,241,0.20);
-      --a-info-txt:        #4338CA;
-      --a-tag-bg:          rgba(99,102,241,0.07);
-      --a-tag-bdr:         rgba(99,102,241,0.20);
-      --a-tag-txt:         #4338CA;
+      --a-info-bg:         rgba(45, 70, 214,0.07);
+      --a-info-bdr:        rgba(45, 70, 214,0.20);
+      --a-info-txt:        #2D46D6;
+      --a-tag-bg:          rgba(45, 70, 214,0.07);
+      --a-tag-bdr:         rgba(45, 70, 214,0.20);
+      --a-tag-txt:         #2D46D6;
       color-scheme: light;
     }
 
@@ -194,7 +194,7 @@
     .theme-btn.active {
       background: var(--a-accent);
       color: #fff;
-      box-shadow: 0 2px 8px rgba(99,102,241,0.35);
+      box-shadow: 0 2px 8px rgba(45, 70, 214,0.35);
     }
 
     /* ── Main layout ─────────────────────────────────────────────────── */
@@ -256,7 +256,7 @@
     .form-input::placeholder { color: var(--a-placeholder); }
     .form-input:focus {
       border-color: var(--a-accent);
-      box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+      box-shadow: 0 0 0 3px rgba(45, 70, 214,0.15);
     }
     .form-input:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -277,7 +277,7 @@
     }
     .otp-digit:focus {
       border-color: var(--a-accent);
-      box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+      box-shadow: 0 0 0 3px rgba(45, 70, 214,0.15);
     }
     .otp-digit.filled { border-color: var(--a-otp-filled); }
 
@@ -294,12 +294,12 @@
     .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
     .btn-primary {
       background: var(--a-accent); color: #fff;
-      box-shadow: 0 4px 16px rgba(99,102,241,0.30);
+      box-shadow: 0 4px 16px rgba(45, 70, 214,0.30);
     }
     .btn-primary:not(:disabled):hover {
       background: var(--a-accent-hover);
       transform: translateY(-1px);
-      box-shadow: 0 8px 24px rgba(99,102,241,0.40);
+      box-shadow: 0 8px 24px rgba(45, 70, 214,0.40);
     }
     .btn-ghost {
       background: transparent;

@@ -143,13 +143,13 @@ const HEAD_STYLE = `
   <style>
     :root {
       --c-bg:#000; --c-bg-2:#0A0A0A; --c-border:rgba(255,255,255,0.08);
-      --c-txt:#E8ECF4; --c-txt-2:#94A3B8; --c-txt-3:#64748B; --c-accent:#818CF8;
-      --c-accent-solid:#4338CA; --c-nav-h:64px; color-scheme:dark;
+      --c-txt:#E8ECF4; --c-txt-2:#94A3B8; --c-txt-3:#64748B; --c-accent:#A9B8FF;
+      --c-accent-solid:#2D46D6; --c-nav-h:64px; color-scheme:dark;
     }
     [data-theme="light"] {
       --c-bg:#FFF; --c-bg-2:#F4F4F8; --c-border:rgba(0,0,0,0.10);
-      --c-txt:#0C0C14; --c-txt-2:#475569; --c-txt-3:#64748B; --c-accent:#4F46E5;
-      --c-accent-solid:#4338CA; color-scheme:light;
+      --c-txt:#0C0C14; --c-txt-2:#475569; --c-txt-3:#64748B; --c-accent:#3550E8;
+      --c-accent-solid:#2D46D6; color-scheme:light;
     }
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     html{scroll-behavior:smooth;scroll-padding-top:calc(var(--c-nav-h) + 16px)}

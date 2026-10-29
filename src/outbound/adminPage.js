@@ -30,17 +30,17 @@ function renderOutboundBody(csrfToken) {
       .ob-run { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; font-size: 0.8125rem; cursor: pointer; }
       .ob-run.active { border-color: var(--accent); }
       .ob-run .ob-run-meta { color: var(--txt-2); font-size: 0.75rem; }
-      .pill-run { background: rgba(129,140,248,0.16); color: #A5B4FC; }
+      .pill-run { background: rgba(129,140,248,0.16); color: #BCC8FF; }
       .pill-done { background: rgba(16,185,129,0.16); color: #34D399; }
       .pill-error { background: rgba(239,68,68,0.16); color: #F87171; }
       .pill-pending { background: rgba(255,255,255,0.06); color: var(--txt-2); }
-      .pill-new { background: rgba(129,140,248,0.16); color: #A5B4FC; }
+      .pill-new { background: rgba(129,140,248,0.16); color: #BCC8FF; }
       .pill-contacted { background: rgba(245,158,11,0.18); color: #FBBF24; }
       .pill-replied { background: rgba(16,185,129,0.16); color: #34D399; }
       .pill-skipped { background: rgba(255,255,255,0.06); color: var(--txt-3); }
       .pill-manual { background: rgba(245,158,11,0.18); color: #FBBF24; }
       .pill-verified { background: rgba(16,185,129,0.16); color: #34D399; }
-      .score-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; height: 28px; padding: 0 8px; border-radius: 8px; font-weight: 800; font-size: 0.9rem; background: rgba(129,140,248,0.16); color: #A5B4FC; }
+      .score-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; height: 28px; padding: 0 8px; border-radius: 8px; font-weight: 800; font-size: 0.9rem; background: rgba(129,140,248,0.16); color: #BCC8FF; }
       .score-hi { background: rgba(16,185,129,0.16); color: #34D399; }
       .score-lo { background: rgba(255,255,255,0.06); color: var(--txt-2); }
       .ob-expand td { background: rgba(255,255,255,0.02); }

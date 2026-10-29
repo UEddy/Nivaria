@@ -154,7 +154,7 @@ function formatDiscordPayload({ competitor, meeting, change, points, matchReason
         title: `📅 ${competitor.name} mentioned in your next meeting`,
         description: `**${meeting.title}**\n${startStr} · ${matchLabel}\n\nNo material changes in the last ${RECENT_CHANGE_LOOKBACK_DAYS} days.`,
         url: `${appUrl}/app#/competitors`,
-        color: 0x6366f1,
+        color: 0x4c63ee,
         footer: { text: 'Nivaria · pre-meeting briefing' },
         timestamp: new Date().toISOString(),
       }],
@@ -167,7 +167,7 @@ function formatDiscordPayload({ competitor, meeting, change, points, matchReason
       title: `📅 ${competitor.name}: pre-meeting briefing`,
       description: `**${meeting.title}**\n${startStr} · ${matchLabel}\n\n**${change.headline || 'Change detected'}**`,
       url: `${appUrl}/app#/history/${change.id}`,
-      color: { low: 0x10b981, medium: 0xf59e0b, high: 0xef4444 }[change.threat_level] || 0x6366f1,
+      color: { low: 0x10b981, medium: 0xf59e0b, high: 0xef4444 }[change.threat_level] || 0x4c63ee,
       fields: [
         { name: 'Threat', value: (change.threat_level || 'low').toUpperCase(), inline: true },
         { name: 'Detected', value: String(change.detected_at || '').slice(0, 10), inline: true },

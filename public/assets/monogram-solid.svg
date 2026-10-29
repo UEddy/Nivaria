@@ -1,1 +1,18 @@
-<svg id="monogram-solid" width="80" height="80" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" data-fg-d3bl23="0.8:0.125:/src/app/App.tsx:83:11:2834:238:e:svg:ete" data-fgid-d3bl23=":r17:"><rect width="400" height="400" fill="#4338CA" data-fg-d3bl24="0.8:0.125:/src/app/App.tsx:84:13:2964:47:e:rect"/><g fill="#FFFFFF" data-fg-d3bl40="0.8:0.125:/src/app/App.tsx:132:5:4763:311:e:g:etete:1"><rect x="72" y="76" width="66" height="254" data-fg-d3bl41="0.8:0.125:/src/app/App.tsx:133:7:4785:60:e:rect"/><rect x="262" y="76" width="66" height="254" data-fg-d3bl42="0.8:0.125:/src/app/App.tsx:134:7:4852:60:e:rect"/><polygon points="130,76 212,76 270,330 188,330" data-fg-d3bl43="0.8:0.125:/src/app/App.tsx:135:7:4919:146:e:polygon"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 400 400" fill="none" role="img" aria-label="Nivaria">
+  <!-- Nivaria monogram: a deep cobalt tile with a faint tonal shift and a
+       hairline inner edge, and the N drawn as two stems and a bold diagonal
+       with a narrow stencil cut on each side. -->
+  <defs>
+    <linearGradient id="nv-tile" x1="0" y1="0" x2="400" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3550E8"/>
+      <stop offset="1" stop-color="#2236C0"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" rx="88" fill="url(#nv-tile)"/>
+  <rect x="2.5" y="2.5" width="395" height="395" rx="85.5" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="5"/>
+  <g fill="#FFFFFF">
+    <rect x="94" y="92" width="58" height="216"/>
+    <rect x="248" y="92" width="58" height="216"/>
+    <path d="M162 92h56l20 216h-56z"/>
+  </g>
+</svg>

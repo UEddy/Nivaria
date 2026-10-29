@@ -33,10 +33,11 @@
   --lp-spin: #555;
   --lp-focus: #fff;
   /* Brand indigo from the logo. Text on black uses a lighter step, because
-     #4338CA text on #000 is under 3:1. */
-  --lp-brand: #4338CA;
-  --lp-brand-hover: #4F46E5;
-  --lp-brand-text: #818CF8;
+     #2D46D6 text on #000 is under 3:1. */
+  --lp-brand: #2D46D6;
+  --lp-brand-hover: #2439B5;
+  --lp-brand-top: #3A54EA;
+  --lp-brand-text: #A9B8FF;
   --lp-hero-overlay: linear-gradient(180deg, rgba(0, 0, 0, 0.74) 0%, rgba(0, 0, 0, 0.8) 62%, #000 100%);
   --lp-nav-bg: rgba(0, 0, 0, 0.72);
   --lp-shot-bg: linear-gradient(180deg, #0d0d0d, #050505);
@@ -79,9 +80,10 @@
   --lp-mark-2: #e4e4e7;
   --lp-spin: #c4c4c8;
   --lp-focus: #111;
-  --lp-brand: #4338CA;
-  --lp-brand-hover: #3730A3;
-  --lp-brand-text: #4338CA;
+  --lp-brand: #2D46D6;
+  --lp-brand-hover: #2439B5;
+  --lp-brand-top: #3A54EA;
+  --lp-brand-text: #2D46D6;
   --lp-hero-overlay: linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.86) 62%, #fff 100%);
   --lp-nav-bg: rgba(255, 255, 255, 0.8);
   --lp-shot-bg: linear-gradient(180deg, #fafafa, #f2f2f3);
@@ -130,8 +132,13 @@ button { font: inherit; }
 .lp-btn-sm { height: 34px; padding: 0 14px; font-size: 13.5px; }
 .lp-btn-white { background: var(--lp-btn-bg); color: var(--lp-btn-fg); }
 .lp-btn-white:hover { background: var(--lp-btn-hover); }
-.lp-btn-brand { background: var(--lp-brand); color: #fff; }
-.lp-btn-brand:hover { background: var(--lp-brand-hover); }
+/* Brand button: solid cobalt with a fine inner highlight, as in the app. */
+.lp-btn-brand {
+  background: linear-gradient(180deg, var(--lp-brand-top) 0%, var(--lp-brand) 100%);
+  color: #fff; border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 2px rgba(0, 0, 0, 0.24);
+}
+.lp-btn-brand:hover { background: linear-gradient(180deg, var(--lp-brand) 0%, var(--lp-brand-hover) 100%); }
 .lp-btn-dark { background: var(--lp-btn2-bg); color: var(--lp-txt); border-color: var(--lp-line-2); }
 .lp-btn-dark:hover { background: var(--lp-btn2-hover); border-color: var(--lp-line-3); }
 .lp-btn[disabled] { opacity: 0.6; cursor: wait; }

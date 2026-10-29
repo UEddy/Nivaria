@@ -59,7 +59,7 @@ async function sendDiscordAlert(webhookUrl, competitor, analysis, changeId) {
       {
         title: `🔍 ${competitor.name}: Page Changed`,
         description: `**${analysis.headline}**\n\n${analysis.summary}`,
-        color: THREAT_COLOR[analysis.threat_level] || 0x6366f1,
+        color: THREAT_COLOR[analysis.threat_level] || 0x4c63ee,
         fields: [
           { name: `${emoji} Threat Level`, value: analysis.threat_level.toUpperCase(), inline: true },
           { name: '🌐 URL', value: `[View Page](${competitor.url})`, inline: true },
@@ -148,7 +148,7 @@ async function sendTasteBriefDiscord(webhookUrl, summary) {
       title: summary.pair.slice(0, 250),
       url: summary.url,
       description: `**${summary.headline}**`.slice(0, 4000),
-      color: 0x6366f1,
+      color: 0x4c63ee,
       fields: summary.picks.map(p => ({
         name: `${p.rank}. ${p.segment}`.slice(0, 250),
         value: (p.hook + (p.numbers ? `\n*${p.numbers}*` : '')).slice(0, 1000) || '\u200b',
