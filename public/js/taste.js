@@ -69,6 +69,8 @@ const Taste = (() => {
   const root = () => document.getElementById('page-root');
 
   function brandLine(run) {
+    // A run with no rival named finds them (rival discovery).
+    if (!run.rivals.length) return esc(run.brand) + ' vs the rivals the agent finds';
     return esc(run.brand) + ' vs ' + run.rivals.map(esc).join(' and ');
   }
 
@@ -127,8 +129,9 @@ const Taste = (() => {
               <input class="form-input" id="taste-brand" name="brand" maxlength="80" autocomplete="off" placeholder="Glossier" required>
             </div>
             <div class="form-group">
-              <label class="form-label" for="taste-rival">Rival</label>
-              <input class="form-input" id="taste-rival" name="rival" maxlength="80" autocomplete="off" placeholder="Fenty Beauty" required>
+              <label class="form-label" for="taste-rival">Rival <span class="taste-optional">optional</span></label>
+              <input class="form-input" id="taste-rival" name="rival" maxlength="80" autocomplete="off" placeholder="Fenty Beauty" aria-describedby="taste-rival-hint">
+              <p class="taste-field-hint" id="taste-rival-hint">Leave blank and the agent will find your closest rivals.</p>
             </div>
             <div class="form-group">
               <label class="form-label" for="taste-rival2">Second rival <span class="taste-optional">optional</span></label>
@@ -366,7 +369,7 @@ const Taste = (() => {
     const f = e.target;
     const brand = f.brand.value.trim();
     const rivals = [f.rival.value.trim(), f.rival2.value.trim()].filter(Boolean);
-    if (!brand || !rivals.length) { toast('Enter your brand and at least one rival.', 'error'); return; }
+    if (!brand) { toast('Enter your brand.', 'error'); return; }
     const btn = document.getElementById('taste-submit');
     btn.disabled = true;
     btn.textContent = 'Starting...';
@@ -501,7 +504,8 @@ const Taste = (() => {
   function traceItem(s) {
     const icon = s.kind === 'switch' ? ICON.swap : s.kind === 'note' ? ICON.note
       : s.status === 'running' ? ICON.spin : s.status === 'error' ? ICON.err : ICON.ok;
-    const cls = 'taste-step taste-step--' + (s.kind === 'tool' ? s.status : s.kind);
+    const cls = 'taste-step taste-step--' + (s.kind === 'tool' ? s.status : s.kind)
+      + (s.tool === 'discover_rivals' || s.tool === 'choose_rivals' ? ' taste-step--decision' : '');
     // The model's own narration between calls reads as a quote.
     const label = s.kind === 'note' ? '"' + s.label + '"' : s.label;
     return `
@@ -681,11 +685,46 @@ const Taste = (() => {
     return label ? `<span class="badge ${c === 'high' ? 'badge-accent' : 'badge-neutral'}">${label}</span>` : '';
   }
 
+  // Rival discovery: the brands the agent considered, the ones it picked and
+  // why, all from discover_rivals and choose_rivals.
+  function rivalChoiceCard(b) {
+    const rc = b.rival_choice;
+    if (!rc || !(rc.candidates || []).length) return '';
+    const picked = rc.candidates.filter(c => c.picked);
+    return `
+      <div class="bc-section taste-choice">
+        <div class="bc-section-header">
+          <div class="bc-section-label">Rivals chosen by the agent</div>
+          <span class="taste-hint">From ${esc(String(rc.candidates.length))} brands whose audiences overlap with ${esc(b.brand?.name || '')}, by Qloo insights</span>
+        </div>
+        <div class="taste-choice-picked">
+          ${picked.map(c => `<span class="taste-choice-pick">${brandMark(c)}<span>${esc(c.name)}</span></span>`).join('')}
+        </div>
+        <p class="taste-choice-reason">${esc(rc.reason)}</p>
+        <div class="taste-choice-scroll">
+          <table class="taste-ev taste-choice-table">
+            <thead><tr><th scope="col">Brand Qloo found</th><th scope="col">Affinity</th><th scope="col">Shared Qloo tags</th><th scope="col">Decision</th></tr></thead>
+            <tbody>
+              ${rc.candidates.map(c => `
+                <tr class="${c.picked ? 'is-picked' : ''}">
+                  <td>${esc(c.name)}</td>
+                  <td>${num(c.affinity)}</td>
+                  <td>${c.shared_tags.length ? c.shared_tags.map(esc).join(', ') : '<span class="taste-hint">None</span>'}</td>
+                  <td>${c.picked ? '<span class="badge badge-accent">Chosen</span>'
+                    : c.flags.length ? '<span class="taste-hint">Skipped: ' + esc(c.flags.join(', ')) + '</span>' : ''}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
   function results(run) {
     const b = run.brief;
     const hasGeo = run.data && Object.keys(run.data.geo || {}).length > 0;
     const hasDemo = run.data && Object.keys(run.data.demographics || {}).length > 0;
     return `
+      ${rivalChoiceCard(b)}
       <div class="bc-headline-wrap">
         <h2 class="bc-headline">${esc(b.headline)}</h2>
         ${readOnly ? '' : `<div class="bc-headline-actions">
@@ -1017,6 +1056,10 @@ const Taste = (() => {
     if (!run?.brief) return;
     const b = run.brief;
     const lines = [b.headline, '', b.summary, '', 'Win these first:'];
+    if (b.rival_choice) {
+      const picked = b.rival_choice.candidates.filter(c => c.picked).map(c => c.name).join(' and ');
+      lines.splice(2, 0, 'Rivals chosen by the agent: ' + picked + '. ' + b.rival_choice.reason, '');
+    }
     for (const w of b.win_first) lines.push(w.rank + '. ' + w.segment + ': ' + w.why + ' Campaign hook: ' + w.campaign_hook);
     lines.push('', 'Segments the rival owns:');
     for (const s of b.rival_owned_segments) lines.push('- ' + s.segment + ': ' + s.insight);

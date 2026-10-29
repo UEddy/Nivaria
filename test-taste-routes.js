@@ -110,8 +110,8 @@ async function main() {
   console.log('status and validation');
   const st = await request(port, 'GET', '/api/taste/status');
   check('status reports ready', st.json?.ready === true, st.text);
-  const bad = await request(port, 'POST', '/api/taste/runs', { body: { brand: 'Glossier', rivals: [] } });
-  check('a run needs a rival', bad.status === 400, bad.text);
+  const nobrandAtAll = await request(port, 'POST', '/api/taste/runs', { body: { brand: '', rivals: ['Glossier'] } });
+  check('a run needs a brand', nobrandAtAll.status === 400, nobrandAtAll.text);
   const same = await request(port, 'POST', '/api/taste/runs', { body: { brand: 'Glossier', rivals: ['glossier'] } });
   check('a rival must differ from the brand', same.status === 400, same.text);
   const three = await request(port, 'POST', '/api/taste/runs', { body: { brand: 'A', rivals: ['B', 'C', 'D'] } });
@@ -203,6 +203,31 @@ async function main() {
   check('a failed run ends in error with a friendly message and its trace', failedRun.status === 'error'
     && /could not find two different brands/.test(failedRun.error_message) && !/Scripted|Qloo brand as ours/.test(failedRun.error_message)
     && failedRun.steps.length > 0, failedRun.status + ' ' + failedRun.error_message);
+
+  console.log('rival discovery');
+  const disc = await request(port, 'POST', '/api/taste/runs', { body: { brand: 'Starbucks', rivals: [], city: 'New York' } });
+  check('a run with no rival starts (the agent finds them)', disc.status === 202 && disc.json?.run?.rivals?.length === 0, disc.text);
+  const dRun = await waitFor(async () => {
+    const r = await request(port, 'GET', '/api/taste/runs/' + disc.json.run.id);
+    return r.json.run.status !== 'running' && r.json.run;
+  });
+  const rc = dRun.brief?.rival_choice;
+  check('the discovery run finishes with a brief', dRun.status === 'done' && dRun.brief.rival_owned_segments.length > 0, dRun.status + ' ' + dRun.error_message);
+  check('the run is stored under the rival the agent chose', dRun.rivals.length >= 1 && dRun.rivals.length <= 2
+    && dRun.brief.rivals.map(r => r.name).join() === dRun.rivals.join(), JSON.stringify(dRun.rivals));
+  check('the brief carries the decision: candidates, picks and a reason', rc && rc.candidates.length > 3
+    && rc.candidates.filter(c => c.picked).map(c => c.name).join() === dRun.rivals.join() && /affinity/.test(rc.reason), JSON.stringify(rc && rc.reason));
+  check('the same brand family and the retailer are flagged and not picked', rc.candidates.some(c => c.flags.includes('same brand family') && !c.picked)
+    && rc.candidates.some(c => c.flags.includes('retailer') && !c.picked));
+  check('our own brand is never a candidate', !rc.candidates.some(c => c.name === 'Starbucks'));
+  check('the trace shows discovery and the choice', dRun.steps.some(s => s.tool === 'discover_rivals' && s.status === 'done')
+    && dRun.steps.some(s => s.tool === 'choose_rivals' && s.status === 'done' && /affinity/.test(s.summary)));
+  check('no em or en dash in the decision', !/[\u2013\u2014]/.test(JSON.stringify(rc)));
+  const pairHit = await request(port, 'POST', '/api/taste/runs', { body: { brand: 'Starbucks', rivals: dRun.rivals, city: 'New York' } });
+  check('asking for the chosen pair later is a cache hit', pairHit.json?.cached === true && pairHit.json.run.id === dRun.id, pairHit.text.slice(0, 200));
+  const discAgain = await request(port, 'POST', '/api/taste/runs', { body: { brand: 'Starbucks', rivals: [], city: 'New York' } });
+  check('a blank rival is never served from the cache', discAgain.status === 202 && !discAgain.json.cached, discAgain.text.slice(0, 200));
+  await waitFor(async () => (await request(port, 'GET', '/api/taste/runs/' + discAgain.json.run.id)).json.run.status !== 'running');
 
   console.log('featured briefs');
   const runsMod = require('./src/tasteRuns');

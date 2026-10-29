@@ -83,7 +83,7 @@ function normalizeInput({ brand, rivals, city } = {}) {
   const b = cleanInput(brand);
   const list = (Array.isArray(rivals) ? rivals : [rivals]).map(cleanInput).filter(Boolean);
   if (!b) return { error: 'Enter your brand.' };
-  if (!list.length) return { error: 'Enter at least one rival.' };
+  // No rival: the agent finds one or two (rival discovery in agent.js).
   if (list.length > 2) return { error: 'Compare against one or two rivals.' };
   if (list.some(r => r.toLowerCase() === b.toLowerCase())) return { error: 'A rival must be a different brand from yours.' };
   return { brand: b, rivals: list, city: cleanInput(city) || null };
@@ -262,8 +262,12 @@ async function execute(id, input, { chain = null } = {}) {
         emit(entry, { type: 'step', step });
       },
     });
+    // A run that discovered its rivals is stored, and cached, under the
+    // rivals the agent chose, so asking for that pair later is a cache hit.
+    const asRun = run.input.discovered ? { ...input, rivals: run.input.rivals } : input;
     finish(id, {
       status: 'done',
+      ...(run.input.discovered ? { rivals: JSON.stringify(run.input.rivals) } : {}),
       headline: run.brief.headline || null,
       brief: JSON.stringify(run.brief),
       data: JSON.stringify(run.data),
@@ -273,7 +277,7 @@ async function execute(id, input, { chain = null } = {}) {
       model: run.model,
       turns: run.turns,
       duration_ms: run.duration_ms,
-      ...cacheKeysFor(input, run.brief, run.data),
+      ...cacheKeysFor(asRun, run.brief, run.data),
     }, entry);
     return { ok: true, error: null };
   } catch (err) {

@@ -25,6 +25,7 @@
 // refs as evidence. Raw Qloo ids are still accepted wherever a ref is.
 
 const qloo = require('./client');
+const { sanitizeCopy } = require('../lib/sanitizeText');
 
 // Rival entities scored per domain. 15 gives the model enough to see a cluster
 // (several reality fashion shows, not one) at two Qloo calls per domain.
@@ -182,6 +183,16 @@ function descriptors(e) {
   return out;
 }
 
+// Every tag name on an entity, once each.
+function tagNames(e) {
+  const out = [];
+  for (const t of e.tags || []) {
+    const name = String(t.name || '').trim();
+    if (name && !out.some(x => x.toLowerCase() === name.toLowerCase())) out.push(name);
+  }
+  return out;
+}
+
 // ── search_brands ─────────────────────────────────────────────────────────────
 
 async function searchBrands(ctx, { query }) {
@@ -190,7 +201,9 @@ async function searchBrands(ctx, { query }) {
   const d = await qloo.search(query.trim(), { types: 'urn:entity:brand', take: 5 });
   const results = (d?.results || []).map(e => {
     const p = e.properties || {};
-    ctx.entities.set(e.entity_id, { name: e.name, image: p.image?.url || null, type: 'brand' });
+    ctx.entities.set(e.entity_id, {
+      name: e.name, image: p.image?.url || null, type: 'brand', tags: tagNames(e), parent: p.parent_organization || null,
+    });
     const desc = p.short_description || '';
     return {
       ref: makeRef(ctx, 'brand', e.entity_id, { id: e.entity_id }),
@@ -571,6 +584,96 @@ const BRAND_PAIR = {
   rival_id: { type: 'string', description: "The rival's ref from search_brands, like b2." },
 };
 
+// ── discover_rivals ───────────────────────────────────────────────────────────
+// Rival discovery, for a run where the user named no rival. The same Insights
+// call audience_gap makes for the brand domain (filter.type urn:entity:brand,
+// a brand as signal.interests.entities), with our brand as the signal: the
+// brands its audience over-indexes on, strongest first. Each candidate gets a
+// brand ref the model can pass on as a rival, the Qloo tags it shares with our
+// brand (same category), and flags for what is not a competitor: another brand
+// of the same family, the parent company, a brand with the same owner, or a
+// retailer that sells it. The model chooses; choose_rivals checks the choice.
+
+const DISCOVER_TAKE = 20;
+const DISCOVER_SHOWN = 12;
+const RETAIL_TAG = /\b(?:retail(?:er|ers)?|supermarkets?|grocer(?:y|ies)|department stores?|marketplaces?|e-?commerce|shopping|malls?|convenience stores?|pharmac(?:y|ies)|drugstores?|wholesale)\b/i;
+const normName = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+async function discoverRivals(ctx, input) {
+  const brand = requireBrand(ctx, input.brand_id, 'brand_id');
+  const own = ctx.entities.get(brand) || {};
+  const ownName = normName(own.name);
+  const ownTags = new Set((own.tags || []).map(t => t.toLowerCase()));
+  counted(ctx, 'insights');
+  const d = await qloo.insights('urn:entity:brand', { 'signal.interests.entities': brand, take: DISCOVER_TAKE });
+
+  const candidates = [];
+  for (const e of entitiesOf(d)) {
+    if (e.entity_id === brand || candidates.length >= DISCOVER_SHOWN) continue;
+    const p = e.properties || {};
+    const tags = tagNames(e);
+    const name = normName(e.name);
+    const flags = [];
+    // Whole words only: "dunkin" is in "dunkin donuts", but "h m" is not in "smith motors".
+    const within = (a, b) => (' ' + b + ' ').includes(' ' + a + ' ');
+    if (ownName && name && (within(ownName, name) || within(name, ownName))) flags.push('same brand family');
+    if (own.parent && normName(own.parent) === name) flags.push('parent company');
+    if (p.parent_organization && own.parent && normName(p.parent_organization) === normName(own.parent)) flags.push('same parent company');
+    if (p.parent_organization && normName(p.parent_organization) === ownName) flags.push('owned by ' + own.name);
+    if (tags.some(t => RETAIL_TAG.test(t))) flags.push('retailer');
+    ctx.entities.set(e.entity_id, { name: e.name, image: p.image?.url || null, type: 'brand', tags, parent: p.parent_organization || null });
+    candidates.push({
+      ref: makeRef(ctx, 'brand', e.entity_id, { id: e.entity_id }),
+      entity_id: e.entity_id,
+      name: e.name,
+      affinity: pts(e.query?.affinity),
+      popularity: pts(e.popularity),
+      shared_tags: tags.filter(t => ownTags.has(t.toLowerCase())),
+      category: descriptors(e),
+      parent: p.parent_organization || null,
+      flags,
+    });
+  }
+  ctx.discovery = { brand_id: brand, candidates };
+  if (!candidates.length) {
+    return { result: { brand: own.name, rows: [], note: 'Qloo returned no overlapping brands.' }, summary: 'No overlapping brands found' };
+  }
+  return {
+    result: {
+      brand: own.name,
+      note: 'Strongest audience overlap first. shared_tags are Qloo tags this brand shares with ours (same category); flags mark what is not a competitor.',
+      columns: ['ref', 'name', 'affinity', 'popularity', 'shared_tags', 'category', 'flags'],
+      rows: candidates.map(c => [c.ref, c.name, c.affinity, c.popularity, c.shared_tags.slice(0, 5).join(', '), c.category.join(', '), c.flags.join(', ') || null]),
+    },
+    summary: 'Found ' + candidates.length + ' brands whose audiences overlap with ' + own.name + ': ' + candidates.slice(0, 4).map(c => c.name).join(', '),
+  };
+}
+
+// ── choose_rivals ─────────────────────────────────────────────────────────────
+// The model's choice of one or two rivals from discover_rivals, with its
+// reason. Checked here: every pick must be a candidate, and not our brand.
+
+function chooseRivals(ctx, input) {
+  if (!ctx.discovery) throw toolError('Call discover_rivals first.');
+  const refs = Array.isArray(input.rival_ids) ? input.rival_ids : [];
+  if (refs.length < 1 || refs.length > 2) throw toolError('Choose one or two rivals.');
+  const picked = [];
+  for (const ref of refs) {
+    const id = brandId(ctx, ref);
+    if (id === ctx.discovery.brand_id) throw toolError(ref + ' is our own brand.');
+    const c = ctx.discovery.candidates.find(x => x.entity_id === id);
+    if (!c) throw toolError(ref + ' is not one of the discover_rivals candidates.');
+    if (!picked.includes(c)) picked.push(c);
+  }
+  const reason = sanitizeCopy(String(input.reason || '').trim()).slice(0, 400);
+  if (!reason) throw toolError('Give the reason in one sentence.');
+  ctx.rivalChoice = { picked: picked.map(c => c.entity_id), reason };
+  return {
+    result: { chosen: picked.map(c => ({ ref: c.ref, name: c.name })), next: 'Run the brief with these refs as the rivals.' },
+    summary: reason,
+  };
+}
+
 const TOOL_DEFS = [
   {
     name: 'search_brands',
@@ -627,7 +730,34 @@ const TOOL_DEFS = [
   },
 ];
 
+// Offered only when the user named no rival (see runTasteAgent).
+const DISCOVERY_DEFS = [
+  {
+    name: 'discover_rivals',
+    description: "Find rival candidates when the user named none. Lists up to " + DISCOVER_SHOWN + " brands our audience over-indexes on (Qloo insights with our brand as the signal), strongest overlap first. Rows are [ref, name, affinity, popularity, shared_tags, category, flags]: affinity and popularity 0 to 100, shared_tags the Qloo tags the brand shares with ours, flags what makes it not a competitor (same brand family, parent company, same parent company, retailer). The refs work as rival ids everywhere.",
+    input_schema: {
+      type: 'object',
+      properties: { brand_id: { type: 'string', description: "Our brand's ref from search_brands, like b1." } },
+      required: ['brand_id'],
+    },
+  },
+  {
+    name: 'choose_rivals',
+    description: 'Record which one or two discover_rivals candidates to compare against, and why in one sentence that cites the affinity and shared tags discover_rivals returned. Call it once, after discover_rivals and before any comparison.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        rival_ids: { type: 'array', items: { type: 'string' }, description: 'One or two candidate refs, like b4.' },
+        reason: { type: 'string', description: 'One sentence citing the Qloo numbers.' },
+      },
+      required: ['rival_ids', 'reason'],
+    },
+  },
+];
+
 const EXECUTORS = {
+  discover_rivals: discoverRivals,
+  choose_rivals: chooseRivals,
   search_brands: searchBrands,
   find_city: findCity,
   audience_gap: audienceGap,
@@ -646,6 +776,11 @@ function describeCall(ctx, name, input = {}) {
   const city = input.locality_id ? localityName(ctx, input.locality_id) : null;
   switch (name) {
     case 'search_brands': return 'Looking up the brand "' + input.query + '" with Qloo search';
+    case 'discover_rivals': return 'Finding the brands whose audiences overlap most with ' + brand + ' with Qloo insights';
+    case 'choose_rivals': {
+      const names = (input.rival_ids || []).map(r => entityName(ctx, r));
+      return 'Choosing the rivals: ' + (names.length ? names.join(' and ') : 'none named');
+    }
     case 'find_city': return 'Finding the city "' + input.query + '" with Qloo search';
     case 'audience_gap': {
       const what = DOMAIN_PLURAL[input.domain] || input.domain;
@@ -672,5 +807,5 @@ async function executeTool(ctx, name, input) {
 }
 
 module.exports = {
-  TOOL_DEFS, DOMAINS, ENDPOINTS, createContext, executeTool, describeCall, endpointsUsed, entityName, brandId, localityId,
+  TOOL_DEFS, DISCOVERY_DEFS, DOMAINS, ENDPOINTS, createContext, executeTool, describeCall, endpointsUsed, entityName, brandId, localityId,
 };

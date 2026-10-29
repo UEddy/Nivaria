@@ -80,6 +80,8 @@ async function search(query, { types } = {}) {
       name: title(query),
       popularity: 0.8 + hash(query) / 5,
       properties: { short_description: 'A consumer brand (synthetic test data).', ...fakeImage(query) },
+      // Shared with some of the brands insights returns, for rival discovery.
+      tags: [{ type: 'urn:tag:category:qloo', name: 'Food' }, { type: 'urn:tag:category:qloo', name: 'Lifestyle' }],
     }],
   };
 }
@@ -117,7 +119,16 @@ async function insights(type, params = {}) {
     return { results: { entities: ids.map(id => entity(type, Number(id.split('-').pop()), signal, (i, h) => 0.2 + h * 0.6)) } };
   }
   const take = Math.min(Number(params.take) || 10, names.length);
-  return { results: { entities: Array.from({ length: take }, (_, i) => entity(type, i, signal, (k, h) => 0.97 - k * 0.02 - h * 0.05)) } };
+  const list = Array.from({ length: take }, (_, i) => entity(type, i, signal, (k, h) => 0.97 - k * 0.02 - h * 0.05));
+  // Rival discovery asks for 20 brands (audience_gap asks for fewer). Its list
+  // also holds what a competitor is not: a sub-brand of the same family at the
+  // top, and a retailer, so the discovery flags get used.
+  if (type === 'urn:entity:brand' && Number(params.take) >= 20 && /^brand-/.test(signal)) {
+    const own = title(String(signal).slice(6).replace(/-/g, ' '));
+    list.unshift({ entity_id: 'brand-family', name: own + ' Reserve', popularity: 0.6, query: { affinity: 0.99 }, properties: {}, tags: [{ type: 'urn:tag:category:qloo', name: 'Food' }] });
+    list[2] = { ...list[2], tags: [...list[2].tags, { type: 'urn:tag:category:qloo', name: 'Retailer' }] };
+  }
+  return { results: { entities: list } };
 }
 
 async function compare(a, b) {

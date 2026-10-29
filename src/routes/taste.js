@@ -97,7 +97,9 @@ router.get('/featured', (req, res) => {
 router.post('/runs', (req, res) => {
   const input = runs.normalizeInput(req.body || {});
   if (input.error) return res.status(400).json({ error: input.error });
-  if (req.body?.fresh !== true) {
+  // With no rival named there is no pair to look up yet: the agent discovers
+  // the rivals, and that brief is cached under the ones it chose.
+  if (req.body?.fresh !== true && input.rivals.length) {
     const hit = runs.findCachedRun(input, req.userId);
     if (hit) return res.json({ run: hit, cached: true });
   }

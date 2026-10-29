@@ -14,6 +14,9 @@
 //      brand_positioning, and geo_gap with a city.
 //   3. submit_brief, written from the rows those tools returned and citing
 //      them by ref. The prose is templated, so it reads plainer than a model's.
+// With no rival named it first discovers one: discover_rivals for our brand,
+// then choose_rivals with the candidate a model is told to prefer (no flag,
+// most shared Qloo tags, then highest affinity), before step 2.
 //
 // SCRIPTED_QUOTA_AFTER=n makes it run out of quota for tests: every call
 // after the nth brief it writes from then on fails with a 429 whose wait is
@@ -42,7 +45,7 @@ function parseOpening(transcript) {
   const city = line(/^City: (.*)$/m);
   return {
     brand: line(/^Our brand: (.*)$/m),
-    rivals: line(/^Rivals?: (.*)$/m).split(', ').filter(Boolean),
+    rivals: /^none given/.test(line(/^Rivals?: (.*)$/m)) ? [] : line(/^Rivals?: (.*)$/m).split(', ').filter(Boolean),
     city: /^none given/.test(city) ? '' : city,
   };
 }
@@ -84,10 +87,26 @@ function resolvePicks(opening, done) {
     return { ref: top.ref, name: top.name };
   };
   const brand = pick(opening.brand);
-  const rivals = opening.rivals.map(pick).filter(r => r.ref !== brand.ref);
+  const chosen = done.find(c => c.name === 'choose_rivals' && c.result)?.result?.chosen;
+  const rivals = (opening.rivals.length ? opening.rivals.map(pick) : chosen || []).filter(r => r.ref !== brand.ref);
   if (!rivals.length) throw scriptError('the rival resolved to the same Qloo brand as ours');
   const city = done.find(c => c.name === 'find_city')?.result?.city;
   return { brand, rivals, city: city ? { ref: city.ref, name: city.name } : null };
+}
+
+// The discovered candidate a model is told to prefer: not flagged, most shared
+// Qloo tags (same category), then the strongest audience overlap.
+function chooseFrom(brand, discovered) {
+  const rows = (discovered?.rows || []).map(r => ({ ref: r[0], name: r[1], affinity: r[2], shared: r[4] ? r[4].split(', ') : [], flags: r[6] }));
+  const ok = rows.filter(r => !r.flags);
+  const best = [...(ok.length ? ok : rows)].sort((a, b) => (b.shared.length - a.shared.length) || ((b.affinity || 0) - (a.affinity || 0)))[0];
+  if (!best) throw scriptError('Qloo returned no brands to choose a rival from');
+  const tags = best.shared.slice(0, 2);
+  return call('choose_rivals', {
+    rival_ids: [best.ref],
+    reason: best.name + ' is the closest competitor: its audience affinity with ' + brand.name + "'s fans is " + best.affinity
+      + (tags.length ? ' and it shares the Qloo tags ' + listNames(tags) + '.' : ', the highest among the candidates.'),
+  });
 }
 
 function comparisons(picks) {
@@ -236,7 +255,7 @@ function scriptedProvider(entry, cfg) {
         throw Object.assign(new Error('Scripted stand-in: quota exhausted (429)'), { status: 429, retryAfterMs: 60 * 60 * 1000 });
       }
       const opening = parseOpening(transcript);
-      if (!opening.brand || !opening.rivals.length) throw scriptError('could not read the brand and rivals from the opening prompt');
+      if (!opening.brand) throw scriptError('could not read the brand from the opening prompt');
       const done = collectCalls(transcript);
 
       let calls;
@@ -245,6 +264,17 @@ function scriptedProvider(entry, cfg) {
         if (finalOnly) throw scriptError('ran out of time before the lookups');
         calls = lookups(opening);
         text = 'Resolving the brands' + (opening.city ? ' and the city' : '') + ' first.';
+      } else if (!opening.rivals.length && !done.some(c => c.name === 'discover_rivals')) {
+        if (finalOnly) throw scriptError('ran out of time before finding rivals');
+        const brand = done.find(c => c.name === 'search_brands')?.result?.results?.[0];
+        if (!brand) throw scriptError('Qloo found no brand matching "' + opening.brand + '"');
+        calls = [call('discover_rivals', { brand_id: brand.ref })];
+        text = 'No rival was named, so finding the brands whose audiences overlap most with ' + brand.name + '.';
+      } else if (!opening.rivals.length && !done.some(c => c.name === 'choose_rivals' && c.result)) {
+        if (finalOnly) throw scriptError('ran out of time before choosing rivals');
+        const brand = done.find(c => c.name === 'search_brands').result.results[0];
+        calls = [chooseFrom(brand, done.find(c => c.name === 'discover_rivals')?.result)];
+        text = 'Choosing the rival from the candidates in the same category.';
       } else {
         const picks = resolvePicks(opening, done);
         if (!done.some(c => c.name === 'audience_gap')) {

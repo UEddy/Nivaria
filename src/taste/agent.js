@@ -58,6 +58,7 @@ Questions to answer:
 
 How to work:
 - First resolve every brand with search_brands, and the city with find_city when one is given. Pick the brand candidate that matches what the user meant. find_city returns the one city to use. Pass the chosen refs (b1, l1) to the other tools.
+- When the user names no rival, find them first: after search_brands for our brand, call discover_rivals with its ref. From its candidates pick one or two real competitors: brands in the same category as ours (they share Qloo tags with it) that compete for the same customers. Never pick our own brand or another brand of the same family, its parent company, a brand with the same owner, or a retailer, marketplace or other business that sells it, and do not pick a brand from an unrelated category just because its audience overlaps. Then call choose_rivals with their refs and one sentence on why that cites the affinity and shared tags discover_rivals returned. Use those refs as the rivals for everything that follows.
 - Call independent tools in the same turn so they run in parallel. For each rival, run audience_gap for artist, movie, tv_show and brand, plus place when there is a city, and run demographic_gap and brand_positioning. With a city, also run geo_gap.
 - Follow up only where it sharpens the answer, for example audience_gap scoped to the city for a domain where the rival leads strongly. The whole run has about three minutes, so batch your calls.
 - Then call submit_brief exactly once, as a tool call.
@@ -156,11 +157,15 @@ const SUBMIT_TOOL = {
 };
 
 const ALL_TOOLS = [...tools.TOOL_DEFS, SUBMIT_TOOL];
+// A run with no rival named also gets rival discovery.
+const DISCOVERY_TOOLS = [...tools.DISCOVERY_DEFS, ...tools.TOOL_DEFS, SUBMIT_TOOL];
 
 function userPrompt(brand, rivals, city) {
   return [
     'Our brand: ' + brand,
-    'Rival' + (rivals.length > 1 ? 's' : '') + ': ' + rivals.join(', '),
+    rivals.length
+      ? 'Rival' + (rivals.length > 1 ? 's' : '') + ': ' + rivals.join(', ')
+      : 'Rivals: none given, so find them with discover_rivals and choose_rivals',
     'City: ' + (city || 'none given, so skip place and geo_gap'),
   ].join('\n');
 }
@@ -434,6 +439,24 @@ function assembleBrief(raw, ctx, warnings) {
     demographic_gap: perRival(b.demographic_gap, ctx.demographics),
     positioning: perRival(b.positioning, ctx.positioning),
   };
+  // Rival discovery: every candidate the agent considered, which it picked and
+  // why, straight from discover_rivals and choose_rivals.
+  if (ctx.discovery && ctx.rivalChoice) {
+    brief.rival_choice = {
+      reason: dropTraitSentences(cleanProse(ctx.rivalChoice.reason), 'rival_choice.reason', warnings),
+      candidates: ctx.discovery.candidates.map(c => ({
+        entity_id: c.entity_id,
+        name: c.name,
+        image: ctx.entities.get(c.entity_id)?.image || null,
+        affinity: c.affinity,
+        popularity: c.popularity,
+        shared_tags: c.shared_tags.slice(0, 5),
+        category: c.category,
+        flags: c.flags,
+        picked: ctx.rivalChoice.picked.includes(c.entity_id),
+      })),
+    };
+  }
   // How the numbers were checked: citations resolved against this run's Qloo
   // results, and those that could not be (runTasteAgent adds the rest).
   brief.provenance = { data_points: countDataPoints(brief), dropped };
@@ -529,7 +552,9 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
   const brandName = cleanInput(brand);
   const rivalNames = (Array.isArray(rivals) ? rivals : [rivals]).map(cleanInput).filter(Boolean);
   if (!brandName) throw new Error('brand is required');
-  if (rivalNames.length < 1 || rivalNames.length > 2) throw new Error('give one or two rivals');
+  if (rivalNames.length > 2) throw new Error('give at most two rivals');
+  // No rival named: the agent finds them (discover_rivals, choose_rivals).
+  const discovery = rivalNames.length === 0;
   const cityName = cleanInput(city);
 
   const chain = llm.buildChain(chainSpec);
@@ -641,7 +666,7 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
       const res = await callModel({
         system: SYSTEM_PROMPT,
         transcript,
-        tools: wrapUp ? [SUBMIT_TOOL] : ALL_TOOLS,
+        tools: wrapUp ? [SUBMIT_TOOL] : discovery ? DISCOVERY_TOOLS : ALL_TOOLS,
         finalOnly: wrapUp,
       });
       addUsage(usage, res.usage);
@@ -682,7 +707,13 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
           return { id: call.id, name: call.name, isError: true, content: call.inputError };
         }
         if (isSubmit) {
-          const problems = checkBrief(call.input, ctx);
+          // With discovery, the brief is about the rivals the agent chose.
+          if (discovery && ctx.rivalChoice && call.input && typeof call.input === 'object') {
+            call.input.rival_ids = ctx.rivalChoice.picked.map(id => ctx.discovery.candidates.find(c => c.entity_id === id).ref);
+          }
+          const problems = discovery && !ctx.rivalChoice
+            ? ['Find the rivals first: call discover_rivals, then choose_rivals, then run the comparisons.']
+            : checkBrief(call.input, ctx);
           if (problems.length) {
             closeStep(step, { status: 'error', summary: problems.join(' ') });
             return { id: call.id, name: call.name, isError: true, content: problems.join(' ') };
@@ -737,7 +768,12 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
     model: providers.map(p => p.provider + ':' + p.model).join(' then '),
     turns,
     duration_ms: Date.now() - started,
-    input: { brand: brandName, rivals: rivalNames, city: cityName || null },
+    input: {
+      brand: brandName,
+      rivals: discovery ? ctx.rivalChoice.picked.map(id => tools.entityName(ctx, id)) : rivalNames,
+      city: cityName || null,
+      discovered: discovery,
+    },
   };
 }
 
