@@ -4,8 +4,10 @@
 //
 //   GET    /status             whether this server can start a run
 //   GET    /featured           the featured pairs, each with its brief or null
-//   POST   /runs               start a run { brand, rivals: [1 or 2], city?, fresh? },
-//                              or answer it from the brief cache
+//   POST   /runs               start a run { brand, rivals: [0 to 2], city?, fresh? },
+//                              or answer it from the brief cache; with no rival
+//                              the agent discovers them and the run is never
+//                              served from the cache
 //   GET    /runs               the user's runs, newest first (no blobs)
 //   GET    /runs/:id           one run: brief, chart data and trace
 //   GET    /runs/:id/events    the live trace as server-sent events

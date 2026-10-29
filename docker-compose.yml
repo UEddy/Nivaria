@@ -1,8 +1,10 @@
 # Nivaria (Taste Gap) on one small host. The app listens on 127.0.0.1:3000
 # only, so put a reverse proxy with HTTPS in front of it: session cookies are
 # Secure in production. Keys and SESSION_SECRET come from .env next to this
-# file. On first boot with an empty volume the server generates the seeded
-# example briefs in the background (a few minutes, a handful of model calls).
+# file. On first boot with an empty volume the server writes the first two
+# featured briefs in the background (a few minutes, a handful of model calls);
+# scripts/generate-featured.js writes all ten (see "Writing the featured
+# briefs" in README.md).
 services:
   nivaria:
     build: .
