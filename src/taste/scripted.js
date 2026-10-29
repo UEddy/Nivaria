@@ -15,6 +15,10 @@
 //   3. submit_brief, written from the rows those tools returned and citing
 //      them by ref. The prose is templated, so it reads plainer than a model's.
 //
+// SCRIPTED_QUOTA_AFTER=n makes it run out of quota for tests: every call
+// after the nth brief it writes from then on fails with a 429 whose wait is
+// too long to sit out, as a spent Gemini daily quota does.
+//
 // Names come from the opening prompt the agent writes (userPrompt in
 // agent.js). Rivals are joined there with ", ", so a rival whose name holds a
 // comma splits in two; the stand-in is a dev tool and lives with that.
@@ -212,11 +216,25 @@ function writeBrief(picks, done) {
   };
 }
 
+let briefsWritten = 0;
+let quota = { raw: '', from: 0 };
+
+// Counted from when SCRIPTED_QUOTA_AFTER last changed, so a test can allow
+// "three more briefs" whatever ran before.
+function quotaSpent() {
+  const raw = process.env.SCRIPTED_QUOTA_AFTER || '';
+  if (raw !== quota.raw) quota = { raw, from: briefsWritten };
+  return raw !== '' && briefsWritten - quota.from >= Number(raw);
+}
+
 function scriptedProvider(entry, cfg) {
   return {
     ...entry, label: cfg.label, timeoutMs: cfg.timeoutMs, inputBudget: 0,
     async complete({ transcript, finalOnly }) {
       await new Promise(r => setTimeout(r, Number(process.env.SCRIPTED_DELAY_MS ?? DELAY_MS)));
+      if (quotaSpent()) {
+        throw Object.assign(new Error('Scripted stand-in: quota exhausted (429)'), { status: 429, retryAfterMs: 60 * 60 * 1000 });
+      }
       const opening = parseOpening(transcript);
       if (!opening.brand || !opening.rivals.length) throw scriptError('could not read the brand and rivals from the opening prompt');
       const done = collectCalls(transcript);
@@ -235,6 +253,7 @@ function scriptedProvider(entry, cfg) {
           text = 'Running every comparison for ' + listNames(picks.rivals.map(r => r.name)) + ' in parallel.';
         } else {
           calls = [call('submit_brief', writeBrief(picks, done))];
+          briefsWritten += 1;
         }
       }
       return {

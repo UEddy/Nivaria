@@ -89,8 +89,8 @@ Notes:
 - Do **not** add `PRODUCT_MODE`, `ENABLE_SCRAPER`, `NODE_ENV` or `PORT`. The
   service sets them (`PRODUCT_MODE=taste`, `ENABLE_SCRAPER=false`,
   `NODE_ENV=production`, `PORT=3000`) and ignores any value here.
-- Do **not** add `TASTE_EXAMPLES=refresh`. It regenerates the example briefs
-  on every restart. See section 7 for the one time you might want it.
+- Do **not** add `TASTE_EXAMPLES=refresh`. It rewrites the first two featured
+  briefs on every restart. Use the featured script instead (section 9).
 
 ## 3. Start the service and watch the first boot
 
@@ -198,11 +198,9 @@ systemctl restart nivaria
   that says so.
 - **The service restarts over and over and the log mentions memory:** it hit
   the 350 MB limit. `systemctl status nivaria` shows the memory peak.
-- **No examples on the Taste Gap page:** look for `[taste]` lines in
-  `journalctl -u nivaria`. `examples not generated: ...` names the missing
-  key. To regenerate both once, add `TASTE_EXAMPLES=refresh` to `.env`, run
-  `systemctl restart nivaria`, wait for both `ready` lines, then **remove the
-  line** and restart again.
+- **Featured briefs missing or out of date:** run the featured script
+  (section 9). It only writes what is missing. For boot errors, look for
+  `[taste]` lines in `journalctl -u nivaria`.
 - **The judge login does not work:** check that both `DEMO_LOGIN_*` lines are
   in `.env`, that the password has at least 12 characters, and that the boot
   log has a `Demo login` line. A changed password takes effect at the next
@@ -224,3 +222,33 @@ From your machine, to download a backup:
 ```
 scp root@YOUR_DROPLET_IP:/root/nivaria-YYYY-MM-DD.db .
 ```
+
+## 9. Writing the featured briefs
+
+The Taste Gap page shows ten featured rival pairs as one-click chips, served
+from the database with no Qloo or model calls. Write them with Gemini once its
+daily quota resets (midnight Pacific), while the service is running:
+
+```
+cd /opt/nivaria
+sudo -u nivaria node scripts/generate-featured.js
+```
+
+It writes one brief at a time, with a 20 second pause between them, and prints
+each headline. It talks to the running server over localhost, so the briefs land
+in the live database right away and no restart is needed.
+
+- **It stops with "Gemini is out of quota":** that is a clean stop, not an
+  error. Run the same command after the quota resets; it skips every pair that
+  is already written and carries on.
+- **Run it again any time:** pairs with a current brief are skipped, so a
+  second run writes nothing new.
+- **To rewrite one pair:** `--force --only nike-adidas-la` (the keys are in
+  `src/tasteFeatured.js`).
+- **"Could not reach the server":** the service is down; start it first.
+  **"answered 404":** run it from `/opt/nivaria` as the `nivaria` user, so it
+  reads the same `SESSION_SECRET` as the service.
+
+Visitors get 3 fresh runs per IP a day (`TASTE_FRESH_PER_DAY`), and one at a
+time. A pair briefed in the last 14 days opens from the cache for free, and the
+featured chips always do.

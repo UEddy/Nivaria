@@ -501,14 +501,15 @@ function cleanInput(value) {
     .slice(0, INPUT_MAX);
 }
 
-async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+// chain: an optional chain spec in LLM_CHAIN syntax for this run only.
+async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_TIMEOUT_MS, chain: chainSpec } = {}) {
   const brandName = cleanInput(brand);
   const rivalNames = (Array.isArray(rivals) ? rivals : [rivals]).map(cleanInput).filter(Boolean);
   if (!brandName) throw new Error('brand is required');
   if (rivalNames.length < 1 || rivalNames.length > 2) throw new Error('give one or two rivals');
   const cityName = cleanInput(city);
 
-  const chain = llm.buildChain();
+  const chain = llm.buildChain(chainSpec);
   let link = 0;
   let provider = llm.createProvider(chain[0]);
   let budgetNoted = Boolean(provider.inputBudget);
@@ -567,7 +568,12 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
           await sleep(wait);
         }
       }
-      if (link + 1 >= chain.length) throw failure.err;
+      if (link + 1 >= chain.length) {
+        // Every model in the chain failed; callers read this (and the status)
+        // to tell a spent quota from a bad run.
+        failure.err.chainExhausted = true;
+        throw failure.err;
+      }
       const from = provider;
       link += 1;
       provider = llm.createProvider(chain[link]);
@@ -677,6 +683,9 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
     e.steps = steps;
     e.usage = usage;
     e.providers = providers;
+    e.timedOut = timedOut;
+    e.chainExhausted = Boolean(err.chainExhausted);
+    e.status = err.status ?? null;
     throw e;
   } finally {
     clearTimeout(timer);

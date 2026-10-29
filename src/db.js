@@ -635,8 +635,13 @@ const SCHEMA = `
   -- own JSON. data holds Qloo results (gaps, heatmap cells, demographics), which
   -- the hackathon rules allow caching server-side but never committing, and this
   -- database is git-ignored. rerun_of points at the run this one repeated.
-  -- example_key marks a seeded example run (src/tasteExamples.js): owned by no
-  -- user (created_by 0), readable by every signed-in user.
+  -- example_key marks a featured brief (src/tasteFeatured.js): owned by no
+  -- user (created_by 0), readable by every signed-in user. example_version
+  -- marks one written by scripts/generate-featured.js. client_hash is a
+  -- salted hash of the visitor IP, for the per-visitor run limits; cache_key
+  -- and resolved_key are the normalized pair as typed and as Qloo resolved
+  -- it, set only on a run whose brief is good enough to serve again
+  -- (src/tasteRuns.js).
   CREATE TABLE IF NOT EXISTS taste_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     created_by INTEGER NOT NULL,
@@ -658,6 +663,10 @@ const SCHEMA = `
     duration_ms INTEGER,
     error_message TEXT,
     example_key TEXT,
+    example_version INTEGER,
+    client_hash TEXT,
+    cache_key TEXT,
+    resolved_key TEXT,
     FOREIGN KEY (created_by) REFERENCES users(id)
   );
   CREATE INDEX IF NOT EXISTS idx_taste_runs_creator ON taste_runs(created_by, created_at DESC);
@@ -873,6 +882,13 @@ async function initDb() {
   if (tasteRunCols.length && !tasteRunCols.includes('example_key')) {
     sqlDb.run('ALTER TABLE taste_runs ADD COLUMN example_key TEXT');
   }
+  // Featured versions, per-visitor limits and the brief cache came later still.
+  for (const [col, type] of [['example_version', 'INTEGER'], ['client_hash', 'TEXT'], ['cache_key', 'TEXT'], ['resolved_key', 'TEXT']]) {
+    if (tasteRunCols.length && !tasteRunCols.includes(col)) sqlDb.run('ALTER TABLE taste_runs ADD COLUMN ' + col + ' ' + type);
+  }
+  sqlDb.run('CREATE INDEX IF NOT EXISTS idx_taste_runs_client ON taste_runs(client_hash, created_at)');
+  sqlDb.run('CREATE INDEX IF NOT EXISTS idx_taste_runs_cache ON taste_runs(cache_key, finished_at)');
+  sqlDb.run('CREATE INDEX IF NOT EXISTS idx_taste_runs_resolved ON taste_runs(resolved_key, finished_at)');
 
   const outboundLeadCols = (sqlDb.exec('PRAGMA table_info(outbound_leads)')[0]?.values || []).map(v => v[1]);
   if (outboundLeadCols.length && !outboundLeadCols.includes('trigger_at')) {

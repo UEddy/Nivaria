@@ -94,7 +94,7 @@ function rawBrief({ brand, rival, artist }, extra = {}) {
   check('filled hotspots carry a rival, a position and a note', spots.every(h => h.rival_id && h.lat != null && h.lng != null && /scores \d+ here and .* scores \d+\./.test(h.note)), JSON.stringify(spots[0]));
   check('labelled cells come first', spots.findIndex(h => !h.label) === -1 || spots.slice(0, spots.findIndex(h => !h.label)).every(h => h.label));
   check('the fill is noted in warnings', warnings.some(x => /no hotspots/.test(x)), JSON.stringify(warnings));
-  check('no em or en dash in the brief', !/[–—]/.test(JSON.stringify(b)));
+  check('no em or en dash in the brief', !/[\u2013\u2014]/.test(JSON.stringify(b)));
 
   const cellRef = [...run.ctx.refs.entries()].find(([, v]) => v.kind === 'cell')[0];
   const own = assembleBrief(rawBrief(run, { geo_hotspots: [{ ref: cellRef, label: 'x', note: 'Model note.' }] }), run.ctx, []);
@@ -154,7 +154,7 @@ function rawBrief({ brand, rival, artist }, extra = {}) {
   check('a win-first pick named after a trait is dropped and the ranks close up', p.win_first.length === 1 && p.win_first[0].rank === 1 && p.win_first[0].segment === 'Indie pop listeners', JSON.stringify(p.win_first.map(w => [w.rank, w.segment])));
   check('a channel tag that names a trait is dropped', JSON.stringify(p.win_first[0].channels) === '["Creator partnerships"]', JSON.stringify(p.win_first[0].channels));
   check('dropped picks and segments are noted in warnings', parts.some(x => /Removed a win-first pick/.test(x)) && parts.some(x => /Removed a segment/.test(x)), JSON.stringify(parts));
-  check('no em or en dash in the warnings or the rebuilt headline', !/[–—]/.test(parts.join(' ') + p.headline));
+  check('no em or en dash in the warnings or the rebuilt headline', !/[\u2013\u2014]/.test(parts.join(' ') + p.headline));
   console.warn = origWarn;
 
   console.log('\n' + passed + ' passed, ' + failed + ' failed');

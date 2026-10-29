@@ -4187,6 +4187,26 @@ body[data-mode="taste"] [data-surface="monitor"] { display: none; }
 .taste-example-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 .taste-sub .badge { margin-right: 4px; }
 
+/* Featured pairs as one-click chips, also listed under refusals and failures */
+.taste-featured { display: flex; flex-direction: column; gap: 10px; }
+.taste-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.taste-chip {
+  display: inline-block;
+  padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--border-accent); background: var(--accent-dim);
+  color: var(--txt); font-size: 12.5px; font-weight: 600; text-decoration: none;
+  line-height: 1.3;
+}
+.taste-chip:hover, .taste-chip:focus-visible { border-color: var(--accent-2); color: var(--accent-2); }
+.taste-chip-city { color: var(--txt-3); font-weight: 500; }
+.taste-notice .taste-chips { margin-top: 8px; }
+.taste-notice-hint { margin-top: 10px; }
+
+/* A brief served from the cache */
+.taste-cached { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-color: var(--border-accent); }
+.taste-cached-text { display: flex; flex-direction: column; gap: 2px; }
+.taste-cached-text strong { font-size: 13.5px; }
+
 /* Taste Gap header: our brand and each rival, image or neutral initial */
 .taste-marks { display: flex; flex-shrink: 0; }
 .taste-mark {

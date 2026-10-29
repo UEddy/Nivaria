@@ -75,7 +75,7 @@ The image runs Nivaria as Taste Gap only (`PRODUCT_MODE=taste`), with page monit
    ```
 3. The app listens on `127.0.0.1:3000` only. Put a reverse proxy with HTTPS in front of it, because session cookies are Secure in production.
 
-The database lives on the `nivaria-data` volume. On first boot with an empty volume, the seeded example briefs are generated in the background, which takes a few minutes. To regenerate them later, set `TASTE_EXAMPLES=refresh` in `.env`, run `docker compose up -d` once, then remove the setting again.
+The database lives on the `nivaria-data` volume. On first boot with an empty volume, the first two featured briefs are generated in the background, which takes a few minutes. To write all ten with Gemini, run `docker compose exec nivaria node scripts/generate-featured.js` once the container is up. It skips briefs that are already written, stops cleanly if Gemini runs out of quota, and can be run again to resume.
 
 ## Calendar setup (pre-meeting briefings)
 

@@ -3,23 +3,34 @@
 // started them; every lookup is scoped by req.userId.
 //
 //   GET    /status             whether this server can start a run
-//   GET    /examples           the seeded example briefs, featured first
-//   POST   /runs               start a run { brand, rivals: [1 or 2], city? }
+//   GET    /featured           the featured pairs, each with its brief or null
+//   POST   /runs               start a run { brand, rivals: [1 or 2], city?, fresh? },
+//                              or answer it from the brief cache
 //   GET    /runs               the user's runs, newest first (no blobs)
 //   GET    /runs/:id           one run: brief, chart data and trace
 //   GET    /runs/:id/events    the live trace as server-sent events
-//   POST   /runs/:id/rerun     start a new run with the same inputs
+//   POST   /runs/:id/rerun     start a fresh run with the same inputs
 //   GET    /search?q=          brand suggestions for the form (Qloo /search),
 //                              exported as router.search and mounted ahead
 //                              of this router with its own limiter
 //
-// A user has at most one run going at a time: each run fans out a few dozen
-// Qloo calls under a 10 per second cap, and a second run would only queue
-// behind the first.
+// Brief cache: a request for a pair that already has a good brief from the
+// last 14 days (the user's own, or a featured one) gets it back at once, 200
+// with cached: true, and no Qloo or model calls. { fresh: true } and rerun
+// skip the cache.
+//
+// Fresh runs are limited per visitor IP, not per account, because every judge
+// shares one demo account: one run going at a time per IP, and
+// TASTE_FRESH_PER_DAY (default 3) fresh runs per IP in 24 hours, which admins
+// (ADMIN_EMAILS) skip. Each run fans out a few dozen Qloo calls under the
+// client's 10 per second spacing. A refusal is a friendly message plus a code
+// (busy, daily_limit, unavailable) the page uses to point at the featured
+// briefs.
 
 const express = require('express');
 const runs = require('../tasteRuns');
-const examples = require('../tasteExamples');
+const featured = require('../tasteFeatured');
+const { isAdminEmail } = require('../lib/adminEmails');
 const qloo = require('../qloo/client');
 const { sanitizeCopy } = require('../lib/sanitizeText');
 
@@ -32,12 +43,36 @@ const SEARCH_MIN = 2;
 const SEARCH_MAX = 80;
 const SEARCH_TAKE = 6;
 
+const MESSAGES = {
+  unavailable: 'New briefs cannot be written on this server right now. The featured briefs open instantly.',
+  busy: 'You already have a brief being written. It takes up to three minutes, and the featured briefs open instantly in the meantime.',
+};
+
+function dailyLimitMessage({ limit, resets_at }) {
+  const resets = resets_at ? Date.parse(resets_at.replace(' ', 'T') + 'Z') : NaN;
+  const hours = Number.isFinite(resets) ? Math.max(1, Math.ceil((resets - Date.now()) / 3600000)) : 24;
+  return 'This network has used its ' + limit + ' fresh brief' + (limit === 1 ? '' : 's') + ' for today. '
+    + 'The featured briefs open instantly, and a fresh brief is available again in about ' + hours + ' hour' + (hours === 1 ? '' : 's') + '.';
+}
+
 function start(req, res, input, rerunOf) {
   const problem = runs.configProblem();
-  if (problem) return res.status(503).json({ error: problem });
-  const active = runs.activeRunForUser(req.userId);
-  if (active) return res.status(409).json({ error: 'A run is already going. Wait for it to finish.', id: active.id });
-  const run = runs.startRun(req.userId, input, { rerunOf });
+  if (problem) {
+    console.warn('[taste] run refused: ' + problem);
+    return res.status(503).json({ error: MESSAGES.unavailable, code: 'unavailable' });
+  }
+  const hash = runs.clientHash(req.ip);
+  const active = runs.activeRunForClient(hash);
+  if (active) {
+    return res.status(409).json({ error: MESSAGES.busy, code: 'busy', id: active.created_by === req.userId ? active.id : undefined });
+  }
+  if (!isAdminEmail(req.user?.email)) {
+    const usage = runs.freshRunUsage(hash);
+    if (usage.used >= usage.limit) {
+      return res.status(429).json({ error: dailyLimitMessage(usage), code: 'daily_limit', limit: usage.limit, resets_at: usage.resets_at });
+    }
+  }
+  const run = runs.startRun(req.userId, input, { rerunOf, clientHash: hash });
   res.status(202).json({ run });
 }
 
@@ -46,13 +81,17 @@ router.get('/status', (req, res) => {
   res.json({ ready: !problem, problem });
 });
 
-router.get('/examples', (req, res) => {
-  res.json({ examples: examples.listExamples() });
+router.get('/featured', (req, res) => {
+  res.json({ pairs: featured.listFeatured() });
 });
 
 router.post('/runs', (req, res) => {
   const input = runs.normalizeInput(req.body || {});
   if (input.error) return res.status(400).json({ error: input.error });
+  if (req.body?.fresh !== true) {
+    const hit = runs.findCachedRun(input, req.userId);
+    if (hit) return res.json({ run: hit, cached: true });
+  }
   start(req, res, input, null);
 });
 

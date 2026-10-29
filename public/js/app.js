@@ -473,7 +473,7 @@ const App = {
         ? 'Where the rival\'s audience is that yours is not'
         : 'Find the audiences a rival owns, and which to win first';
       root.innerHTML = Skeleton.cards(3);
-      Taste.render(id).then(transition);
+      Taste.render(id, routeQuery).then(transition);
     } else if (page === 'runs') {
       el('page-title').textContent = 'Runs';
       el('page-sub').textContent = 'Every Taste Gap brief you have run';

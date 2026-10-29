@@ -184,8 +184,10 @@ function defaultModels(name) {
 }
 
 // The ordered list of { name, model, key } entries a run may use.
-function buildChain() {
-  let tokens = splitList(process.env.LLM_CHAIN);
+// spec: a chain in LLM_CHAIN syntax for one caller (the featured briefs run
+// Gemini only); unset, LLM_CHAIN and then DEFAULT_CHAIN apply.
+function buildChain(spec) {
+  let tokens = splitList(spec == null ? process.env.LLM_CHAIN : spec);
   if (!tokens.length) {
     tokens = DEFAULT_CHAIN();
     const first = String(process.env.LLM_PROVIDER || '').trim().toLowerCase();
@@ -500,4 +502,4 @@ function createProvider(entry) {
   return cfg.kind === 'anthropic' ? anthropicProvider(entry, cfg) : openAIProvider(entry, cfg);
 }
 
-module.exports = { PROVIDERS, buildChain, createProvider, classifyFailure, isConfigured, estimateTokens };
+module.exports = { PROVIDERS, SECOND_GEMINI_MODEL, buildChain, createProvider, classifyFailure, isConfigured, estimateTokens };

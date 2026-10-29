@@ -35,8 +35,9 @@ const outboundRouter = require('./routes/outbound');
 const { requireOutboundAccess } = require('./outbound/access');
 // Taste Gap: Qloo audience-gap agent runs.
 const tasteRouter = require('./routes/taste');
-const { closeInterruptedRuns } = require('./tasteRuns');
-const { ensureExamples } = require('./tasteExamples');
+const tasteInternalRouter = require('./routes/tasteInternal');
+const { closeInterruptedRuns, tidyStoredRuns } = require('./tasteRuns');
+const { ensureFeatured } = require('./tasteFeatured');
 const { ensureDemoAccount } = require('./lib/demoAccount');
 
 // ── DB-backed session store ────────────────────────────────────────────────────
@@ -276,8 +277,11 @@ app.use('/api/roi',   limits.api, requireAuth, csrfProtect, roiRouter);
 app.use('/api/admin/outbound', limits.api, requireAuth, csrfProtect, requireOutboundAccess, outboundRouter);
 
 // Taste Gap: standard protected mounting. Runs are scoped to their creator.
-// Brand autocomplete answers first, under its own per-user limit, so typing
-// never spends the general API budget.
+// Brand autocomplete answers first, under its own per-IP limit, so typing
+// never spends the general API budget. The internal routes (the featured
+// brief generator) answer only localhost requests that carry the internal
+// token, so they sit outside auth.
+app.use('/internal/taste', tasteInternalRouter);
 app.get('/api/taste/search', requireAuth, limits.tasteSearch, tasteRouter.search);
 app.use('/api/taste', limits.api, requireAuth, csrfProtect, tasteRouter);
 
@@ -372,11 +376,12 @@ initDb().then(() => {
   logAnthropicKeyStatus();
   ensureDemoAccount();
   closeInterruptedRuns();
+  tidyStoredRuns();
   startScheduler();
   app.listen(PORT, () => {
     console.log(`\n🔍 Nivaria — http://localhost:${PORT}\n`);
-    // Seeded Taste Gap examples, generated once in the background.
-    ensureExamples().catch(err => console.warn('[taste] examples failed: ' + err.message));
+    // Featured Taste Gap briefs for a fresh database, in the background.
+    ensureFeatured().catch(err => console.warn('[taste] featured briefs failed: ' + err.message));
   });
 }).catch(err => {
   console.error('Failed to start:', err);

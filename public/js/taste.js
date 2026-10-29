@@ -23,6 +23,8 @@ const Taste = (() => {
   let steps = [];        // live trace, indexed by n - 1
   let current = null;    // run on screen
   let geoRival = null;   // rival entity_id the map shows
+  let viewCached = false; // the run on screen was served from the brief cache
+  let featuredPairs = []; // /api/taste/featured, for the chips
 
   const pts = x => (typeof x === 'number' && Number.isFinite(x) ? Math.round(x * 100) : null);
   const signed = n => (n == null ? 'n/a' : (n > 0 ? '+' : '') + n);
@@ -80,13 +82,10 @@ const Taste = (() => {
   async function renderForm() {
     let status = { ready: true };
     let recent = [];
-    let examples = [];
     try {
-      [status, { runs: recent }, { examples }] = await Promise.all([
-        API.get('/taste/status'), API.get('/taste/runs'), API.get('/taste/examples'),
-      ]);
+      [status, { runs: recent }] = await Promise.all([API.get('/taste/status'), API.get('/taste/runs'), loadFeatured()]);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(friendlyMessage(e), 'error');
     }
     const running = recent.find(r => r.status === 'running');
 
@@ -102,12 +101,11 @@ const Taste = (() => {
           </div>
         </div>
 
-        ${exampleCards(examples)}
+        ${featuredSection(featuredPairs)}
 
         ${status.ready ? '' : `
           <div class="bc-section taste-notice">
-            <div class="bc-section-label">Not ready on this server</div>
-            <div class="bc-section-body">${esc(status.problem)}</div>
+            <div class="bc-section-body">New briefs cannot be written on this server right now. The featured briefs above open instantly.</div>
           </div>`}
 
         ${running ? `
@@ -117,6 +115,8 @@ const Taste = (() => {
               <a href="#/taste/${running.id}">Watch it</a>
             </div>
           </div>` : ''}
+
+        <div id="taste-form-notice"></div>
 
         <form class="bc-section taste-form" id="taste-form" novalidate>
           <div class="bc-section-label">New brief</div>
@@ -139,8 +139,8 @@ const Taste = (() => {
             </div>
           </div>
           <div class="taste-form-foot">
-            <span class="taste-hint">Only these names are sent to the model. A run takes up to three minutes.</span>
-            <button class="btn btn-primary" type="submit" id="taste-submit" ${status.ready && !running ? '' : 'disabled'}>Run the brief</button>
+            <span class="taste-hint">Only these names are sent to the model. A pair briefed in the last two weeks opens instantly; a new one takes up to three minutes.</span>
+            <button class="btn btn-primary" type="submit" id="taste-submit" ${status.ready ? '' : 'disabled'}>Run the brief</button>
           </div>
         </form>
 
@@ -269,51 +269,91 @@ const Taste = (() => {
     input.addEventListener('blur', () => setTimeout(close, 100));
   }
 
-  // Seeded examples (generated for real once, served from the database), so a
-  // finished brief is one click away before anyone runs anything.
-  function exampleCards(list) {
-    if (!list.length) return '';
-    const title = ex => brandLine(ex) + (ex.city ? ' in ' + esc(ex.city) : '');
-    const featured = list.find(ex => ex.featured) || list[0];
-    const rest = list.filter(ex => ex !== featured);
-    const facts = ex => [
-      ex.segments ? ex.segments + ' rival-owned segments' : '',
-      ex.hotspots ? ex.hotspots + ' map hotspots' : '',
+  // ── Featured briefs ─────────────────────────────────────────────────────────
+  // Ten popular rival pairs, written ahead of time and served from the
+  // database. A chip opens the cached brief, so it costs nothing and always
+  // loads; every refusal and failure points at them.
+
+  async function loadFeatured() {
+    try {
+      ({ pairs: featuredPairs } = await API.get('/taste/featured'));
+    } catch (_) {
+      featuredPairs = [];
+    }
+    return featuredPairs;
+  }
+
+  function pairLine(p) {
+    return esc(p.brand) + ' vs ' + p.rivals.map(esc).join(' and ');
+  }
+
+  function featuredChips(pairs = featuredPairs) {
+    const ready = pairs.filter(p => p.run);
+    if (!ready.length) return '';
+    return `<div class="taste-chips">${ready.map(p => `
+      <a class="taste-chip" href="#/taste/${p.run.id}?cached=1">${pairLine(p)}${p.city ? '<span class="taste-chip-city"> · ' + esc(p.city) + '</span>' : ''}</a>`).join('')}</div>`;
+  }
+
+  function featuredSection(pairs) {
+    const ready = pairs.filter(p => p.run);
+    if (!ready.length) return '';
+    const top = ready.find(p => p.featured) || ready[0];
+    const r = top.run;
+    const facts = [
+      r.segments ? r.segments + ' rival-owned segments' : '',
+      r.hotspots ? r.hotspots + ' map hotspots' : '',
     ].filter(Boolean).join(', ');
     return `
-      <div class="taste-section-title">See a finished brief</div>
+      <div class="taste-section-title">Featured briefs</div>
+      <div class="bc-section taste-featured">
+        <div class="taste-hint">Popular rival pairs, already written. They open instantly.</div>
+        ${featuredChips(pairs)}
+      </div>
       <div class="bc-section bc-response taste-example taste-example--featured">
         <div class="bc-section-header">
-          <div class="bc-section-label">Featured example</div>
-          <span class="taste-hint">${esc(facts(featured))}</span>
+          <div class="bc-section-label">Featured brief</div>
+          <span class="taste-hint">${esc(facts)}</span>
         </div>
-        <div class="taste-example-title">${title(featured)}</div>
-        <h2 class="bc-headline taste-example-headline">${esc(featured.headline)}</h2>
-        <div class="bc-section-body">${esc(featured.summary)}</div>
-        ${featured.win_first.length ? `
+        <div class="taste-example-title">${pairLine(top)}${top.city ? ' in ' + esc(top.city) : ''}</div>
+        <h2 class="bc-headline taste-example-headline">${esc(r.headline)}</h2>
+        <div class="bc-section-body">${esc(r.summary)}</div>
+        ${r.win_first.length ? `
           <ol class="taste-example-wins">
-            ${featured.win_first.map(w => `
+            ${r.win_first.map(w => `
               <li><span class="taste-rank">${esc(String(w.rank))}</span>
                 <span><strong>${esc(w.segment)}</strong>. ${esc(w.campaign_hook)}</span></li>`).join('')}
           </ol>` : ''}
         <div class="taste-example-actions">
-          <a class="btn btn-primary btn-sm" href="#/taste/${featured.id}">Open the full brief</a>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="Taste.rerun(${featured.id})">Run it yourself</button>
+          <a class="btn btn-primary btn-sm" href="#/taste/${r.id}?cached=1">Open the full brief</a>
         </div>
-      </div>
-      ${rest.map(ex => `
-        <div class="bc-section taste-example">
-          <div class="bc-section-header">
-            <div class="bc-section-label">Example${ex.city ? '' : ', no city'}</div>
-            <span class="taste-hint">${esc(facts(ex))}</span>
-          </div>
-          <div class="taste-example-title">${title(ex)}</div>
-          <div class="bc-section-body">${esc(ex.headline)}</div>
-          <div class="taste-example-actions">
-            <a class="btn btn-secondary btn-sm" href="#/taste/${ex.id}">Open the brief</a>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="Taste.rerun(${ex.id})">Run it yourself</button>
-          </div>
-        </div>`).join('')}`;
+      </div>`;
+  }
+
+  // A friendly notice that points at the featured briefs: a refused run (one
+  // at a time, the daily limit) or a failed one. Never a raw error.
+  function notice(message, { error = false, label = '' } = {}) {
+    const chips = featuredChips();
+    return `
+      <div class="bc-section taste-notice ${error ? 'taste-notice--error' : ''}" role="status">
+        ${label ? '<div class="bc-section-label">' + esc(label) + '</div>' : ''}
+        <div class="bc-section-body">${esc(message)}</div>
+        ${chips ? '<div class="taste-hint taste-notice-hint">Featured briefs, ready now:</div>' + chips : ''}
+      </div>`;
+  }
+
+  // The server's refusals carry a friendly message and a code; anything else
+  // (a crash page, a dropped connection) gets a plain one.
+  function friendlyMessage(err) {
+    const msg = String(err?.message || '');
+    if (err?.code || (msg && !/^HTTP \d+|fetch|network|JSON/i.test(msg))) return msg;
+    return 'Something went wrong on our side. The featured briefs open instantly, or try again in a minute.';
+  }
+
+  function showNotice(boxId, message) {
+    const box = document.getElementById(boxId);
+    if (!box) { toast(message, 'error'); return; }
+    box.innerHTML = notice(message);
+    box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
   async function submit(e) {
@@ -325,12 +365,13 @@ const Taste = (() => {
     const btn = document.getElementById('taste-submit');
     btn.disabled = true;
     btn.textContent = 'Starting...';
+    document.getElementById('taste-form-notice').innerHTML = '';
     try {
-      const { run } = await API.post('/taste/runs', { brand, rivals, city: f.city.value.trim() });
-      navigate('#/taste/' + run.id);
+      const res = await API.post('/taste/runs', { brand, rivals, city: f.city.value.trim() });
+      navigate('#/taste/' + res.run.id + (res.cached ? '?cached=1' : ''));
     } catch (err) {
-      toast(err.message, 'error');
-      if (err.id) navigate('#/taste/' + err.id);
+      if (err.code === 'busy' && err.id) { navigate('#/taste/' + err.id); return; }
+      showNotice('taste-form-notice', friendlyMessage(err));
       btn.disabled = false;
       btn.textContent = 'Run the brief';
     }
@@ -338,20 +379,23 @@ const Taste = (() => {
 
   // ── Run page ────────────────────────────────────────────────────────────────
 
-  async function renderRun(id) {
+  // cached: opened from the brief cache or a featured chip.
+  async function renderRun(id, { cached = false } = {}) {
     let run;
     try {
       ({ run } = await API.get('/taste/runs/' + encodeURIComponent(id)));
     } catch (e) {
       root().innerHTML = `<div class="empty-state">
-        <div class="empty-title">Run not found</div>
-        <div class="empty-desc">${esc(e.message)}</div>
-        <a class="btn btn-primary" href="#/runs">All runs</a>
+        <div class="empty-title">Brief not found</div>
+        <div class="empty-desc">It may have been removed. The featured briefs on the Taste Gap page open instantly.</div>
+        <a class="btn btn-primary" href="#/taste">Taste Gap</a>
       </div>`;
       return;
     }
     current = run;
     geoRival = null;
+    viewCached = run.status === 'done' && (cached || Boolean(run.example_key));
+    if (run.status === 'error') await loadFeatured();
     paintRun(run);
     if (run.status === 'running') openStream(run.id, run.steps || []);
   }
@@ -413,17 +457,34 @@ const Taste = (() => {
         </div>`;
     } else if (run.status === 'error') {
       body = `
-        <div class="bc-section taste-notice taste-notice--error">
-          <div class="bc-section-label">What went wrong</div>
-          <div class="bc-section-body">${esc(run.error_message || 'The run failed.')}</div>
-        </div>
-        ${traceSection(run, true)}
+        ${notice(run.error_message || 'This brief could not be written. The featured briefs open instantly, or try again later.', { error: true, label: 'What went wrong' })}
+        <div id="taste-run-notice"></div>
+        ${traceSection(run, false)}
         ${footer(run)}`;
     } else {
-      body = results(run) + traceSection(run, false) + footer(run);
+      body = (viewCached ? cachedBanner(run) : '<div id="taste-run-notice"></div>') + results(run) + traceSection(run, false) + footer(run);
     }
     root().innerHTML = `<div class="bc-wrap taste-wrap">${header(run)}${body}</div>`;
     if (run.status === 'done') afterResults(run);
+  }
+
+  function dayOf(d) {
+    const t = parseDbDate(d);
+    return t ? t.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  }
+
+  // A brief served from the cache: when it was written, and a fresh run on
+  // request (which counts against the visitor's daily runs).
+  function cachedBanner(run) {
+    return `
+      <div class="bc-section taste-cached">
+        <div class="taste-cached-text">
+          <strong>Cached brief from ${esc(dayOf(run.finished_at))}</strong>
+          <span class="taste-hint">Opened instantly, with no new Qloo or model calls.</span>
+        </div>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="Taste.rerun(${run.id})">Run fresh</button>
+      </div>
+      <div id="taste-run-notice"></div>`;
   }
 
   function cleanupMapOnly() {
@@ -441,10 +502,18 @@ const Taste = (() => {
         <span class="taste-step-icon">${icon}</span>
         <span class="taste-step-main">
           <span class="taste-step-label">${esc(s.label)}</span>
-          ${s.summary && s.kind !== 'note' ? `<span class="taste-step-sum">${esc(s.summary)}</span>` : ''}
+          ${stepSummary(s) ? `<span class="taste-step-sum">${esc(stepSummary(s))}</span>` : ''}
         </span>
         <span class="taste-step-time">${s.status === 'running' ? '' : secs(s.ms)}</span>
       </li>`;
+  }
+
+  // Raw provider and tool errors stay off the page: a failed step says so
+  // plainly, and a model switch shows only its label.
+  function stepSummary(s) {
+    if (s.kind === 'note' || s.kind === 'switch') return '';
+    if (s.status === 'error') return 'This step did not work, so the agent carried on without it.';
+    return s.summary || '';
   }
 
   function traceItems(list) {
@@ -490,9 +559,11 @@ const Taste = (() => {
       try {
         const { run } = await API.get('/taste/runs/' + id);
         current = run;
+        viewCached = false;
+        if (run.status === 'error') await loadFeatured();
         paintRun(run);
         if (run.status === 'done') toast('Brief ready', 'success');
-      } catch (err) { toast(err.message, 'error'); }
+      } catch (err) { toast(friendlyMessage(err), 'error'); }
     });
     // EventSource reconnects on its own after a dropped connection; the
     // server replays the trace so far, so nothing is lost.
@@ -617,7 +688,7 @@ const Taste = (() => {
         <a href="#/runs" class="btn btn-ghost btn-sm">All runs</a>
         <a href="#/taste" class="btn btn-ghost btn-sm">New brief</a>
         <span class="taste-hint taste-meta">${run.model ? esc(run.model) : ''}${run.turns ? ', ' + run.turns + ' turns' : ''}</span>
-        <button class="btn btn-secondary btn-sm" type="button" style="margin-left:auto" onclick="Taste.rerun(${run.id})">Run again</button>
+        ${viewCached ? '' : `<button class="btn btn-secondary btn-sm" type="button" style="margin-left:auto" onclick="Taste.rerun(${run.id})">Run again</button>`}
       </div>`;
   }
 
@@ -836,13 +907,16 @@ const Taste = (() => {
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
+  // A fresh run of the same inputs (Run fresh, Run again): it skips the cache
+  // and counts against the visitor's daily runs.
   async function rerun(id) {
     try {
       const { run } = await API.post('/taste/runs/' + id + '/rerun');
       navigate('#/taste/' + run.id);
     } catch (err) {
-      toast(err.message, 'error');
-      if (err.id) navigate('#/taste/' + err.id);
+      if (err.code === 'busy' && err.id) { navigate('#/taste/' + err.id); return; }
+      if (!featuredPairs.length) await loadFeatured();
+      showNotice('taste-run-notice', friendlyMessage(err));
     }
   }
 
@@ -907,9 +981,9 @@ const Taste = (() => {
       </div>`;
   }
 
-  async function render(id) {
+  async function render(id, query) {
     cleanup();
-    return id ? renderRun(id) : renderForm();
+    return id ? renderRun(id, { cached: query?.get('cached') === '1' }) : renderForm();
   }
 
   return { render, renderRuns, rerun, copy, showGeo, markFallback };
