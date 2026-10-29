@@ -278,24 +278,65 @@ function knownNames(ctx) {
   return [...names];
 }
 
-function cleanBriefProse(b, ctx) {
+// Traits no Qloo tool returns (income, class, education). The prompt forbids
+// them; as a backstop, a sentence that names one is dropped, the run's
+// warnings name the trait, and the server log keeps the sentence.
+const UNSUPPORTED_TRAIT = /\b(?:price[- ]?sensitiv(?:e|ity)|budget\w*|affluen(?:t|ce)|wealth(?:y|ier|iest)|(?:low|lower|middle|high|higher)[- ]income|blue[- ]collar|white[- ]collar)\b|educated\b/i;
+
+// A sentence ends at . ! or ? followed by a space and a capital or digit, but
+// not after a short abbreviation ("St." in "St. Marks Place").
+const SENTENCE_BREAK = /(?<!\b(?:St|Mt|Mr|Mrs|Ms|Dr|Jr|Sr|vs|Ave)\.)(?<=[.!?])\s+(?=["'(]?[A-Z0-9])/;
+
+function dropTraitSentences(text, where, warnings) {
+  if (typeof text !== 'string' || !UNSUPPORTED_TRAIT.test(text)) return text;
+  return text.split(SENTENCE_BREAK).filter(sentence => {
+    const hit = UNSUPPORTED_TRAIT.exec(sentence);
+    if (!hit) return true;
+    warnings.push('Removed a sentence that described a trait no tool returned ("' + hit[0] + '")');
+    console.warn('[taste] dropped a sentence with an unsupported trait ("' + hit[0] + '") from ' + where + ': ' + sentence.slice(0, 200));
+    return false;
+  }).join(' ').trim();
+}
+
+function cleanBriefProse(b, ctx, warnings) {
   const names = knownNames(ctx);
-  const prose = obj => {
+  const prose = (obj, where) => {
     for (const k of ['headline', 'summary', 'segment', 'insight', 'why', 'campaign_hook', 'label', 'note']) {
-      if (typeof obj[k] === 'string') obj[k] = cleanProse(obj[k]);
+      if (typeof obj[k] !== 'string') continue;
+      const had = obj[k].trim() !== '';
+      obj[k] = dropTraitSentences(cleanProse(obj[k]), where + k, warnings);
+      if (k === 'segment' && had && !obj[k]) obj.traitOnly = true;
     }
     if (Array.isArray(obj.channels)) {
       obj.channels = obj.channels
-        .map(cleanProse)
+        .map(c => dropTraitSentences(cleanProse(c), where + 'channels', warnings))
         .filter(c => typeof c === 'string' && c && !(RULE_START.test(c) && RULE_TOPIC.test(c)))
         .map(c => sentenceCase(c, names));
     }
   };
-  prose(b);
+  prose(b, '');
   for (const k of ['rival_owned_segments', 'win_first', 'geo_hotspots', 'demographic_gap', 'positioning']) {
-    for (const item of b[k] || []) prose(item);
+    (b[k] || []).forEach((item, i) => prose(item, k + '[' + i + '].'));
+  }
+  // A segment whose whole name was an unsupported trait has nothing left to
+  // stand on, so the segment or win-first pick goes too.
+  for (const k of ['rival_owned_segments', 'win_first']) {
+    if (!Array.isArray(b[k])) continue;
+    b[k] = b[k].filter(item => {
+      if (!item.traitOnly) return true;
+      warnings.push(k === 'win_first' ? 'Removed a win-first pick named after that trait' : 'Removed a segment named after that trait');
+      return false;
+    });
   }
   return b;
+}
+
+// The headline when the clean-up left none: the top segment, plainly.
+function fallbackHeadline(ctx, segments, brandId, rivalIds) {
+  const brand = brandId ? tools.entityName(ctx, brandId) : 'us';
+  const top = segments[0];
+  if (top) return sanitizeCopy(tools.entityName(ctx, top.rival_id) + ' leads ' + brand + ' in ' + top.segment);
+  return sanitizeCopy('Where ' + rivalIds.map(id => tools.entityName(ctx, id)).join(' and ') + ' leads ' + brand);
 }
 
 // When the model cites no hotspot for a rival whose city was mapped, the
@@ -316,7 +357,7 @@ function serverHotspots(ctx, rivalId, brandId) {
 }
 
 function assembleBrief(raw, ctx, warnings) {
-  const b = cleanBriefProse(sanitizeCopyDeep(raw), ctx);
+  const b = cleanBriefProse(sanitizeCopyDeep(raw), ctx, warnings);
   const brandId = tools.brandId(ctx, b.brand_id);
   const rivalIds = (b.rival_ids || []).map(r => tools.brandId(ctx, r)).filter(Boolean);
   const brandRef = id => ({ entity_id: id, name: tools.entityName(ctx, id), image: ctx.entities.get(id)?.image || null });
@@ -341,7 +382,8 @@ function assembleBrief(raw, ctx, warnings) {
 
   const winFirst = (b.win_first || [])
     .map(w => ({ ...w, evidence: evidenceFor(w.evidence, null, 'win_first "' + w.segment + '"') }))
-    .sort((x, y) => (x.rank || 0) - (y.rank || 0));
+    .sort((x, y) => (x.rank || 0) - (y.rank || 0))
+    .map((w, i) => ({ ...w, rank: i + 1 }));
 
   const hotspots = [];
   for (const h of b.geo_hotspots || []) {
@@ -353,7 +395,7 @@ function assembleBrief(raw, ctx, warnings) {
   for (const rivalId of Object.keys(ctx.geo)) {
     if (hotspots.some(h => h.rival_id === rivalId)) continue;
     const filled = serverHotspots(ctx, rivalId, brandId);
-    if (filled.length) warnings.push('The brief named no hotspots for ' + tools.entityName(ctx, rivalId) + ', so the top geo_gap cells are listed');
+    if (filled.length) warnings.push('The brief named no hotspots for ' + tools.entityName(ctx, rivalId) + ', so the map lists the cells where it leads most');
     hotspots.push(...filled);
   }
 
@@ -365,7 +407,7 @@ function assembleBrief(raw, ctx, warnings) {
   return {
     brand: brandId ? brandRef(brandId) : null,
     rivals: rivalIds.map(brandRef),
-    headline: b.headline || '',
+    headline: b.headline || fallbackHeadline(ctx, segments, brandId, rivalIds),
     summary: b.summary || '',
     rival_owned_segments: segments,
     win_first: winFirst,

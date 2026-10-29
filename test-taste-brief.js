@@ -100,6 +100,63 @@ function rawBrief({ brand, rival, artist }, extra = {}) {
   const own = assembleBrief(rawBrief(run, { geo_hotspots: [{ ref: cellRef, label: 'x', note: 'Model note.' }] }), run.ctx, []);
   check("the model's own hotspots are kept as they are", own.geo_hotspots.length === 1 && own.geo_hotspots[0].note === 'Model note.', JSON.stringify(own.geo_hotspots.map(h => h.note)));
 
+  console.log('unsupported traits');
+  check('a clean brief drops nothing for traits', !warnings.some(x => /trait/.test(x)), JSON.stringify(warnings));
+
+  // Capture the server log the backstop writes to.
+  const logged = [];
+  const origWarn = console.warn;
+  console.warn = (...m) => { logged.push(m.join(' ')); };
+  const traitWarnings = [];
+  const TRAIT_SENTENCES = [
+    'They are price-sensitive commuters.',
+    'Price sensitive shoppers lean in.',
+    'Most stick to a budget.',
+    'Budget-conscious families visit often.',
+    'The audience is affluent.',
+    'Wealthy fans drive the gap.',
+    'Low-income households over-index.',
+    'High income earners lead here.',
+    'These are educated professionals.',
+    'College-educated fans skew this way.',
+    'It reads as a blue-collar crowd.',
+    'White collar workers dominate.',
+  ];
+  const t = assembleBrief(rawBrief(run, {
+    summary: 'Fans aged 35_to_44 lean Dunkin. ' + TRAIT_SENTENCES.join(' ') + ' The TV gap is small.',
+  }), run.ctx, traitWarnings);
+  check('every listed trait word drops its sentence and only that sentence', t.summary === 'Fans aged 35 to 44 lean Dunkin. The TV gap is small.', t.summary);
+  check('each dropped sentence is a warning naming the trait', traitWarnings.filter(x => /trait no tool returned/.test(x)).length === TRAIT_SENTENCES.length
+    && traitWarnings.some(x => /"price-sensitive"/.test(x)) && traitWarnings.some(x => /"blue-collar"/i.test(x)), JSON.stringify(traitWarnings));
+  check('the warnings do not repeat the dropped claim', !traitWarnings.some(x => /commuters|households|professionals/.test(x)));
+  check('the server log keeps the dropped sentence and where it was', logged.some(x => /summary: They are price-sensitive commuters\./.test(x)), logged[0]);
+
+  const abbrev = assembleBrief(rawBrief(run, {
+    summary: 'Pop-ups near St. Marks Place suit them. They are wealthy.',
+  }), run.ctx, []);
+  check('an abbreviation does not split a sentence', abbrev.summary === 'Pop-ups near St. Marks Place suit them.', abbrev.summary);
+
+  const parts = [];
+  const p = assembleBrief(rawBrief(run, {
+    headline: 'Win affluent Dunkin fans',
+    rival_owned_segments: [
+      { rival_id: run.rival, domain: 'artist', segment: 'Affluent commuters', confidence: 'high', insight: 'A lead.', evidence: [run.artist[0]] },
+      { rival_id: run.rival, domain: 'artist', segment: 'Indie pop listeners', confidence: 'high', insight: 'A clear lead. Fans are budget minded.', evidence: [run.artist[0]] },
+    ],
+    win_first: [
+      { rank: 1, segment: 'Wealthy suburbanites', why: 'x', campaign_hook: 'y', channels: [], evidence: [run.artist[0]] },
+      { rank: 2, segment: 'Indie pop listeners', why: 'The widest gap.', campaign_hook: 'Playlist takeovers.', channels: ['Ads for budget shoppers', 'Creator partnerships'], evidence: [run.artist[0]] },
+    ],
+  }), run.ctx, parts);
+  check('a headline that names a trait is rebuilt from the top segment', /leads Starbucks in Indie pop listeners/.test(p.headline) && !/affluent/i.test(p.headline), p.headline);
+  check('a segment named after a trait is dropped', p.rival_owned_segments.length === 1 && p.rival_owned_segments[0].segment === 'Indie pop listeners', JSON.stringify(p.rival_owned_segments.map(s => s.segment)));
+  check('a sentence inside a kept segment is dropped', p.rival_owned_segments[0].insight === 'A clear lead.', p.rival_owned_segments[0].insight);
+  check('a win-first pick named after a trait is dropped and the ranks close up', p.win_first.length === 1 && p.win_first[0].rank === 1 && p.win_first[0].segment === 'Indie pop listeners', JSON.stringify(p.win_first.map(w => [w.rank, w.segment])));
+  check('a channel tag that names a trait is dropped', JSON.stringify(p.win_first[0].channels) === '["Creator partnerships"]', JSON.stringify(p.win_first[0].channels));
+  check('dropped picks and segments are noted in warnings', parts.some(x => /Removed a win-first pick/.test(x)) && parts.some(x => /Removed a segment/.test(x)), JSON.stringify(parts));
+  check('no em or en dash in the warnings or the rebuilt headline', !/[–—]/.test(parts.join(' ') + p.headline));
+  console.warn = origWarn;
+
   console.log('\n' + passed + ' passed, ' + failed + ' failed');
   process.exit(failed ? 1 : 0);
 })().catch(err => { console.error(err); process.exit(1); });

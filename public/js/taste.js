@@ -603,7 +603,7 @@ const Taste = (() => {
         </div>` : ''}
 
       ${run.warnings?.length ? `
-        <div class="bc-reasoning">Dropped by the citation check: ${run.warnings.map(esc).join('; ')}</div>` : ''}`;
+        <div class="bc-reasoning">Server checks on the model's draft: ${run.warnings.map(esc).join('; ')}</div>` : ''}`;
   }
 
   function tagRow(label, tags) {
