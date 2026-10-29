@@ -361,7 +361,7 @@ async function audienceGap(ctx, input) {
       }),
     },
     summary: lead
-      ? 'Biggest gap: ' + lead.name + ' (' + pts(lead.rival_affinity) + ' vs ' + pts(lead.our_affinity) + '), mean gap ' + pts(mean) + ' points'
+      ? 'Biggest gap: ' + lead.name + ' (' + pts(lead.rival_affinity) + ' vs ' + pts(lead.our_affinity) + '), mean gap ' + pts(mean) + (Math.abs(pts(mean)) === 1 ? ' point' : ' points')
       : 'No overlap scored',
   };
 }
@@ -418,8 +418,6 @@ async function labelCell(ctx, cell, signalId) {
     cell.top_places = [];
   }
 }
-
-const cellLabel = c => c.label || c.geohash;
 
 async function geoGap(ctx, input) {
   const [brand, rival] = requirePair(ctx, input);
@@ -489,8 +487,9 @@ async function geoGap(ctx, input) {
       rival_hotspots: hotspots.map(row),
       our_strongest: ourStrongest.map(row),
     },
-    summary: 'Rival leads in ' + pts(stats.share_rival_leads) + '% of ' + cells.length
-      + ' cells; widest gap in ' + cellLabel(top) + ' (' + pts(top.rival_affinity) + ' vs ' + pts(top.our_affinity) + ')',
+    // An unlabelled cell is only a geohash, which means nothing on screen.
+    summary: 'Rival leads by ' + pts(STRONG_GAP) + ' or more in ' + pts(stats.share_rival_leads) + '% of ' + cells.length
+      + ' cells; widest gap' + (top.label ? ' in ' + top.label : '') + ' (' + pts(top.rival_affinity) + ' vs ' + pts(top.our_affinity) + ')',
   };
 }
 

@@ -221,6 +221,9 @@ const Drawer = {
     // Auto-close on any route navigation — nav-items are real anchors so hash
     // changes fire here, and so does navigate() elsewhere in the app.
     window.addEventListener('hashchange', () => { if (Drawer.isOpen()) Drawer.close(); });
+    // A link to the page already on screen changes no hash, so close on the
+    // tap itself too.
+    sb.addEventListener('click', (e) => { if (Drawer.isOpen() && e.target.closest('a[href]')) Drawer.close(); });
 
     // Reset every state when crossing the drawer breakpoint in either direction.
     const mql = window.matchMedia('(max-width: 767px)');
@@ -461,7 +464,9 @@ const App = {
       Settings.render(routeQuery, id).then(transition);
     } else if (page === 'profile') {
       el('page-title').textContent = 'Profile';
-      el('page-sub').textContent = 'Your personal details, integrations, and voice';
+      el('page-sub').textContent = App.productMode === 'taste'
+        ? 'Your details, and where briefs are sent'
+        : 'Your personal details, integrations, and voice';
       // rest[0] is the section (#/profile/integrations). Only show the skeleton on
       // a fresh entry — when the profile shell is already mounted we're just
       // switching sections, and Profile.render() re-paints from cache without a

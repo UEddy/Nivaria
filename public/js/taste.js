@@ -166,7 +166,11 @@ const Taste = (() => {
 
     document.getElementById('taste-form').addEventListener('submit', submit);
     for (const id of ['taste-brand', 'taste-rival', 'taste-rival2']) attachSuggest(document.getElementById(id));
-    document.getElementById('taste-brand').focus();
+    // Ready to type, without scrolling the banner and featured briefs out of
+    // view, and without opening a phone's keyboard.
+    if (window.matchMedia('(pointer: fine)').matches) {
+      document.getElementById('taste-brand').focus({ preventScroll: true });
+    }
   }
 
   // ── Brand autocomplete ──────────────────────────────────────────────────────
@@ -301,8 +305,8 @@ const Taste = (() => {
     const top = ready.find(p => p.featured) || ready[0];
     const r = top.run;
     const facts = [
-      r.segments ? r.segments + ' rival-owned segments' : '',
-      r.hotspots ? r.hotspots + ' map hotspots' : '',
+      r.segments ? r.segments + ' rival-owned segment' + (r.segments === 1 ? '' : 's') : '',
+      r.hotspots ? r.hotspots + ' map hotspot' + (r.hotspots === 1 ? '' : 's') : '',
     ].filter(Boolean).join(', ');
     return `
       <div class="taste-section-title">Featured briefs</div>
@@ -525,13 +529,16 @@ const Taste = (() => {
     return shown.map(traceItem).join('');
   }
 
+  // As src/taste/llm.js labels its providers.
+  const PROVIDER_LABEL = { gemini: 'Gemini', groq: 'Groq', openrouter: 'OpenRouter', zai: 'Z.ai', anthropic: 'Claude' };
+
   // The model that wrote the brief: from the brief's provenance, else (older
   // runs) the last model the run used.
   function writerOf(run) {
     const w = run.brief?.provenance?.written_by;
     if (w) return w.label + ' · ' + w.model;
     const last = (run.providers || [])[(run.providers || []).length - 1];
-    return last ? capFirst(last.provider) + ' · ' + last.model : '';
+    return last ? (PROVIDER_LABEL[last.provider] || capFirst(last.provider)) + ' · ' + last.model : '';
   }
 
   function traceSection(run, open) {
@@ -685,7 +692,7 @@ const Taste = (() => {
           <button class="btn btn-secondary btn-sm" type="button" onclick="Taste.share(${run.id})">Share</button>
           <button class="btn btn-secondary btn-sm" type="button" id="taste-send-btn" onclick="Taste.send(${run.id})">Send to Slack or Discord</button>
           <button class="btn btn-ghost btn-sm" type="button" onclick="Taste.copy()">Copy brief</button>
-          <button class="btn btn-ghost btn-sm" type="button" onclick="Taste.rerun(${run.id})">Run again</button>
+          ${viewCached ? '' : `<button class="btn btn-ghost btn-sm" type="button" onclick="Taste.rerun(${run.id})">Run again</button>`}
         </div>`}
       </div>
       ${readOnly ? '' : '<div id="taste-share-panel"></div>'}
@@ -883,12 +890,14 @@ const Taste = (() => {
       ).addTo(map);
     }
 
-    // This rival's hotspots, numbered on the map and listed beside it.
+    // This rival's hotspots, numbered on the map and listed beside it. A cell
+    // where our brand leads takes our end of the scale, as its dot does.
     const spots = hotspotsFor(run, geoRival);
+    const oursLeads = h => typeof h.gap === 'number' && h.gap < 0;
     spots.forEach((h, i) => {
       if (h.lat == null || h.lng == null) return;
       L.marker([h.lat, h.lng], {
-        icon: L.divIcon({ className: 'taste-pin', html: '<span>' + (i + 1) + '</span>', iconSize: [24, 24], iconAnchor: [12, 12] }),
+        icon: L.divIcon({ className: 'taste-pin' + (oursLeads(h) ? ' taste-pin--ours' : ''), html: '<span>' + (i + 1) + '</span>', iconSize: [24, 24], iconAnchor: [12, 12] }),
         keyboard: false,
       }).bindTooltip(`<strong>${esc(cellName(h))}</strong><br>${esc(h.note)}`, { direction: 'top', className: 'taste-tip' }).addTo(map);
     });
@@ -911,7 +920,7 @@ const Taste = (() => {
         <ol class="taste-spots">
           ${spots.map((h, i) => `
             <li>
-              <span class="taste-spot-n">${i + 1}</span>
+              <span class="taste-spot-n${oursLeads(h) ? ' taste-spot-n--ours' : ''}">${i + 1}</span>
               <span><strong>${esc(cellName(h))}</strong>: ${esc(h.note)} <span class="taste-gap">(gap ${signed(pts(h.gap))})</span></span>
             </li>`).join('')}
         </ol>` : ''}`;

@@ -28,16 +28,28 @@ const Profile = {
 
   _RETURN_PARAMS: ['calendar_connected', 'calendar_error', 'slack_connected', 'slack_error'],
 
+  // The sections this account sees. Taste mode writes no outreach, so it has no
+  // voice profile. The shared demo account cannot change its password or
+  // delete itself, so it has no Security section.
+  sections() {
+    const taste = window.App?.productMode === 'taste';
+    const demo = Boolean(window.App?.user?.is_demo);
+    return Profile.SECTIONS.filter(sx => !(taste && sx.id === 'voice') && !(demo && sx.id === 'security'));
+  },
+
   // Resolve which section to show from an explicit id, then from any OAuth return
   // params (so an OAuth callback landing on #/profile?calendar_connected=… shows
-  // Integrations), then the last active section, then the details default.
+  // Integrations), then the last active section, then the details default. A
+  // section this account does not see falls back to the details.
   _resolveSection(section, routeQuery) {
+    let id;
     // 'account' was renamed to 'security'; alias old deep links/bookmarks.
-    if (section === 'account') return 'security';
-    if (section) return section;
-    if (routeQuery instanceof URLSearchParams &&
-        Profile._RETURN_PARAMS.some(k => routeQuery.has(k))) return 'integrations';
-    return Profile._activeSection || 'details';
+    if (section === 'account') id = 'security';
+    else if (section) id = section;
+    else if (routeQuery instanceof URLSearchParams &&
+        Profile._RETURN_PARAMS.some(k => routeQuery.has(k))) id = 'integrations';
+    else id = Profile._activeSection || 'details';
+    return Profile.sections().some(sx => sx.id === id) ? id : 'details';
   },
 
   async render(routeQuery, section) {
@@ -87,9 +99,10 @@ const Profile = {
 
   shellHtml(ctx, active) {
     const { user } = ctx;
-    const section = Profile.SECTIONS.find(x => x.id === active) || Profile.SECTIONS[0];
+    const sections = Profile.sections();
+    const section = sections.find(x => x.id === active) || sections[0];
 
-    const nav = Profile.SECTIONS.map(sx => {
+    const nav = sections.map(sx => {
       const on = sx.id === active;
       return `
         <a href="#/profile/${sx.id}" class="settings-nav__item ${on ? 'is-active' : ''}"
@@ -104,7 +117,7 @@ const Profile = {
         <div class="settings-page-header">
           <div>
             <div class="settings-page-title">Profile</div>
-            <div class="settings-page-subtitle">Your personal details and how Nivaria represents you</div>
+            <div class="settings-page-subtitle">${window.App?.productMode === 'taste' ? 'Your details, and where briefs are sent' : 'Your personal details and how Nivaria represents you'}</div>
           </div>
           <div class="settings-identity">
             <span>${esc(user?.email || '')}</span>
@@ -130,6 +143,9 @@ const Profile = {
       case 'voice':
         return Profile.voiceProfileHtml(voiceData);
       case 'integrations':
+        // Taste mode has no calendar briefings or deal logging; the webhooks
+        // are where Send to Slack or Discord posts a brief.
+        if (window.App?.productMode === 'taste') return Profile.webhooksHtml(s, true);
         return Profile.calendarHtml(s, calData) + Profile.slackHtml(slackData) + Profile.webhooksHtml(s);
       case 'security':
         return Profile.passwordHtml(user) + Profile.accountHtml(user) + Profile.gdprHtml();
@@ -532,9 +548,23 @@ const Profile = {
   // any column whose key is absent from the body, so this save never touches
   // briefings.
 
-  webhooksHtml(s) {
+  // forBriefs: taste mode, where the webhooks only carry briefs sent from a
+  // brief page. On the shared demo account they live in the browser session.
+  webhooksHtml(s, forBriefs = false) {
     const slackUrl   = s.slack_webhook || '';
     const discordUrl = s.discord_webhook || '';
+    const copy = forBriefs ? {
+      title: 'Slack and Discord',
+      desc: 'Where Send to Slack or Discord posts a brief: the headline, the top picks and a link to the full brief.'
+        + (window.App?.user?.is_demo ? ' On the shared demo account they are kept for this browser session only.' : ''),
+      slack: 'Briefs post to a Slack channel through an incoming webhook.',
+      discord: 'Briefs post to a Discord channel through a webhook.',
+    } : {
+      title: 'Alert webhooks',
+      desc: 'Push change alerts and briefings to Slack or Discord via incoming webhook.',
+      slack: 'Receive alerts in a Slack channel via incoming webhook.',
+      discord: 'Receive alerts in a Discord channel via webhook.',
+    };
 
     const slackIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/><path d="M20.5 10H19V8.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/><path d="M9.5 14c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5S8 21.33 8 20.5v-5c0-.83.67-1.5 1.5-1.5z"/><path d="M3.5 14H5v1.5c0 .83-.67 1.5-1.5 1.5S2 16.33 2 15.5 2.67 14 3.5 14z"/><path d="M14 14.5c0-.83.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-5c-.83 0-1.5-.67-1.5-1.5z"/><path d="M15.5 19H14v1.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5-.67-1.5-1.5-1.5z"/><path d="M10 9.5C10 8.67 9.33 8 8.5 8h-5C2.67 8 2 8.67 2 9.5S2.67 11 3.5 11h5c.83 0 1.5-.67 1.5-1.5z"/><path d="M8.5 5H10V3.5C10 2.67 9.33 2 8.5 2S7 2.67 7 3.5 7.67 5 8.5 5z"/></svg>`;
     const discordIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.74 19.74 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>`;
@@ -547,9 +577,9 @@ const Profile = {
       <div class="set-card">
         <div class="set-card__head">
           <div class="set-card__title">
-            Alert webhooks
+            ${copy.title}
           </div>
-          <div class="set-card__desc">Push change alerts and briefings to Slack or Discord via incoming webhook.</div>
+          <div class="set-card__desc">${copy.desc}</div>
         </div>
         <div class="set-card__body" data-dirty-group>
 
@@ -559,7 +589,7 @@ const Profile = {
               <div class="set-integration__icon">${slackIcon}</div>
               <div class="set-integration__text">
                 <div class="set-integration__name">Slack workspace</div>
-                <div class="set-integration__meta">Receive alerts in a Slack channel via incoming webhook.</div>
+                <div class="set-integration__meta">${copy.slack}</div>
               </div>
               <div class="set-integration__action">${statusPill(!!slackUrl)}</div>
             </div>
@@ -577,7 +607,7 @@ const Profile = {
               <div class="set-integration__icon">${discordIcon}</div>
               <div class="set-integration__text">
                 <div class="set-integration__name">Discord server</div>
-                <div class="set-integration__meta">Receive alerts in a Discord channel via webhook.</div>
+                <div class="set-integration__meta">${copy.discord}</div>
               </div>
               <div class="set-integration__action">${statusPill(!!discordUrl)}</div>
             </div>
