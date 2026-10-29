@@ -35,6 +35,20 @@
     });
   }
 
+  // ── Hero video ───────────────────────────────────────────────────────────
+  // Decorative loop. With reduced motion it stays paused on its first frame.
+  function initVideo() {
+    const video = document.getElementById('lp-hero-video');
+    if (!video) return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const sync = () => {
+      if (reduce.matches) video.pause();
+      else video.play().catch(() => {});
+    };
+    reduce.addEventListener('change', sync);
+    sync();
+  }
+
   // ── Navbar border once the page scrolls ──────────────────────────────────
   function initNav() {
     const nav = document.getElementById('lp-nav');
@@ -159,6 +173,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     initTheme();
+    initVideo();
     initNav();
     initMenu();
     initReveal();
