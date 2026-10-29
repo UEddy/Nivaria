@@ -509,7 +509,7 @@ const Taste = (() => {
         <tbody>
           ${list.map(e => `
             <tr>
-              <td>${esc(e.kind === 'cell' ? (e.neighborhood || e.area || 'Map cell') : e.name)}</td>
+              <td>${esc(e.kind === 'cell' ? (e.label || e.neighborhood || e.area || 'Map cell') : e.name)}</td>
               <td>${num(pts(e.rival_affinity))}</td>
               <td>${num(pts(e.our_affinity))}</td>
               <td class="taste-gap">${signed(pts(e.gap))}</td>
@@ -701,7 +701,7 @@ const Taste = (() => {
       L.circleMarker([c.lat, c.lng], {
         radius, color: ring, weight: 1, fillColor: gapColor(c.gap), fillOpacity: 0.85,
       }).bindTooltip(
-        `<strong>${esc(c.neighborhood || c.area || 'Map cell')}</strong><br>${esc(rival)} ${num(pts(c.rival_affinity))}, ${esc(ours)} ${num(pts(c.our_affinity))}<br>Gap ${signed(pts(c.gap))}`,
+        `<strong>${esc(c.label || c.neighborhood || c.area || 'Map cell')}</strong><br>${esc(rival)} ${num(pts(c.rival_affinity))}, ${esc(ours)} ${num(pts(c.our_affinity))}<br>Gap ${signed(pts(c.gap))}`,
         { direction: 'top', className: 'taste-tip' },
       ).addTo(map);
     }

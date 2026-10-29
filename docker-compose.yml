@@ -1,0 +1,28 @@
+# Nivaria (Taste Gap) on one small host. The app listens on 127.0.0.1:3000
+# only, so put a reverse proxy with HTTPS in front of it: session cookies are
+# Secure in production. Keys and SESSION_SECRET come from .env next to this
+# file. On first boot with an empty volume the server generates the seeded
+# example briefs in the background (a few minutes, a handful of model calls).
+services:
+  nivaria:
+    build: .
+    image: nivaria:latest
+    env_file: .env
+    # Pinned here as well as in the Dockerfile, because values from env_file
+    # override the image's ENV and a local .env sets its own PORT and NODE_ENV.
+    environment:
+      NODE_ENV: production
+      PRODUCT_MODE: taste
+      ENABLE_SCRAPER: "false"
+      PORT: "3000"
+      DATABASE_PATH: /app/data/nivaria.db
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - nivaria-data:/app/data
+    mem_limit: 512m
+    cpus: 0.5
+    restart: unless-stopped
+
+volumes:
+  nivaria-data:

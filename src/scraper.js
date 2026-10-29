@@ -542,7 +542,14 @@ async function fetchPageContentJs(url, opts = {}) {
 // Dispatcher — selects fetch vs js path based on competitor.render_mode
 // ──────────────────────────────────────────────────────────────────────────────
 
+// ENABLE_SCRAPER=false turns page monitoring off for a deploy that only runs
+// Taste Gap (the Docker image sets it): no page fetches and no browser.
+function scraperEnabled() {
+  return String(process.env.ENABLE_SCRAPER || '').trim().toLowerCase() !== 'false';
+}
+
 async function fetchPageContent(url, opts = {}) {
+  if (!scraperEnabled()) throw new Error('Page monitoring is turned off on this server (ENABLE_SCRAPER=false).');
   const mode = opts.renderMode === 'js' ? 'js' : 'fetch';
   const t0   = Date.now();
   const result = mode === 'js'
@@ -692,6 +699,7 @@ function classifyScrapeError(err, url) {
 
 module.exports = {
   fetchPageContent,
+  scraperEnabled,
   generateDiff,
   detectBlockPage,
   detectJsWall,

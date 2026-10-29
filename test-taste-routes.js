@@ -146,6 +146,10 @@ async function main() {
     Object.values(run.data.geo)[0]?.locality.locality_id === 'locality-new-york'
     && /not the state/.test(run.steps.find(s => s.tool === 'find_city')?.summary || '')
     && scoped.length >= 2 && new Set(scoped).size === 1, JSON.stringify(Object.values(run.data.geo)[0]?.locality));
+  // Fake cells carry county names (New York County) that read as boroughs (Manhattan).
+  check('hotspots are labelled neighborhood, borough', run.brief.geo_hotspots.length > 0
+    && run.brief.geo_hotspots.every(h => h.label && !/County/.test(h.label))
+    && run.brief.geo_hotspots.some(h => /^[^,]+, [^,]+$/.test(h.label)), JSON.stringify(run.brief.geo_hotspots.map(h => h.label)));
   check('stored trace matches the streamed one', run.steps.length === new Set(steps.map(s => s.n)).size);
   check('model is the scripted stand-in', /^scripted:/.test(run.model || ''), run.model);
   check('no em or en dash in the brief', !/[\u2013\u2014]/.test(JSON.stringify(run.brief)));

@@ -64,6 +64,19 @@ I built Nivaria from the ground up as a full-stack solution to help B2B business
    ```
 5. Open http://localhost:3000. Demo data is seeded on first run, and demo credentials are printed to the console.
 
+## Run with Docker
+
+The image runs Nivaria as Taste Gap only (`PRODUCT_MODE=taste`), with page monitoring off (`ENABLE_SCRAPER=false`, so no browser is installed) and `NODE_ENV=production`.
+
+1. Create `.env` from `.env.example` and set at least `SESSION_SECRET`, `QLOO_API_KEY` and one model key (for example `GEMINI_API_KEY`). Set `DEMO_LOGIN_EMAIL` and `DEMO_LOGIN_PASSWORD` for a shared judge login.
+2. Build and start it:
+   ```bash
+   docker compose up -d --build
+   ```
+3. The app listens on `127.0.0.1:3000` only. Put a reverse proxy with HTTPS in front of it, because session cookies are Secure in production.
+
+The database lives on the `nivaria-data` volume. On first boot with an empty volume, the seeded example briefs are generated in the background, which takes a few minutes. To regenerate them later, set `TASTE_EXAMPLES=refresh` in `.env`, run `docker compose up -d` once, then remove the setting again.
+
 ## Calendar setup (pre-meeting briefings)
 
 Phase 7 connects Google Calendar so Nivaria can push a briefing to your Slack/Discord webhook 30 minutes before any meeting that mentions a tracked competitor.

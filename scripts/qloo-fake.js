@@ -106,7 +106,7 @@ async function insights(type, params = {}) {
   }
   if (params['filter.location.geohash']) {
     const i = parseInt(params['filter.location.geohash'].slice(3), 36) % AREAS.length;
-    return { results: { entities: [0, 1, 2].map(k => entity('urn:entity:place', (i + k) % 17, signal, () => 0.5)).map(e => ({ ...e, properties: { geocode: { name: AREAS[i][0], admin2_region: AREAS[i][1] } } })) } };
+    return { results: { entities: [0, 1, 2].map(k => entity('urn:entity:place', (i + k) % 17, signal, () => 0.5)).map(e => ({ ...e, properties: { geocode: { name: AREAS[i][0], admin2_region: AREAS[i][1], admin1_region: 'New York' } } })) } };
   }
   const names = NAMES[type];
   if (!names) return { results: { entities: [] } };

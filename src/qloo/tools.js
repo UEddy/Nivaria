@@ -344,13 +344,34 @@ async function audienceGap(ctx, input) {
 
 // The neighbourhood a cell sits in, read off the top places Qloo returns for
 // that geohash. Many places carry no neighbourhood name but all carry the
-// borough or county (geocode.admin2_region), so area is the fallback label.
+// borough or county (geocode.admin2_region), so the label is "neighbourhood,
+// borough" when both are known and whichever one is known otherwise.
 // Best-effort: a failed lookup leaves the cell unlabelled.
 function mostCommon(values) {
   const counts = {};
   for (const v of values) if (v) counts[v] = (counts[v] || 0) + 1;
   const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
   return best ? best[0] : null;
+}
+
+// Four of New York City's boroughs come back as their county names. Keyed by
+// state too, since Kings, Queens and Richmond counties exist elsewhere.
+const NYC_BOROUGHS = {
+  'New York County': 'Manhattan',
+  'Kings County': 'Brooklyn',
+  'Queens County': 'Queens',
+  'Bronx County': 'The Bronx',
+  'Richmond County': 'Staten Island',
+};
+
+function areaName(geocode) {
+  const area = geocode?.admin2_region || null;
+  return (geocode?.admin1_region === 'New York' && NYC_BOROUGHS[area]) || area;
+}
+
+function placeLabel(neighborhood, area) {
+  if (neighborhood && area && nameKey(neighborhood) !== nameKey(area)) return neighborhood + ', ' + area;
+  return neighborhood || area || null;
 }
 
 async function labelCell(cell, signalId) {
@@ -360,16 +381,18 @@ async function labelCell(cell, signalId) {
     });
     const places = entitiesOf(d);
     cell.neighborhood = mostCommon(places.map(p => p.properties?.geocode?.name));
-    cell.area = mostCommon(places.map(p => p.properties?.geocode?.admin2_region));
+    cell.area = mostCommon(places.map(p => areaName(p.properties?.geocode)));
+    cell.label = placeLabel(cell.neighborhood, cell.area);
     cell.top_places = places.map(p => p.name).slice(0, 3);
   } catch (_) {
     cell.neighborhood = null;
     cell.area = null;
+    cell.label = null;
     cell.top_places = [];
   }
 }
 
-const cellLabel = c => c.neighborhood || c.area || c.geohash;
+const cellLabel = c => c.label || c.geohash;
 
 async function geoGap(ctx, input) {
   const [brand, rival] = requirePair(ctx, input);
@@ -424,7 +447,7 @@ async function geoGap(ctx, input) {
     cells, hotspots, our_strongest: ourStrongest, stats,
   };
 
-  const row = c => [c.ref, c.neighborhood || null, c.area || null, (c.top_places || []).join(', '),
+  const row = c => [c.ref, c.label || null, (c.top_places || []).join(', '),
     pts(c.rival_affinity), pts(c.our_affinity), pts(c.gap)];
   const top = hotspots[0];
   return {
@@ -434,7 +457,7 @@ async function geoGap(ctx, input) {
       median_gap: pts(stats.median_gap),
       rival_leads_pct: pts(stats.share_rival_leads),
       we_lead_pct: pts(stats.share_we_lead),
-      columns: ['ref', 'neighborhood', 'area', 'top_places', 'rival', 'ours', 'gap'],
+      columns: ['ref', 'place', 'top_places', 'rival', 'ours', 'gap'],
       rival_hotspots: hotspots.map(row),
       our_strongest: ourStrongest.map(row),
     },
@@ -553,7 +576,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'geo_gap',
-    description: "Where on the map the rival's audience outweighs ours in one city. Joins both brands' Qloo heatmaps cell by cell. Returns the " + GEO_HOTSPOTS + ' cells with the widest rival lead (the first ' + GEO_LABELED + ' labelled with a neighborhood, borough and top places), the ' + GEO_OURS_TOP + ' cells where we lead most, and the percentage of cells each side leads by 10 or more. Rows are [ref, neighborhood, area, top_places, rival, ours, gap] on a 0 to 100 scale.',
+    description: "Where on the map the rival's audience outweighs ours in one city. Joins both brands' Qloo heatmaps cell by cell. Returns the " + GEO_HOTSPOTS + ' cells with the widest rival lead (the first ' + GEO_LABELED + ' labelled with their place, such as "Charleston, Staten Island", and top places), the ' + GEO_OURS_TOP + ' cells where we lead most, and the percentage of cells each side leads by 10 or more. Rows are [ref, place, top_places, rival, ours, gap] on a 0 to 100 scale.',
     input_schema: {
       type: 'object',
       properties: {

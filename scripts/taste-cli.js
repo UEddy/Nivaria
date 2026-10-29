@@ -56,7 +56,7 @@ function printBrief(run) {
     console.log('  ' + s.insight);
     for (const e of s.evidence) {
       if (e.kind === 'entity') console.log('    - ' + e.name + ': rival ' + pct(e.rival_affinity) + ', us ' + pct(e.our_affinity) + ', gap ' + pct(e.gap));
-      else console.log('    - cell ' + e.geohash + ' (' + (e.neighborhood || e.area || 'unlabelled') + '): gap ' + pct(e.gap));
+      else console.log('    - cell ' + e.geohash + ' (' + (e.label || e.neighborhood || e.area || 'unlabelled') + '): gap ' + pct(e.gap));
     }
   }
 
@@ -66,7 +66,7 @@ function printBrief(run) {
     console.log('     Why: ' + w.why);
     console.log('     Hook: ' + w.campaign_hook);
     console.log('     Channels: ' + (w.channels || []).join('; '));
-    console.log('     Evidence: ' + w.evidence.map(e => e.kind === 'entity' ? e.name + ' (gap ' + pct(e.gap) + ')' : (e.neighborhood || e.area || e.geohash) + ' (gap ' + pct(e.gap) + ')').join(', '));
+    console.log('     Evidence: ' + w.evidence.map(e => e.kind === 'entity' ? e.name + ' (gap ' + pct(e.gap) + ')' : (e.label || e.neighborhood || e.area || e.geohash) + ' (gap ' + pct(e.gap) + ')').join(', '));
   }
 
   if (b.geo_hotspots.length) {

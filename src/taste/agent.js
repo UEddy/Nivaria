@@ -73,6 +73,8 @@ Rules:
 - Refs (b1, l1, e3, c2) belong only in id and evidence fields. In prose, use the names.
 - Describe audiences by their tastes, places, and age and gender scores. Never infer or name race, ethnicity, religion, nationality or other protected traits, even when venues or neighborhoods seem to suggest one.
 - Campaign hooks must come from the actual entities (a show, an artist, a venue, a neighborhood). Channels must be concrete, such as a creator partnership with a named show's audience or a pop-up in a named neighborhood.
+- Never use alcohol or hangovers as the angle of a campaign hook or channel: no bar or pub co-promotions, drinking occasions, game-day drinks, or morning-after framing. When the rival leads in bars or pubs, build the hook on that neighborhood or on the audience's other tastes.
+- The headline states the finding and the move: the rival's strongest segment or neighborhood and what to win first. Never a generic title such as "Taste Gap Brief: Starbucks vs Dunkin'".
 - Never use em-dashes, en-dashes, or "+" as a connector between words or phrases. Write "and" instead, and use commas, periods, colons or parentheses.
 - Keep text tight: a headline under 110 characters, a summary of two or three sentences, and one or two sentences per insight.`;
 
@@ -84,7 +86,7 @@ const SUBMIT_TOOL = {
     properties: {
       brand_id: { type: 'string', description: "Our brand's ref, like b1." },
       rival_ids: { type: 'array', items: { type: 'string' }, description: "The rivals' refs, like b2." },
-      headline: { type: 'string', description: 'One line, under 110 characters.' },
+      headline: { type: 'string', description: 'One line, under 110 characters: the finding and the move, not a title.' },
       summary: { type: 'string', description: 'Two or three sentences.' },
       rival_owned_segments: {
         type: 'array',
@@ -125,7 +127,7 @@ const SUBMIT_TOOL = {
           type: 'object',
           properties: {
             ref: { type: 'string', description: 'A map cell ref from geo_gap, like c2.' },
-            label: { type: 'string', description: 'Neighborhood or area name.' },
+            label: { type: 'string', description: 'The place from the geo_gap row, like "Charleston, Staten Island".' },
             note: { type: 'string', description: 'One sentence.' },
           },
           required: ['ref', 'label', 'note'],
@@ -249,7 +251,8 @@ function assembleBrief(raw, ctx, warnings) {
   for (const h of b.geo_hotspots || []) {
     const hit = resolveCitation(ctx, h.ref || h.geohash, null);
     if (!hit || hit.kind !== 'cell') { warnings.push('Dropped hotspot ' + (h.ref || h.geohash)); continue; }
-    hotspots.push({ ...hit, label: h.label, note: h.note });
+    // The cell's own "neighborhood, borough" label wins over the model's wording.
+    hotspots.push({ ...hit, label: hit.label || h.label, note: h.note });
   }
 
   const perRival = (arr, source) => (arr || [])

@@ -1,0 +1,26 @@
+# Secrets and local data never go into the image: the database holds user
+# data and data/qloo-samples holds Qloo responses (not to be redistributed).
+.env
+.env.*
+!.env.example
+data/
+*.db
+*.bak
+*.sqlite
+*.sqlite3
+
+# Installed fresh inside the image.
+node_modules/
+
+# Local tooling, logs, screenshots and test reports.
+.git/
+.claude/
+screenshots/
+logs/
+*.log
+*.err
+*-report*.json
+phase*.json
+change11-*.json
+audit-mobile-findings.json
+QLOO_BUILD_PLAN.md

@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const { getDb } = require('./db');
-const { fetchPageContent, generateDiff, classifyScrapeError } = require('./scraper');
+const { fetchPageContent, generateDiff, classifyScrapeError, scraperEnabled } = require('./scraper');
 const { analyzeChange, buildBaselineRecord, buildFallbackAnalysis, estimateCostUsd } = require('./analyzer');
 const { classifyChange } = require('./changeGate');
 const { sendAlerts, sendPatternAlert } = require('./webhooks');
@@ -399,10 +399,14 @@ async function runScheduledChecks() {
 }
 
 function startScheduler() {
-  // Daily at 9 AM server time
-  cron.schedule('0 9 * * *', () => {
-    runScheduledChecks().catch(err => console.error('Scheduler error:', err));
-  });
+  // Daily at 9 AM server time, unless page monitoring is off (ENABLE_SCRAPER=false).
+  if (scraperEnabled()) {
+    cron.schedule('0 9 * * *', () => {
+      runScheduledChecks().catch(err => console.error('Scheduler error:', err));
+    });
+  } else {
+    console.log('⏰ Daily page checks off (ENABLE_SCRAPER=false)');
+  }
 
   // Phase 7: calendar sync every 15 min, briefing dispatch every 5 min.
   // Lazy-require so the scheduler still boots if the new modules have a

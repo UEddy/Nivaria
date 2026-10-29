@@ -132,8 +132,9 @@ function writeBrief(picks, done) {
   const chosen = candidates.slice(0, SEGMENTS_MAX);
   if (!chosen.length) throw scriptError('no audience gap of ' + MEANINGFUL_GAP + ' points or more came back, so there is nothing to brief');
 
-  const hotspotsFor = rival => (of('geo_gap', rival.ref)[0]?.result?.rival_hotspots || []).filter(r => r[1] || r[2]);
-  const placeName = r => r[1] || r[2];
+  // geo_gap rows are [ref, place, top_places, rival, ours, gap].
+  const hotspotsFor = rival => (of('geo_gap', rival.ref)[0]?.result?.rival_hotspots || []).filter(r => r[1]);
+  const placeName = r => r[1];
 
   const segments = chosen.map(s => {
     const top = s.rows.slice(0, 3);
@@ -166,7 +167,7 @@ function writeBrief(picks, done) {
   const geo = [];
   for (const rival of picks.rivals) {
     for (const r of hotspotsFor(rival).slice(0, 3)) {
-      geo.push({ ref: r[0], label: placeName(r), note: rival.name + ' scores ' + r[4] + ' here and ' + brand + ' scores ' + r[5] + '.' });
+      geo.push({ ref: r[0], label: placeName(r), note: rival.name + ' scores ' + r[3] + ' here and ' + brand + ' scores ' + r[4] + '.' });
     }
   }
 
