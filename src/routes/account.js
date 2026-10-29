@@ -90,6 +90,7 @@ function purgeUser(db, userId, email) {
     db.prepare('DELETE FROM user_context WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM user_voice_profile WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM settings WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM taste_runs WHERE created_by = ?').run(userId);
     db.prepare('DELETE FROM otp_codes WHERE email = ?').run(email);
     db.prepare('DELETE FROM login_attempts WHERE email = ?').run(email);
     db.prepare('DELETE FROM users WHERE id = ?').run(userId);

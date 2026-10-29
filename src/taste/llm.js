@@ -40,6 +40,10 @@
 //               LLM_CHAIN to use it. ZAI_MODEL overrides the model.
 //   anthropic   The Messages API through the Anthropic SDK. Not in the default
 //               chain; add it through LLM_CHAIN.
+//   scripted    No model at all: src/taste/scripted.js plays the model's part
+//               from a fixed script over the real Qloo tools, for building and
+//               demoing without model quota. Needs no key. Opt in with
+//               LLM_CHAIN=scripted; it is never in the default chain.
 //
 // ── Chain ─────────────────────────────────────────────────────────────────────
 // LLM_CHAIN is a comma-separated list of entries tried in order. An entry is a
@@ -60,6 +64,7 @@
 
 const axios = require('axios');
 const Anthropic = require('@anthropic-ai/sdk');
+const { scriptedProvider } = require('./scripted');
 
 const PROVIDERS = {
   gemini: {
@@ -144,6 +149,12 @@ const PROVIDERS = {
     maxTokens: 16000,
     timeoutMs: 90000,
   },
+  scripted: {
+    label: 'Scripted stand-in',
+    kind: 'scripted',
+    model: 'script',
+    timeoutMs: 10000,
+  },
 };
 
 const SECOND_GEMINI_MODEL = 'gemini-3.5-flash';
@@ -157,7 +168,9 @@ const DEFAULT_CHAIN = () => [
   'openrouter',
 ];
 
-const isConfigured = name => Boolean(PROVIDERS[name] && String(process.env[PROVIDERS[name].keyEnv] || '').trim());
+// A provider without a keyEnv (the scripted stand-in) needs no key.
+const isConfigured = name => Boolean(PROVIDERS[name]
+  && (!PROVIDERS[name].keyEnv || String(process.env[PROVIDERS[name].keyEnv] || '').trim()));
 
 const splitList = s => String(s || '').split(',').map(x => x.trim()).filter(Boolean);
 
@@ -195,7 +208,10 @@ function buildChain() {
       if (!chain.some(e => e.key === key)) chain.push({ name, model: m, key });
     }
   }
-  if (!chain.length) throw new Error('No LLM provider is configured: set at least one of ' + Object.values(PROVIDERS).map(p => p.keyEnv).join(', '));
+  if (!chain.length) {
+    throw new Error('No LLM provider is configured: set at least one of '
+      + Object.values(PROVIDERS).map(p => p.keyEnv).filter(Boolean).join(', ') + ', or use LLM_CHAIN=scripted');
+  }
   return chain;
 }
 
@@ -480,6 +496,7 @@ function anthropicProvider(entry, cfg) {
 function createProvider(entry) {
   const cfg = PROVIDERS[entry.name];
   if (!cfg) throw new Error('Unknown LLM provider ' + entry.name);
+  if (cfg.kind === 'scripted') return scriptedProvider(entry, cfg);
   return cfg.kind === 'anthropic' ? anthropicProvider(entry, cfg) : openAIProvider(entry, cfg);
 }
 

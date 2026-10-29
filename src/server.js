@@ -33,6 +33,9 @@ const { registerAdminRoutes } = require('./routes/admin');
 // Outbound — admin-only lead-gen. API router + the single access gate.
 const outboundRouter = require('./routes/outbound');
 const { requireOutboundAccess } = require('./outbound/access');
+// Taste Gap: Qloo audience-gap agent runs.
+const tasteRouter = require('./routes/taste');
+const { closeInterruptedRuns } = require('./tasteRuns');
 
 // ── DB-backed session store ────────────────────────────────────────────────────
 
@@ -268,6 +271,9 @@ app.use('/api/roi',   limits.api, requireAuth, csrfProtect, roiRouter);
 // get a JSON 403. See src/outbound/access.js to open this to the public later.
 app.use('/api/admin/outbound', limits.api, requireAuth, csrfProtect, requireOutboundAccess, outboundRouter);
 
+// Taste Gap: standard protected mounting. Runs are scoped to their creator.
+app.use('/api/taste', limits.api, requireAuth, csrfProtect, tasteRouter);
+
 // Phase 10: GDPR account routes (protected). Per-endpoint rate limits live
 // inside the router. The public email-link restore is registered BEFORE the
 // protected /api/account mount so the unauthenticated GET resolves first (the
@@ -357,6 +363,7 @@ initDb().then(() => {
   }, 60 * 60 * 1000);
 
   logAnthropicKeyStatus();
+  closeInterruptedRuns();
   startScheduler();
   app.listen(PORT, () => {
     console.log(`\n🔍 Nivaria — http://localhost:${PORT}\n`);

@@ -627,6 +627,37 @@ const SCHEMA = `
   );
   CREATE INDEX IF NOT EXISTS idx_outbound_leads_run    ON outbound_leads(run_id, score DESC);
   CREATE INDEX IF NOT EXISTS idx_outbound_leads_status ON outbound_leads(status, created_at DESC);
+
+  -- ── Taste Gap ────────────────────────────────────────────────────────────────
+  -- One Taste Gap agent run (src/taste/agent.js). The run itself happens in the
+  -- background (src/tasteRuns.js); the live trace streams from memory and is
+  -- written here once, when the run ends. brief, data and steps are the agent's
+  -- own JSON. data holds Qloo results (gaps, heatmap cells, demographics), which
+  -- the hackathon rules allow caching server-side but never committing, and this
+  -- database is git-ignored. rerun_of points at the run this one repeated.
+  CREATE TABLE IF NOT EXISTS taste_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_by INTEGER NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_at DATETIME,
+    status TEXT NOT NULL DEFAULT 'running',   -- running | done | error
+    brand TEXT NOT NULL,
+    rivals TEXT NOT NULL,                     -- JSON array of one or two names
+    city TEXT,
+    rerun_of INTEGER,
+    headline TEXT,
+    brief TEXT,                               -- JSON: the assembled brief
+    data TEXT,                                -- JSON: chart data straight from Qloo
+    steps TEXT,                               -- JSON: the trace
+    warnings TEXT,                            -- JSON array
+    providers TEXT,                           -- JSON: [{ key, provider, model, turns, usage }]
+    model TEXT,
+    turns INTEGER,
+    duration_ms INTEGER,
+    error_message TEXT,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_taste_runs_creator ON taste_runs(created_by, created_at DESC);
 `;
 
 async function initDb() {
