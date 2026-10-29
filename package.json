@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "postinstall": "playwright install --with-deps chromium"
+    "postinstall": "node scripts/postinstall.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
