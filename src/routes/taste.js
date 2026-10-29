@@ -10,6 +10,11 @@
 //   GET    /runs/:id           one run: brief, chart data and trace
 //   GET    /runs/:id/events    the live trace as server-sent events
 //   POST   /runs/:id/rerun     start a fresh run with the same inputs
+//   GET    /runs/:id/share     the caller's public link to a finished brief, or null
+//   POST   /runs/:id/share     make that link (or return the active one)
+//   DELETE /runs/:id/share     revoke it
+//   POST   /runs/:id/send      post a summary and the link to the caller's Slack
+//                              and Discord webhooks; { webhook } saves one first
 //   GET    /search?q=          brand suggestions for the form (Qloo /search),
 //                              exported as router.search and mounted ahead
 //                              of this router with its own limiter
@@ -31,6 +36,10 @@ const express = require('express');
 const runs = require('../tasteRuns');
 const featured = require('../tasteFeatured');
 const { isAdminEmail } = require('../lib/adminEmails');
+const shares = require('../tasteShares');
+const userWebhooks = require('../lib/userWebhooks');
+const webhooks = require('../webhooks');
+const limits = require('../middleware/rateLimits');
 const qloo = require('../qloo/client');
 const { sanitizeCopy } = require('../lib/sanitizeText');
 
@@ -111,6 +120,78 @@ router.post('/runs/:id/rerun', (req, res) => {
   const input = runs.normalizeInput({ brand: prev.brand, rivals: prev.rivals, city: prev.city });
   if (input.error) return res.status(400).json({ error: input.error });
   start(req, res, input, prev.id);
+});
+
+// ── Sharing ───────────────────────────────────────────────────────────────────
+// A public, read-only link to a finished brief (src/tasteShares.js). Any brief
+// the caller can read can be shared, featured ones included; only the caller's
+// own link is listed or revoked.
+
+function finishedRun(req, res) {
+  const run = runs.getRunForUser(req.params.id, req.userId);
+  if (!run) { res.status(404).json({ error: 'Brief not found.' }); return null; }
+  if (run.status !== 'done') { res.status(409).json({ error: 'Only a finished brief can be shared.' }); return null; }
+  return run;
+}
+
+router.get('/runs/:id/share', (req, res) => {
+  const run = finishedRun(req, res);
+  if (run) res.json({ share: shares.getShare(run.id, shares.ownerOf(req)) });
+});
+
+router.post('/runs/:id/share', (req, res) => {
+  const run = finishedRun(req, res);
+  if (run) res.json({ share: shares.createShare(run.id, shares.ownerOf(req)) });
+});
+
+router.delete('/runs/:id/share', (req, res) => {
+  const run = finishedRun(req, res);
+  if (run) res.json({ revoked: shares.revokeShare(run.id, shares.ownerOf(req)) });
+});
+
+// Post the headline, the top three win-first picks with their Qloo numbers,
+// and the share link (made now if needed) to every webhook the caller has
+// saved. A webhook pasted on the brief page comes in as { webhook } and is
+// saved first, exactly as the Profile, Integrations card would save it.
+router.post('/runs/:id/send', limits.tasteSend, async (req, res) => {
+  const run = finishedRun(req, res);
+  if (!run) return;
+  const sessionOnly = userWebhooks.keptInSession(req);
+
+  const pasted = String(req.body?.webhook || '').trim();
+  if (pasted) {
+    const kind = userWebhooks.webhookKind(pasted);
+    if (!kind || pasted.length > 500) {
+      return res.status(400).json({ error: 'Paste a Slack webhook (https://hooks.slack.com/...) or a Discord webhook (https://discord.com/api/webhooks/...).', code: 'bad_webhook' });
+    }
+    userWebhooks.saveWebhooks(req, { [kind + '_webhook']: pasted });
+  }
+
+  const saved = userWebhooks.getWebhooks(req);
+  const targets = [
+    saved.slack_webhook && { kind: 'slack', label: 'Slack', send: () => webhooks.sendTasteBriefSlack(saved.slack_webhook, summary) },
+    saved.discord_webhook && { kind: 'discord', label: 'Discord', send: () => webhooks.sendTasteBriefDiscord(saved.discord_webhook, summary) },
+  ].filter(Boolean);
+  if (!targets.length) {
+    return res.status(409).json({ error: 'No Slack or Discord webhook is saved yet.', code: 'no_webhook', session_only: sessionOnly });
+  }
+
+  const share = shares.createShare(run.id, shares.ownerOf(req));
+  const summary = shares.briefSummary(run, share.url);
+  const results = await Promise.allSettled(targets.map(t => t.send()));
+  const sent = targets.filter((t, i) => results[i].status === 'fulfilled').map(t => t.kind);
+  const failed = targets.filter((t, i) => results[i].status === 'rejected');
+  for (const t of failed) {
+    const err = results[targets.indexOf(t)].reason;
+    console.warn('[taste] send to ' + t.kind + ' failed for run ' + run.id + ': ' + (err?.response?.status || '') + ' ' + err?.message);
+  }
+  if (!sent.length) {
+    return res.status(502).json({
+      error: failed.map(t => t.label).join(' and ') + ' did not accept the message. Check the webhook in Profile, Integrations, and try again.',
+      code: 'send_failed', share,
+    });
+  }
+  res.json({ sent, failed: failed.map(t => t.kind), share });
 });
 
 // Events: "step" carries one trace step (upsert by step.n), "end" carries the

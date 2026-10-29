@@ -4,6 +4,7 @@ const axios   = require('axios');
 const { getDb }         = require('../db');
 const { canWorkspaceAccess, planLimitReached } = require('../lib/tierLimits');
 const { logAudit }      = require('../lib/audit');
+const { isValidSlackWebhook, isValidDiscordWebhook, keptInSession, getWebhooks, saveWebhooks } = require('../lib/userWebhooks');
 
 // ── Validation helpers ─────────────────────────────────────────────────────────
 
@@ -14,22 +15,8 @@ function isValidHttpsUrl(str) {
   } catch { return false; }
 }
 
-function isValidSlackWebhook(url) {
-  try {
-    const u = new URL(url);
-    return u.protocol === 'https:' &&
-      (u.hostname === 'hooks.slack.com' || u.hostname.endsWith('.slack.com'));
-  } catch { return false; }
-}
-
-function isValidDiscordWebhook(url) {
-  try {
-    const u = new URL(url);
-    return u.protocol === 'https:' &&
-      (u.hostname === 'discord.com' || u.hostname === 'discordapp.com' ||
-       u.hostname.endsWith('.discord.com'));
-  } catch { return false; }
-}
+// Slack and Discord webhook checks live in lib/userWebhooks.js, shared with
+// the Taste Gap send button.
 
 function isValidEmail(str) {
   return typeof str === 'string' && str.length <= 254 &&
@@ -42,7 +29,9 @@ router.get('/', (req, res) => {
   const db       = getDb();
   const settings = db.prepare('SELECT * FROM settings WHERE user_id = ?').get(req.userId);
   const user     = db.prepare('SELECT id, email, name, first_name, timezone, tier, api_key, created_at FROM users WHERE id = ?').get(req.userId);
-  res.json({ settings: settings || {}, user });
+  // The shared demo account keeps webhooks per browser session.
+  const out = keptInSession(req) ? { ...(settings || {}), ...getWebhooks(req) } : (settings || {});
+  res.json({ settings: out, user });
 });
 
 router.put('/', (req, res) => {
@@ -89,10 +78,14 @@ router.put('/', (req, res) => {
   // null whichever group the current panel omitted. The legacy combined form
   // sends all fields, so its behavior is unchanged.
   const existing = db.prepare('SELECT * FROM settings WHERE user_id = ?').get(req.userId) || {};
-  const finalSlack = slack_webhook === undefined
+  // On the shared demo account webhooks go to the browser session, and the
+  // shared settings row keeps whatever it had (nothing, normally).
+  const sessionWebhooks = keptInSession(req);
+  if (sessionWebhooks) saveWebhooks(req, { slack_webhook, discord_webhook });
+  const finalSlack = slack_webhook === undefined || sessionWebhooks
     ? (existing.slack_webhook ?? null)
     : (slack_webhook || null);
-  const finalDiscord = discord_webhook === undefined
+  const finalDiscord = discord_webhook === undefined || sessionWebhooks
     ? (existing.discord_webhook ?? null)
     : (discord_webhook || null);
   const finalNotifEmail = notification_email === undefined

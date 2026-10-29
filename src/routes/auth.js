@@ -676,7 +676,9 @@ router.get('/me', (req, res) => {
   // and routes for the Taste Gap view and hides the monitoring surfaces.
   const product_mode = process.env.PRODUCT_MODE === 'taste' ? 'taste' : 'monitor';
 
-  res.json({ ...user, product_mode, csrfToken: req.session.csrfToken });
+  // is_demo: the shared judge account, where the page notes that webhooks and
+  // share links are kept per browser session.
+  res.json({ ...user, product_mode, is_demo: isDemoEmail(user.email), csrfToken: req.session.csrfToken });
 });
 
 // ── Forgot password — Step 1: request OTP ─────────────────────────────────────

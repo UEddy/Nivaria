@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="referrer" content="no-referrer">
+  <title>__TITLE__ · Nivaria</title>
+  <meta name="description" content="__DESCRIPTION__">
+  <meta property="og:site_name" content="Nivaria">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="__TITLE__">
+  <meta property="og:description" content="__DESCRIPTION__">
+  <meta property="og:image" content="__APP_URL__/assets/og-image.png">
+  <meta name="twitter:card" content="summary">
+
+  <!-- Anti-flash theme: the visitor's saved choice on this site, else the system's. -->
+  <script>
+  (function () {
+    var v = 'system';
+    try { v = localStorage.getItem('cs-theme') || 'system'; } catch (e) {}
+    var r = v === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+      : v;
+    document.documentElement.setAttribute('data-theme', r);
+  })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/js/vendor/leaflet/leaflet.css">
+  <link rel="icon" href="/assets/monogram-solid.svg">
+</head>
+<body class="share-page">
+  <header class="share-top">
+    <a href="/" class="share-brand" aria-label="Nivaria home">
+      <img src="/assets/monogram-solid.svg" alt="" width="28" height="28">
+      <span>Nivaria</span>
+    </a>
+    <span class="share-tag">Shared Taste Gap brief</span>
+    <a href="/register" class="btn btn-primary btn-sm share-cta">Get started</a>
+  </header>
+
+  <main class="share-main" id="page-root" aria-live="polite">
+    <div class="share-loading">Loading the brief...</div>
+  </main>
+
+  <footer class="share-foot">
+    <span>Made with Nivaria · powered by Qloo</span>
+    <a href="/register">Get started</a>
+  </footer>
+
+  <script src="/js/vendor/leaflet/leaflet.js"></script>
+  <script src="/js/share.js"></script>
+  <script src="/js/taste.js"></script>
+</body>
+</html>

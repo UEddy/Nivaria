@@ -25,6 +25,7 @@ const Taste = (() => {
   let geoRival = null;   // rival entity_id the map shows
   let viewCached = false; // the run on screen was served from the brief cache
   let featuredPairs = []; // /api/taste/featured, for the chips
+  let readOnly = false;  // the public page behind a share link (Taste.renderShared)
 
   const pts = x => (typeof x === 'number' && Number.isFinite(x) ? Math.round(x * 100) : null);
   const signed = n => (n == null ? 'n/a' : (n > 0 ? '+' : '') + n);
@@ -401,7 +402,7 @@ const Taste = (() => {
   }
 
   function header(run) {
-    const label = run.status === 'done' ? 'Brief ready' : run.status === 'error' ? 'Run failed' : 'Running';
+    const label = readOnly ? 'Shared brief' : run.status === 'done' ? 'Brief ready' : run.status === 'error' ? 'Run failed' : 'Running';
     const cls = run.status === 'done' ? 'taste-state--done' : run.status === 'error' ? 'taste-state--error' : 'taste-state--running';
     // Our brand and each rival, with Qloo's image when there is one and a
     // neutral initial otherwise (also when an image fails to load).
@@ -604,11 +605,14 @@ const Taste = (() => {
     return `
       <div class="bc-headline-wrap">
         <h2 class="bc-headline">${esc(b.headline)}</h2>
-        <div class="bc-headline-actions">
+        ${readOnly ? '' : `<div class="bc-headline-actions">
+          <button class="btn btn-secondary btn-sm" type="button" onclick="Taste.share(${run.id})">Share</button>
+          <button class="btn btn-secondary btn-sm" type="button" id="taste-send-btn" onclick="Taste.send(${run.id})">Send to Slack or Discord</button>
           <button class="btn btn-ghost btn-sm" type="button" onclick="Taste.copy()">Copy brief</button>
           <button class="btn btn-ghost btn-sm" type="button" onclick="Taste.rerun(${run.id})">Run again</button>
-        </div>
+        </div>`}
       </div>
+      ${readOnly ? '' : '<div id="taste-share-panel"></div>'}
 
       <div class="bc-section bc-summary">
         <div class="bc-section-label">Executive summary</div>
@@ -673,7 +677,7 @@ const Taste = (() => {
             </div>`).join('')}
         </div>` : ''}
 
-      ${run.warnings?.length ? `
+      ${!readOnly && run.warnings?.length ? `
         <div class="bc-reasoning">Server checks on the model's draft: ${run.warnings.map(esc).join('; ')}</div>` : ''}`;
   }
 
@@ -933,6 +937,129 @@ const Taste = (() => {
       .catch(() => toast('Could not copy the brief', 'error'));
   }
 
+  // ── Share and send ──────────────────────────────────────────────────────────
+  // Share makes (or reuses) a public, read-only link to this brief. Send posts
+  // a short summary with that link to the user's Slack or Discord webhook, and
+  // asks for one inline when none is saved. On the shared demo account both are
+  // kept per browser session, so judges never see each other's links or
+  // channels.
+
+  const CHANNEL = { slack: 'Slack', discord: 'Discord' };
+
+  function sharePanel(runId, link) {
+    const box = document.getElementById('taste-share-panel');
+    if (!box) return;
+    box.innerHTML = link ? `
+      <div class="bc-section taste-share">
+        <div class="bc-section-label">Share this brief</div>
+        <div class="taste-hint">Anyone with the link can read the brief, the map and the chart without logging in. Search engines are asked not to index it.</div>
+        <div class="taste-share-row">
+          <input class="form-input" id="taste-share-url" readonly value="${esc(link.url)}" aria-label="Share link" onfocus="this.select()">
+          <button class="btn btn-primary btn-sm" type="button" onclick="Taste.copyShare()">Copy link</button>
+        </div>
+        <div class="taste-share-foot">
+          <a href="${esc(link.url)}" target="_blank" rel="noopener">Open the shared page</a>
+          <button class="btn btn-ghost btn-sm" type="button" onclick="Taste.revokeShare(${runId})">Revoke link</button>
+        </div>
+      </div>` : `
+      <div class="bc-section taste-share">
+        <div class="bc-section-label">Link revoked</div>
+        <div class="bc-section-body">Anyone who opens the old link now sees that the brief is no longer available.</div>
+        <div class="taste-share-foot">
+          <button class="btn btn-secondary btn-sm" type="button" onclick="Taste.share(${runId})">Make a new link</button>
+        </div>
+      </div>`;
+  }
+
+  async function share(id) {
+    try {
+      const { share: link } = await API.post('/taste/runs/' + id + '/share');
+      sharePanel(id, link);
+      document.getElementById('taste-share-panel')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } catch (err) {
+      toast(friendlyMessage(err), 'error');
+    }
+  }
+
+  async function revokeShare(id) {
+    try {
+      await API.delete('/taste/runs/' + id + '/share');
+      sharePanel(id, null);
+      toast('Link revoked', 'success');
+    } catch (err) {
+      toast(friendlyMessage(err), 'error');
+    }
+  }
+
+  function copyShare() {
+    const input = document.getElementById('taste-share-url');
+    if (!input) return;
+    const fallback = () => { input.focus(); input.select(); toast('Link selected, copy it from there', 'info'); };
+    if (!navigator.clipboard) return fallback();
+    navigator.clipboard.writeText(input.value).then(() => toast('Link copied', 'success'), fallback);
+  }
+
+  function webhookForm(id, error) {
+    const box = document.getElementById('taste-share-panel');
+    if (!box) return;
+    const sessionOnly = Boolean(window.App?.user?.is_demo);
+    box.innerHTML = `
+      <form class="bc-section taste-share" onsubmit="Taste.sendWithWebhook(event, ${id})" novalidate>
+        <div class="bc-section-label">Send to Slack or Discord</div>
+        <div class="bc-section-body">No webhook is saved yet. Paste an incoming webhook from Slack or Discord and the summary goes out right away.</div>
+        <div class="taste-share-row">
+          <input class="form-input" id="taste-webhook" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"
+            placeholder="https://hooks.slack.com/services/..." aria-label="Slack or Discord webhook URL" required>
+          <button class="btn btn-primary btn-sm" type="submit" id="taste-webhook-send">Save and send</button>
+        </div>
+        ${error ? `<div class="taste-share-error" role="alert">${esc(error)}</div>` : ''}
+        <div class="taste-hint">${sessionOnly
+          ? 'This is the shared demo account, so the webhook is kept for this browser session only. Other visitors never see it.'
+          : 'It is saved under Profile, Integrations, where you can change or remove it.'}</div>
+      </form>`;
+    document.getElementById('taste-webhook')?.focus();
+  }
+
+  async function send(id, webhook) {
+    const buttons = ['taste-send-btn', 'taste-webhook-send'].map(b => document.getElementById(b)).filter(Boolean);
+    const labels = buttons.map(b => b.textContent);
+    for (const b of buttons) { b.disabled = true; b.textContent = 'Sending...'; }
+    try {
+      const res = await API.post('/taste/runs/' + id + '/send', webhook ? { webhook } : {});
+      sharePanel(id, res.share);
+      toast('Sent to ' + res.sent.map(k => CHANNEL[k]).join(' and '), 'success');
+      if (res.failed?.length) toast(res.failed.map(k => CHANNEL[k]).join(' and ') + ' did not accept the message', 'error');
+    } catch (err) {
+      if (err.code === 'no_webhook') webhookForm(id);
+      else if (err.code === 'bad_webhook') webhookForm(id, err.message);
+      else {
+        if (err.share) sharePanel(id, err.share);
+        toast(friendlyMessage(err), 'error');
+      }
+    } finally {
+      buttons.forEach((b, i) => { if (b.isConnected) { b.disabled = false; b.textContent = labels[i]; } });
+    }
+  }
+
+  function sendWithWebhook(e, id) {
+    e.preventDefault();
+    const url = document.getElementById('taste-webhook')?.value.trim();
+    if (!url) { webhookForm(id, 'Paste a webhook URL first.'); return; }
+    send(id, url);
+  }
+
+  // The public page behind a share link (public/js/share.js): the brief, map
+  // and chart, read-only, with no actions, trace or server notes.
+  function renderShared(run, target) {
+    readOnly = true;
+    current = run;
+    viewCached = false;
+    geoRival = null;
+    document.title = run.brand + ' vs ' + run.rivals.join(' and ') + ' · Nivaria';
+    target.innerHTML = `<div class="bc-wrap taste-wrap">${header(run)}${results(run)}</div>`;
+    afterResults(run);
+  }
+
   // ── Runs history ────────────────────────────────────────────────────────────
 
   async function renderRuns() {
@@ -986,6 +1113,6 @@ const Taste = (() => {
     return id ? renderRun(id, { cached: query?.get('cached') === '1' }) : renderForm();
   }
 
-  return { render, renderRuns, rerun, copy, showGeo, markFallback };
+  return { render, renderRuns, renderShared, rerun, copy, showGeo, markFallback, share, revokeShare, copyShare, send, sendWithWebhook };
 })();
 window.Taste = Taste;

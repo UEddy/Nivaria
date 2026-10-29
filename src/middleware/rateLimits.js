@@ -45,6 +45,13 @@ module.exports = {
   // every judge shares one demo account.
   tasteSearch: makeLimiter(15 * 60 * 1000, 300, 15),
 
+  // Taste Gap: sending a brief to Slack or Discord. Per IP; each send is an
+  // outbound post to a webhook the visitor chose.
+  tasteSend: makeLimiter(15 * 60 * 1000, 20, 15),
+
+  // Taste Gap shared briefs: public pages and their data, no login.
+  tasteShared: makeLimiter(15 * 60 * 1000, 300, 15),
+
   // ── Phase 10: account endpoints (per user) ──────────────────────────────────
   accountDelete:   makeUserLimiter(60 * 60 * 1000, 3, 60),  // 3 / user / hour (paranoia)
 

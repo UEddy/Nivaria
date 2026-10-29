@@ -670,6 +670,22 @@ const SCHEMA = `
     FOREIGN KEY (created_by) REFERENCES users(id)
   );
   CREATE INDEX IF NOT EXISTS idx_taste_runs_creator ON taste_runs(created_by, created_at DESC);
+
+  -- Public, read-only links to a finished Taste Gap brief (src/tasteShares.js).
+  -- token is the unguessable part of /share/<token>. created_by is the account
+  -- that made the link; on the shared demo account owner_session (a hash of
+  -- the session id) narrows it to one visitor, so judges cannot see or revoke
+  -- each other's links. A revoked link stays as a row with revoked_at set.
+  CREATE TABLE IF NOT EXISTS taste_shares (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT UNIQUE NOT NULL,
+    run_id INTEGER NOT NULL,
+    created_by INTEGER NOT NULL,
+    owner_session TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    revoked_at DATETIME
+  );
+  CREATE INDEX IF NOT EXISTS idx_taste_shares_owner ON taste_shares(run_id, created_by);
 `;
 
 async function initDb() {

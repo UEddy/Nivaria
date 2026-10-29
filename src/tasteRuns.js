@@ -320,6 +320,8 @@ async function runExample(key, input, { chain = null, version = null } = {}) {
     return { id: null, error };
   }
   db.savepoint(() => {
+    // Share links to the brief being replaced follow the new one.
+    db.prepare('UPDATE taste_shares SET run_id = ? WHERE run_id IN (SELECT id FROM taste_runs WHERE example_key = ? AND id != ?)').run(id, key, id);
     db.prepare('DELETE FROM taste_runs WHERE example_key = ? AND id != ?').run(key, id);
     db.prepare('UPDATE taste_runs SET example_key = ?, example_version = ? WHERE id = ?').run(key, version, id);
   });

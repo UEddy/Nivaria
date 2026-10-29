@@ -118,4 +118,48 @@ async function sendPatternAlert(settings, competitor, analysis, changeId, typeLa
   await Promise.all(promises);
 }
 
-module.exports = { sendAlerts, sendSlackAlert, sendDiscordAlert, sendPatternAlert };
+// Taste Gap: a finished brief, sent on request from the brief page. summary
+// comes from tasteShares.briefSummary: the pair, the headline, up to three
+// win-first picks (segment, campaign hook, Qloo numbers) and the public link.
+// Throws on a failed post so the page can say so.
+function slackEscape(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+async function sendTasteBriefSlack(webhookUrl, summary) {
+  const picks = summary.picks.map(p => `*${p.rank}. ${slackEscape(p.segment)}*\n${slackEscape(p.hook)}${p.numbers ? `\n_${slackEscape(p.numbers)}_` : ''}`);
+  const payload = {
+    text: `Taste Gap brief: ${summary.headline}`,
+    blocks: [
+      { type: 'header', text: { type: 'plain_text', text: summary.pair.slice(0, 150) } },
+      { type: 'section', text: { type: 'mrkdwn', text: `*${slackEscape(summary.headline)}*` } },
+      ...(picks.length ? [{ type: 'section', text: { type: 'mrkdwn', text: `*Win these first*\n\n${picks.join('\n\n')}`.slice(0, 2900) } }] : []),
+      { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Open the full brief' }, url: summary.url }] },
+      { type: 'context', elements: [{ type: 'mrkdwn', text: `Made with Nivaria · powered by Qloo | <${summary.url}|${slackEscape(summary.url)}>` }] },
+    ],
+  };
+  await axios.post(webhookUrl, payload, { timeout: 10000 });
+}
+
+async function sendTasteBriefDiscord(webhookUrl, summary) {
+  const payload = {
+    username: 'Nivaria',
+    embeds: [{
+      title: summary.pair.slice(0, 250),
+      url: summary.url,
+      description: `**${summary.headline}**`.slice(0, 4000),
+      color: 0x6366f1,
+      fields: summary.picks.map(p => ({
+        name: `${p.rank}. ${p.segment}`.slice(0, 250),
+        value: (p.hook + (p.numbers ? `\n*${p.numbers}*` : '')).slice(0, 1000) || '\u200b',
+        inline: false,
+      })),
+      footer: { text: 'Made with Nivaria · powered by Qloo' },
+      timestamp: new Date().toISOString(),
+    }],
+    content: `Full brief: ${summary.url}`,
+  };
+  await axios.post(webhookUrl, payload, { timeout: 10000 });
+}
+
+module.exports = { sendAlerts, sendSlackAlert, sendDiscordAlert, sendPatternAlert, sendTasteBriefSlack, sendTasteBriefDiscord };

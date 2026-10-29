@@ -252,3 +252,14 @@ in the live database right away and no restart is needed.
 Visitors get 3 fresh runs per IP a day (`TASTE_FRESH_PER_DAY`), and one at a
 time. A pair briefed in the last 14 days opens from the cache for free, and the
 featured chips always do.
+
+## 10. Share links and Send to Slack or Discord
+
+Every finished brief has a **Share** button (a public, read-only link at
+`/share/<token>`, never indexed, revocable) and a **Send to Slack or Discord**
+button. Share links are built from `APP_URL`, so it must be the public address
+(`https://nivaria.app`), or the links will point somewhere else.
+
+On the shared judge account, webhooks and share links are kept per browser
+session: one judge never sees, revokes or posts to another judge's link or
+channel, and nothing a judge pastes is stored on the shared account.

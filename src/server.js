@@ -36,6 +36,7 @@ const { requireOutboundAccess } = require('./outbound/access');
 // Taste Gap: Qloo audience-gap agent runs.
 const tasteRouter = require('./routes/taste');
 const tasteInternalRouter = require('./routes/tasteInternal');
+const tasteShareRouter = require('./routes/tasteShare');
 const { closeInterruptedRuns, tidyStoredRuns } = require('./tasteRuns');
 const { ensureFeatured } = require('./tasteFeatured');
 const { ensureDemoAccount } = require('./lib/demoAccount');
@@ -282,6 +283,9 @@ app.use('/api/admin/outbound', limits.api, requireAuth, csrfProtect, requireOutb
 // brief generator) answer only localhost requests that carry the internal
 // token, so they sit outside auth.
 app.use('/internal/taste', tasteInternalRouter);
+// Shared Taste Gap briefs: public, read-only pages behind an unguessable
+// token, never indexed. No login.
+app.use(tasteShareRouter);
 app.get('/api/taste/search', requireAuth, limits.tasteSearch, tasteRouter.search);
 app.use('/api/taste', limits.api, requireAuth, csrfProtect, tasteRouter);
 
