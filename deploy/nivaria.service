@@ -1,0 +1,33 @@
+# systemd unit for Nivaria on the droplet. Installed by deploy/setup.sh (and
+# kept in step by deploy/update.sh) as /etc/systemd/system/nivaria.service.
+#
+# Secrets come from /opt/nivaria/.env (see deploy/CHECKLIST.md). The fixed
+# settings are passed on the command line rather than with Environment=,
+# because systemd lets EnvironmentFile= override Environment=, and these must
+# hold even if .env happens to set them. --max-old-space-size keeps V8's heap
+# under MemoryMax so Node collects garbage before the kernel kills it.
+
+[Unit]
+Description=Nivaria (Taste Gap)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nivaria
+Group=nivaria
+WorkingDirectory=/opt/nivaria
+EnvironmentFile=/opt/nivaria/.env
+ExecStart=/usr/bin/env PRODUCT_MODE=taste ENABLE_SCRAPER=false NODE_ENV=production PORT=3000 NODE_OPTIONS=--max-old-space-size=256 /usr/bin/node src/server.js
+Restart=always
+RestartSec=5
+MemoryMax=350M
+
+# Hardening: the app only writes its database under /opt/nivaria/data.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

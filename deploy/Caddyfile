@@ -1,0 +1,14 @@
+# Caddy for the Nivaria droplet, installed by deploy/setup.sh as
+# /etc/caddy/Caddyfile. Caddy gets and renews the HTTPS certificates on its
+# own once DNS for both names points at this server.
+#
+# No encode block: the Taste Gap live trace is a server-sent event stream, and
+# Caddy flushes text/event-stream responses as they arrive.
+
+nivaria.app {
+	reverse_proxy 127.0.0.1:3000
+}
+
+www.nivaria.app {
+	redir https://nivaria.app{uri} permanent
+}
