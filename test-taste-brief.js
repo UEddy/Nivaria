@@ -113,6 +113,9 @@ function rawBrief({ brand, rival, artist }, extra = {}) {
     'Price sensitive shoppers lean in.',
     'Most stick to a budget.',
     'Budget-conscious families visit often.',
+    'They shop on a tight budget.',
+    'Budget shoppers lead here.',
+    'It skews budget-minded.',
     'The audience is affluent.',
     'Wealthy fans drive the gap.',
     'Low-income households over-index.',
@@ -130,6 +133,11 @@ function rawBrief({ brand, rival, artist }, extra = {}) {
     && traitWarnings.some(x => /"price-sensitive"/.test(x)) && traitWarnings.some(x => /"blue-collar"/i.test(x)), JSON.stringify(traitWarnings));
   check('the warnings do not repeat the dropped claim', !traitWarnings.some(x => /commuters|households|professionals/.test(x)));
   check('the server log keeps the dropped sentence and where it was', logged.some(x => /summary: They are price-sensitive commuters\./.test(x)), logged[0]);
+
+  const marketing = assembleBrief(rawBrief(run, {
+    summary: 'Shift media budget toward Bushwick. Set aside budget for a creator partnership. A budget-friendly pop-up works. Budgets for TV can shrink.',
+  }), run.ctx, []);
+  check('marketing sentences about budget stay', marketing.summary === 'Shift media budget toward Bushwick. Set aside budget for a creator partnership. A budget-friendly pop-up works. Budgets for TV can shrink.', marketing.summary);
 
   const abbrev = assembleBrief(rawBrief(run, {
     summary: 'Pop-ups near St. Marks Place suit them. They are wealthy.',

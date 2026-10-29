@@ -281,7 +281,14 @@ function knownNames(ctx) {
 // Traits no Qloo tool returns (income, class, education). The prompt forbids
 // them; as a backstop, a sentence that names one is dropped, the run's
 // warnings name the trait, and the server log keeps the sentence.
-const UNSUPPORTED_TRAIT = /\b(?:price[- ]?sensitiv(?:e|ity)|budget\w*|affluen(?:t|ce)|wealth(?:y|ier|iest)|(?:low|lower|middle|high|higher)[- ]income|blue[- ]collar|white[- ]collar)\b|educated\b/i;
+// "budget" only counts when it describes people ("budget-conscious", "on a
+// budget", "budget shoppers"); a marketing sentence such as "shift media
+// budget" or "a budget-friendly pop-up" stays.
+const BUDGET_AUDIENCE = 'budget[- ](?:conscious|minded|savvy|sensitive|oriented|focused|constrained)'
+  + '|(?:on|stick(?:s|ing)? to) (?:a|their) (?:tight |limited |strict |small |shoestring )?budget'
+  + '|budget[- ](?:shoppers?|consumers?|buyers?|customers?|fans?|audiences?|crowds?|segments?|households?|travell?ers?|famil(?:y|ies)|students?|diners?|spenders?)';
+const UNSUPPORTED_TRAIT = new RegExp('\\b(?:price[- ]?sensitiv(?:e|ity)|' + BUDGET_AUDIENCE
+  + '|affluen(?:t|ce)|wealth(?:y|ier|iest)|(?:low|lower|middle|high|higher)[- ]income|blue[- ]collar|white[- ]collar)\\b|educated\\b', 'i');
 
 // A sentence ends at . ! or ? followed by a space and a capital or digit, but
 // not after a short abbreviation ("St." in "St. Marks Place").
