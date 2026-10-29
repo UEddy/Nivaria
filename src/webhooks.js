@@ -129,7 +129,7 @@ function slackEscape(s) {
 async function sendTasteBriefSlack(webhookUrl, summary) {
   const picks = summary.picks.map(p => `*${p.rank}. ${slackEscape(p.segment)}*\n${slackEscape(p.hook)}${p.numbers ? `\n_${slackEscape(p.numbers)}_` : ''}`);
   const payload = {
-    text: `Taste Gap brief: ${summary.headline}`,
+    text: `Nivaria brief: ${summary.headline}`,
     blocks: [
       { type: 'header', text: { type: 'plain_text', text: summary.pair.slice(0, 150) } },
       { type: 'section', text: { type: 'mrkdwn', text: `*${slackEscape(summary.headline)}*` } },

@@ -8,7 +8,7 @@
 # under MemoryMax so Node collects garbage before the kernel kills it.
 
 [Unit]
-Description=Nivaria (Taste Gap)
+Description=Nivaria
 After=network-online.target
 Wants=network-online.target
 

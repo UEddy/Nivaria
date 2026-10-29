@@ -324,11 +324,10 @@ const App = {
   applyProductMode() {
     App.productMode = App.user?.product_mode === 'taste' ? 'taste' : 'monitor';
     document.body.dataset.mode = App.productMode;
-    // The shell starts with these blank, so neither mode flashes the other's text.
-    const taste = App.productMode === 'taste';
-    document.title = taste ? 'Nivaria: Taste Gap' : 'Nivaria: Dashboard';
+    // The shell starts with this blank, so neither mode flashes the other's
+    // text. The tab title follows the page (route()).
     const sub = document.querySelector('.logo-sub');
-    if (sub) sub.textContent = taste ? 'Taste Gap' : 'Intelligence Platform';
+    if (sub) sub.textContent = App.productMode === 'taste' ? 'Audience intelligence' : 'Intelligence Platform';
   },
 
   updateUserUI() {
@@ -468,7 +467,7 @@ const App = {
       if (!document.getElementById('profile-shell')) root.innerHTML = Skeleton.cards(3);
       Profile.render(routeQuery, id).then(transition);
     } else if (page === 'taste') {
-      el('page-title').textContent = id ? 'Taste Gap brief' : 'Taste Gap';
+      el('page-title').textContent = id ? 'Brief' : 'Dashboard';
       el('page-sub').textContent = id
         ? 'Where the rival\'s audience is that yours is not'
         : 'Find the audiences a rival owns, and which to win first';
@@ -476,7 +475,7 @@ const App = {
       Taste.render(id, routeQuery).then(transition);
     } else if (page === 'runs') {
       el('page-title').textContent = 'Runs';
-      el('page-sub').textContent = 'Every Taste Gap brief you have run';
+      el('page-sub').textContent = 'Every brief you have run';
       root.innerHTML = Skeleton.table();
       Taste.renderRuns().then(transition);
     } else if (page === 'onboarding') {
@@ -493,8 +492,12 @@ const App = {
         <div class="empty-desc">The page you're looking for doesn't exist.</div>
         <a class="btn btn-primary" href="#/">Go to Dashboard</a>
       </div>`;
+      el('page-title').textContent = 'Page not found';
+      el('page-sub').textContent = '';
       transition();
     }
+    // The tab names the page: "Nivaria: Dashboard", "Nivaria: Runs".
+    document.title = 'Nivaria: ' + (el('page-title').textContent.trim() || 'Dashboard');
   },
 };
 window.App = App;

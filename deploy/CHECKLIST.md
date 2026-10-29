@@ -1,4 +1,4 @@
-# Deploying Nivaria (Taste Gap) to the droplet
+# Deploying Nivaria to the droplet
 
 Step by step, over SSH, for a fresh Ubuntu droplet. Every command runs as root
 on the droplet unless it says otherwise.
@@ -127,9 +127,9 @@ curl -I https://www.nivaria.app
 The first should answer `200`. The second should answer `301` with
 `location: https://nivaria.app/`. Then, in a browser (on your phone too):
 
-- [ ] `https://nivaria.app` shows the Taste Gap landing page with a padlock.
+- [ ] `https://nivaria.app` shows the Nivaria landing page with a padlock.
 - [ ] **Login** with the judge email and password signs in with no email code.
-- [ ] The Taste Gap page shows the Starbucks vs Dunkin' featured example and
+- [ ] The Dashboard shows the Starbucks vs Dunkin' featured example and
       the Glossier vs Fenty Beauty example (once section 3 shows both ready).
 - [ ] Opening the featured example shows the map with OpenStreetMap tiles and
       the hotspots in New York City.
@@ -225,7 +225,7 @@ scp root@YOUR_DROPLET_IP:/root/nivaria-YYYY-MM-DD.db .
 
 ## 9. Writing the featured briefs
 
-The Taste Gap page shows ten featured rival pairs as one-click chips, served
+The Dashboard shows ten featured rival pairs as one-click chips, served
 from the database with no Qloo or model calls. Write them with Gemini once its
 daily quota resets (midnight Pacific), while the service is running:
 

@@ -388,8 +388,8 @@ const Taste = (() => {
     } catch (e) {
       root().innerHTML = `<div class="empty-state">
         <div class="empty-title">Brief not found</div>
-        <div class="empty-desc">It may have been removed. The featured briefs on the Taste Gap page open instantly.</div>
-        <a class="btn btn-primary" href="#/taste">Taste Gap</a>
+        <div class="empty-desc">It may have been removed. The featured briefs on the Dashboard open instantly.</div>
+        <a class="btn btn-primary" href="#/taste">Dashboard</a>
       </div>`;
       return;
     }
@@ -1153,7 +1153,7 @@ const Taste = (() => {
     if (!list.length) {
       root().innerHTML = `<div class="empty-state">
         <div class="empty-title">No runs yet</div>
-        <div class="empty-desc">Run your first Taste Gap brief to see where a rival's audience is that yours is not.</div>
+        <div class="empty-desc">Run your first brief to see where a rival's audience is that yours is not.</div>
         <a class="btn btn-primary" href="#/taste">New brief</a>
       </div>`;
       return;

@@ -49,7 +49,7 @@ const BUDGET_NOTE = 'This model has a small token budget. Skip optional follow-u
 // Row caps tried in turn when a transcript is over a provider's input budget.
 const ROW_CAPS = [10, 6, 4, 2];
 
-const SYSTEM_PROMPT = `You are Nivaria's Taste Gap analyst. A consumer brand wants to know where a rival's audience is that theirs is not, and which of those audiences to win first. You answer with Qloo taste data only.
+const SYSTEM_PROMPT = `You are Nivaria's audience analyst. A consumer brand wants to know where a rival's audience is that theirs is not, and which of those audiences to win first. You answer with Qloo taste data only.
 
 Questions to answer:
 1. Where is the rival's audience that ours is not? Taste segments in music, film, TV, places and other brands where the rival's audience over-indexes and ours does not.
@@ -75,13 +75,13 @@ Rules:
 - Campaign hooks must come from the actual entities (a show, an artist, a venue, a neighborhood). Channels must be concrete, such as a creator partnership with a named show's audience or a pop-up in a named neighborhood.
 - Build campaign hooks and channels on coffee, food, music, film, TV, retail and neighborhoods. Bars, pubs, drinking and hangovers have no place in them. When the rival leads in bars or pubs, use that neighborhood or the audience's other tastes instead.
 - These rules shape what you write and are never part of it: do not mention them, and do not annotate a hook or channel with what it leaves out.
-- The headline states the finding and the move: the rival's strongest segment or neighborhood and what to win first. Never a generic title such as "Taste Gap Brief: Starbucks vs Dunkin'".
+- The headline states the finding and the move: the rival's strongest segment or neighborhood and what to win first. Never a generic title such as "Brief: Starbucks vs Dunkin'".
 - Never use em-dashes, en-dashes, or "+" as a connector between words or phrases. Write "and" instead, and use commas, periods, colons or parentheses.
 - Keep text tight: a headline under 110 characters, a summary of two or three sentences, and one or two sentences per insight.`;
 
 const SUBMIT_TOOL = {
   name: 'submit_brief',
-  description: 'Submit the finished Taste Gap brief. Call it once, when the research is done. Cite rows by ref (e3, c2); the server attaches the Qloo scores, so do not restate them in evidence.',
+  description: 'Submit the finished brief. Call it once, when the research is done. Cite rows by ref (e3, c2); the server attaches the Qloo scores, so do not restate them in evidence.',
   input_schema: {
     type: 'object',
     properties: {

@@ -66,7 +66,7 @@ I built Nivaria from the ground up as a full-stack solution to help B2B business
 
 ## Run with Docker
 
-The image runs Nivaria as Taste Gap only (`PRODUCT_MODE=taste`), with page monitoring off (`ENABLE_SCRAPER=false`, so no browser is installed) and `NODE_ENV=production`.
+The image runs only Nivaria's audience briefs (`PRODUCT_MODE=taste`), with page monitoring off (`ENABLE_SCRAPER=false`, so no browser is installed) and `NODE_ENV=production`.
 
 1. Create `.env` from `.env.example` and set at least `SESSION_SECRET`, `QLOO_API_KEY` and one model key (for example `GEMINI_API_KEY`). Set `DEMO_LOGIN_EMAIL` and `DEMO_LOGIN_PASSWORD` for a shared judge login.
 2. Build and start it:

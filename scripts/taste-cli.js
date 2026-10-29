@@ -92,7 +92,7 @@ async function main() {
     console.error(err.message);
     process.exit(1);
   }
-  console.log('Taste Gap: ' + args.brand + ' vs ' + args.rivals.join(', ') + (args.city ? ' in ' + args.city : '')
+  console.log('Nivaria brief: ' + args.brand + ' vs ' + args.rivals.join(', ') + (args.city ? ' in ' + args.city : '')
     + '\nModel chain: ' + chain.map(e => e.key).join(' > ') + '\n');
 
   let run;

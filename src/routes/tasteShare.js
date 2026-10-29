@@ -37,8 +37,8 @@ router.get('/share/:token', limits.tasteShared, (req, res) => {
   privateHeaders(res);
   const run = shares.sharedRun(req.params.token);
   const pair = run ? run.brand + ' vs ' + run.rivals.join(' and ') + (run.city ? ' in ' + run.city : '') : '';
-  const title = run ? pair + ' · Taste Gap brief' : 'Brief not available';
-  const description = run ? run.brief?.headline || 'A Taste Gap brief made with Nivaria.' : 'This shared brief is no longer available.';
+  const title = run ? pair : 'Brief not available';
+  const description = run ? run.brief?.headline || 'A brief made with Nivaria.' : 'This shared brief is no longer available.';
   const html = page()
     .replace(/__TITLE__/g, () => attr(title))
     .replace(/__DESCRIPTION__/g, () => attr(description))
