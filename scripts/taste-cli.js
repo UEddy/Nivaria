@@ -2,17 +2,17 @@
 //
 //   node scripts/taste-cli.js --brand Glossier --rival "Fenty Beauty" [--rival "Rare Beauty"] [--city "New York"]
 //
-// Streams each agent step as it happens, then prints the brief. The full run
-// (brief, chart data, steps, usage) is written to data/taste-runs/, which is
-// git-ignored: it holds Qloo response data, and that must not be committed.
+// The model chain comes from LLM_CHAIN (see src/taste/llm.js); set it to one
+// entry, e.g. LLM_CHAIN=zai, to run a single model. Streams each agent step as it
+// happens, then prints the brief. The full run (brief, chart data, steps,
+// usage) is written to data/taste-runs/, which is git-ignored: it holds Qloo
+// response data, and that must not be committed.
 
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const { runTasteAgent, MODEL } = require('../src/taste/agent');
-
-// Sonnet 4.6 list prices per million tokens, for a rough cost line.
-const PRICE = { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.3 };
+const { runTasteAgent } = require('../src/taste/agent');
+const llm = require('../src/taste/llm');
 
 function parseArgs(argv) {
   const out = { rivals: [] };
@@ -30,7 +30,9 @@ const secs = ms => (ms / 1000).toFixed(1) + 's';
 const pct = x => (x == null ? 'n/a' : Math.round(x * 100));
 
 function printStep(step) {
-  if (step.kind === 'note') {
+  if (step.kind === 'switch') {
+    if (step.status === 'done') console.log('[' + secs(step.at_ms) + '] !! ' + step.label + ' (' + step.summary + ')');
+  } else if (step.kind === 'note') {
     console.log('[' + secs(step.at_ms) + ']   (agent) ' + step.label);
   } else if (step.status === 'running') {
     console.log('[' + secs(step.at_ms) + '] > ' + step.label);
@@ -83,7 +85,15 @@ async function main() {
     console.error('Usage: node scripts/taste-cli.js --brand <name> --rival <name> [--rival <name>] [--city <name>]');
     process.exit(1);
   }
-  console.log('Taste Gap: ' + args.brand + ' vs ' + args.rivals.join(', ') + (args.city ? ' in ' + args.city : '') + ' (' + MODEL + ')\n');
+  let chain;
+  try {
+    chain = llm.buildChain();
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
+  console.log('Taste Gap: ' + args.brand + ' vs ' + args.rivals.join(', ') + (args.city ? ' in ' + args.city : '')
+    + '\nModel chain: ' + chain.map(e => e.key).join(' > ') + '\n');
 
   let run;
   try {
@@ -95,14 +105,13 @@ async function main() {
 
   printBrief(run);
 
-  const u = run.usage;
-  const cost = (u.input_tokens * PRICE.input + u.output_tokens * PRICE.output
-    + u.cache_creation_input_tokens * PRICE.cacheWrite + u.cache_read_input_tokens * PRICE.cacheRead) / 1e6;
   const toolSteps = run.steps.filter(s => s.kind === 'tool');
   console.log('\n' + '-'.repeat(78));
-  console.log(run.turns + ' turns, ' + toolSteps.length + ' tool calls, ' + secs(run.duration_ms)
-    + '; tokens in ' + u.input_tokens + ', out ' + u.output_tokens + ', cache write ' + u.cache_creation_input_tokens
-    + ', cache read ' + u.cache_read_input_tokens + ' (about $' + cost.toFixed(3) + ')');
+  console.log(run.turns + ' turns, ' + toolSteps.length + ' tool calls, ' + secs(run.duration_ms));
+  for (const p of run.providers) {
+    console.log('  ' + p.provider + ' ' + p.model + ': ' + p.turns + ' turns, tokens in ' + p.usage.input_tokens
+      + ', out ' + p.usage.output_tokens + ', cache read ' + p.usage.cache_read_input_tokens);
+  }
   if (run.warnings.length) console.log('Warnings: ' + run.warnings.join('; '));
 
   const dir = path.join(__dirname, '..', 'data', 'taste-runs');

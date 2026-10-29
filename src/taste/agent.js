@@ -1,43 +1,53 @@
-// Taste Gap agent: a Claude tool-use loop over the Qloo tools.
+// Taste Gap agent: an LLM tool-use loop over the Qloo tools.
 //
 // Given our brand, one or two rivals and an optional city, the agent resolves
 // the entities, decides which Qloo comparisons to run (independent calls go out
 // in parallel, under the client's 10 requests per second spacing), and ends by
 // calling submit_brief with a structured brief.
 //
-// The model never supplies a score. submit_brief cites entities by entity_id
-// and map cells by geohash; assembleBrief() looks each one up in the run
-// context and attaches the numbers Qloo actually returned, dropping any
+// The model runs through src/taste/llm.js, which builds an ordered chain of
+// models from LLM_CHAIN (Gemini, a second Gemini model, Groq, OpenRouter and
+// Z.ai by default). When a model call fails with a 429, a 5xx or a timeout,
+// it is retried once after a backoff; if that fails too, the run moves to the
+// next model in the chain for its remaining turns, and each move is recorded
+// as a step in the trace.
+//
+// The model never supplies a score. submit_brief cites rows by ref (e3 for a
+// scored entity, c2 for a map cell); assembleBrief() looks each one up in the
+// run context and attaches the numbers Qloo actually returned, dropping any
 // citation that does not resolve. Model-written text goes through
 // sanitizeCopyDeep before it leaves this module (CLAUDE.md no-dash rule).
 //
 // Limits: MAX_TURNS model calls and a wall-clock timeout (3 minutes by
 // default). When either is close, the agent is told to submit with what it
-// has and only submit_brief stays available. Every tool call is reported to
-// onStep as it starts and as it finishes, for the live trace.
+// has and only submit_brief stays available, forced where the provider
+// allows it. Every tool call is reported to onStep as it starts and as it
+// finishes, for the live trace.
 
-const Anthropic = require('@anthropic-ai/sdk');
-const { withRetry } = require('../lib/retry');
+const { sleep, retryAfterMs } = require('../lib/retry');
 const { sanitizeCopy, sanitizeCopyDeep } = require('../lib/sanitizeText');
 const tools = require('../qloo/tools');
+const llm = require('./llm');
 
-// Matches the model used elsewhere in the app (src/analyzer.js).
-const MODEL = 'claude-sonnet-4-6';
-const MAX_TOKENS = 16000;
 const MAX_TURNS = 15;
 const DEFAULT_TIMEOUT_MS = 3 * 60 * 1000;
 
 // With less than this left, the next turn is the last: submit_brief only.
 const WRAP_UP_MS = 45 * 1000;
 
-let client;
-function getClient() {
-  if (!client) {
-    // maxRetries: 0 because withRetry() owns the backoff, as in outbound/ai.js.
-    client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 });
-  }
-  return client;
-}
+// Backoff before the one retry on a failed model call. A provider's
+// Retry-After wins when it is longer, up to the cap. A retry that would leave
+// less than MIN_TURN_MS of the run goes straight to the fallback instead.
+const BACKOFF_MS = 2000;
+const MAX_BACKOFF_MS = 30000;
+const MIN_TURN_MS = 10000;
+
+// Told to a provider with a small input budget (free-tier Groq), so the
+// transcript stops growing once the core comparisons are back.
+const BUDGET_NOTE = 'This model has a small token budget. Skip optional follow-up calls, and call submit_brief as soon as the core comparisons are back. Keep the brief short: three segments, three win-first items, and one sentence per text field.';
+
+// Row caps tried in turn when a transcript is over a provider's input budget.
+const ROW_CAPS = [10, 6, 4, 2];
 
 const SYSTEM_PROMPT = `You are Nivaria's Taste Gap analyst. A consumer brand wants to know where a rival's audience is that theirs is not, and which of those audiences to win first. You answer with Qloo taste data only.
 
@@ -47,19 +57,20 @@ Questions to answer:
 3. Which segments should we win first? A ranked list with campaign hooks built from the actual tastes.
 
 How to work:
-- First resolve every brand with search_brands, and the city with find_city when one is given. Pick the candidate that matches what the user meant; for a city, pick the city itself, not a state or county with the same name.
+- First resolve every brand with search_brands, and the city with find_city when one is given. Pick the candidate that matches what the user meant; for a city, pick the city itself, not a state or county with the same name. Pass the chosen refs (b1, l1) to the other tools.
 - Call independent tools in the same turn so they run in parallel. For each rival, run audience_gap for artist, movie, tv_show and brand, plus place when there is a city, and run demographic_gap and brand_positioning. With a city, also run geo_gap.
 - Follow up only where it sharpens the answer, for example audience_gap scoped to the city for a domain where the rival leads strongly. The whole run has about three minutes, so batch your calls.
-- Then call submit_brief exactly once.
+- Then call submit_brief exactly once, as a tool call.
 
 Reading the data:
-- Affinity runs 0 to 1 and measures how strongly an audience over-indexes on an entity or map cell. gap is rival affinity minus ours. A gap of 0.05 or more is meaningful and 0.10 or more is strong. In prose, write affinity as a score out of 100 (0.982 becomes 98).
+- Scores are whole points out of 100. Affinity measures how strongly an audience over-indexes on an entity or map cell, and gap is rival minus ours. A gap of 5 or more is meaningful and 10 or more is strong.
 - A segment is a cluster of related entities with large gaps (several reality fashion shows, a run of R&B artists), not a single title. Name it in plain words.
-- Demographic scores run from -1 to 1, where positive means over-indexed.
+- Demographic scores run from -100 to 100, where positive means over-indexed.
 - brand_positioning compares how Qloo tags the two brands. Use it for a line or two on positioning, never as audience evidence.
 
 Rules:
-- Every claim must rest on numbers from a tool result. Never invent statistics, audience sizes, revenue or trends. In evidence fields, cite entities by entity_id and map cells by geohash; the server attaches the scores. Only quote a number in prose if a tool returned it.
+- Every claim must rest on numbers from a tool result. Never invent statistics, audience sizes, revenue or trends. In evidence fields, cite rows by their ref (e3 for an entity, c2 for a map cell); the server attaches the scores. Only quote a number in prose if a tool returned it.
+- Refs (b1, l1, e3, c2) belong only in id and evidence fields. In prose, use the names.
 - Describe audiences by their tastes, places, and age and gender scores. Never infer or name race, ethnicity, religion, nationality or other protected traits, even when venues or neighborhoods seem to suggest one.
 - Campaign hooks must come from the actual entities (a show, an artist, a venue, a neighborhood). Channels must be concrete, such as a creator partnership with a named show's audience or a pop-up in a named neighborhood.
 - Never use em-dashes, en-dashes, or "+" as a connector between words or phrases. Write "and" instead, and use commas, periods, colons or parentheses.
@@ -67,12 +78,12 @@ Rules:
 
 const SUBMIT_TOOL = {
   name: 'submit_brief',
-  description: 'Submit the finished Taste Gap brief. Call it once, when the research is done. Cite entities by entity_id and map cells by geohash; the server attaches the Qloo scores, so do not restate them in evidence.',
+  description: 'Submit the finished Taste Gap brief. Call it once, when the research is done. Cite rows by ref (e3, c2); the server attaches the Qloo scores, so do not restate them in evidence.',
   input_schema: {
     type: 'object',
     properties: {
-      brand_id: { type: 'string', description: "Our brand's entity_id." },
-      rival_ids: { type: 'array', items: { type: 'string' }, description: "The rivals' entity_ids." },
+      brand_id: { type: 'string', description: "Our brand's ref, like b1." },
+      rival_ids: { type: 'array', items: { type: 'string' }, description: "The rivals' refs, like b2." },
       headline: { type: 'string', description: 'One line, under 110 characters.' },
       summary: { type: 'string', description: 'Two or three sentences.' },
       rival_owned_segments: {
@@ -81,11 +92,11 @@ const SUBMIT_TOOL = {
         items: {
           type: 'object',
           properties: {
-            rival_id: { type: 'string' },
+            rival_id: { type: 'string', description: "The rival's ref." },
             domain: { type: 'string', enum: Object.keys(tools.DOMAINS) },
             segment: { type: 'string', description: 'A short plain name for the cluster.' },
             insight: { type: 'string', description: 'One or two sentences on what the gap means.' },
-            evidence: { type: 'array', items: { type: 'string' }, description: 'entity_ids from audience_gap results.' },
+            evidence: { type: 'array', items: { type: 'string' }, description: 'Entity refs (like e3) from audience_gap rows.' },
             confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
           },
           required: ['rival_id', 'domain', 'segment', 'insight', 'evidence', 'confidence'],
@@ -102,7 +113,7 @@ const SUBMIT_TOOL = {
             why: { type: 'string' },
             campaign_hook: { type: 'string' },
             channels: { type: 'array', items: { type: 'string' } },
-            evidence: { type: 'array', items: { type: 'string' }, description: 'entity_ids and geohashes behind this pick.' },
+            evidence: { type: 'array', items: { type: 'string' }, description: 'Entity refs (e3) and map cell refs (c2) behind this pick.' },
           },
           required: ['rank', 'segment', 'why', 'campaign_hook', 'channels', 'evidence'],
         },
@@ -113,12 +124,11 @@ const SUBMIT_TOOL = {
         items: {
           type: 'object',
           properties: {
-            rival_id: { type: 'string' },
-            geohash: { type: 'string' },
+            ref: { type: 'string', description: 'A map cell ref from geo_gap, like c2.' },
             label: { type: 'string', description: 'Neighborhood or area name.' },
             note: { type: 'string', description: 'One sentence.' },
           },
-          required: ['rival_id', 'geohash', 'label', 'note'],
+          required: ['ref', 'label', 'note'],
         },
       },
       demographic_gap: {
@@ -154,15 +164,6 @@ function userPrompt(brand, rivals, city) {
 
 // ── Brief assembly ────────────────────────────────────────────────────────────
 
-// Resolve a cited entity_id against everything audience_gap scored this run.
-function findGapItem(ctx, rivalId, entityId) {
-  if (rivalId && ctx.gapIndex.has(rivalId + ':' + entityId)) return { rival_id: rivalId, ...ctx.gapIndex.get(rivalId + ':' + entityId) };
-  for (const [key, item] of ctx.gapIndex) {
-    if (key.endsWith(':' + entityId)) return { rival_id: key.slice(0, key.indexOf(':')), ...item };
-  }
-  return null;
-}
-
 function findCell(ctx, rivalId, geohash) {
   const pools = rivalId && ctx.geo[rivalId] ? [[rivalId, ctx.geo[rivalId]]] : Object.entries(ctx.geo);
   for (const [rid, g] of pools) {
@@ -174,32 +175,70 @@ function findCell(ctx, rivalId, geohash) {
   return null;
 }
 
+// A cited ref (e3, c2) to the Qloo row behind it. Raw entity_ids and geohashes
+// are accepted too, so a model that copies an id still resolves.
+function resolveCitation(ctx, ref, rivalId) {
+  const hit = ctx.refs.get(ref);
+  if (hit && hit.kind === 'entity') {
+    const item = ctx.gapIndex.get(hit.rival_id + ':' + hit.id);
+    if (item) return { kind: 'entity', rival_id: hit.rival_id, ...item };
+  }
+  if (hit && hit.kind === 'cell') {
+    const cell = findCell(ctx, hit.rival_id, hit.geohash);
+    if (cell) return { kind: 'cell', ...cell };
+  }
+  if (rivalId && ctx.gapIndex.has(rivalId + ':' + ref)) return { kind: 'entity', rival_id: rivalId, ...ctx.gapIndex.get(rivalId + ':' + ref) };
+  for (const [key, item] of ctx.gapIndex) {
+    if (key.endsWith(':' + ref)) return { kind: 'entity', rival_id: key.slice(0, key.indexOf(':')), ...item };
+  }
+  const cell = findCell(ctx, rivalId, ref);
+  return cell ? { kind: 'cell', ...cell } : null;
+}
+
 // Turn submit_brief input into the stored brief: sanitize the prose, then swap
 // every citation for the Qloo numbers behind it. Anything that does not
 // resolve is dropped and noted in warnings.
+// A ref that leaked into prose despite the prompt, e.g. "Closest taste gap
+// (e31)": drop parenthesised ref lists and bare refs, keep the sentence.
+const REF_IN_PROSE = /\s*\((?:\s*[becl]\d{1,3}\s*,?)+\)|\b[becl]\d{1,3}\b/g;
+const stripRefs = s => (typeof s === 'string' ? s.replace(REF_IN_PROSE, '').replace(/\s{2,}/g, ' ').trim() : s);
+
+function stripRefsFromProse(b) {
+  const prose = obj => {
+    for (const k of ['headline', 'summary', 'segment', 'insight', 'why', 'campaign_hook', 'label', 'note']) {
+      if (typeof obj[k] === 'string') obj[k] = stripRefs(obj[k]);
+    }
+    if (Array.isArray(obj.channels)) obj.channels = obj.channels.map(stripRefs);
+  };
+  prose(b);
+  for (const k of ['rival_owned_segments', 'win_first', 'geo_hotspots', 'demographic_gap', 'positioning']) {
+    for (const item of b[k] || []) prose(item);
+  }
+  return b;
+}
+
 function assembleBrief(raw, ctx, warnings) {
-  const b = sanitizeCopyDeep(raw);
-  const brandId = b.brand_id;
-  const rivalIds = (b.rival_ids || []).filter(id => ctx.entities.has(id));
+  const b = stripRefsFromProse(sanitizeCopyDeep(raw));
+  const brandId = tools.brandId(ctx, b.brand_id);
+  const rivalIds = (b.rival_ids || []).map(r => tools.brandId(ctx, r)).filter(Boolean);
   const brandRef = id => ({ entity_id: id, name: tools.entityName(ctx, id), image: ctx.entities.get(id)?.image || null });
 
-  const evidenceFor = (ids, rivalId, where) => {
+  const evidenceFor = (refs, rivalId, where) => {
     const out = [];
-    for (const ref of ids || []) {
-      const item = findGapItem(ctx, rivalId, ref);
-      if (item) { out.push({ kind: 'entity', ...item }); continue; }
-      const cell = findCell(ctx, rivalId, ref);
-      if (cell) { out.push({ kind: 'cell', ...cell }); continue; }
-      warnings.push('Dropped unresolved citation ' + ref + ' in ' + where);
+    for (const ref of refs || []) {
+      const hit = resolveCitation(ctx, ref, rivalId);
+      if (hit) out.push(hit);
+      else warnings.push('Dropped unresolved citation ' + ref + ' in ' + where);
     }
     return out;
   };
 
   const segments = [];
   for (const s of b.rival_owned_segments || []) {
-    const evidence = evidenceFor(s.evidence, s.rival_id, 'segment "' + s.segment + '"');
+    const rivalId = tools.brandId(ctx, s.rival_id);
+    const evidence = evidenceFor(s.evidence, rivalId, 'segment "' + s.segment + '"');
     if (!evidence.length) { warnings.push('Dropped segment "' + s.segment + '" with no resolvable evidence'); continue; }
-    segments.push({ ...s, evidence });
+    segments.push({ ...s, rival_id: rivalId || evidence[0].rival_id, evidence });
   }
 
   const winFirst = (b.win_first || [])
@@ -208,17 +247,18 @@ function assembleBrief(raw, ctx, warnings) {
 
   const hotspots = [];
   for (const h of b.geo_hotspots || []) {
-    const cell = findCell(ctx, h.rival_id, h.geohash);
-    if (!cell) { warnings.push('Dropped hotspot ' + h.geohash); continue; }
-    hotspots.push({ ...cell, label: h.label, note: h.note });
+    const hit = resolveCitation(ctx, h.ref || h.geohash, null);
+    if (!hit || hit.kind !== 'cell') { warnings.push('Dropped hotspot ' + (h.ref || h.geohash)); continue; }
+    hotspots.push({ ...hit, label: h.label, note: h.note });
   }
 
   const perRival = (arr, source) => (arr || [])
-    .filter(x => source[x.rival_id])
+    .map(x => ({ ...x, rival_id: tools.brandId(ctx, x.rival_id) }))
+    .filter(x => x.rival_id && source[x.rival_id])
     .map(x => ({ rival_id: x.rival_id, summary: x.summary, ...source[x.rival_id] }));
 
   return {
-    brand: ctx.entities.has(brandId) ? brandRef(brandId) : null,
+    brand: brandId ? brandRef(brandId) : null,
     rivals: rivalIds.map(brandRef),
     headline: b.headline || '',
     summary: b.summary || '',
@@ -243,9 +283,9 @@ function chartData(ctx) {
 function checkBrief(input, ctx) {
   const problems = [];
   if (!input || typeof input !== 'object') return ['submit_brief input must be an object.'];
-  if (!ctx.entities.has(input.brand_id)) problems.push('brand_id must be an entity_id from search_brands.');
+  if (!tools.brandId(ctx, input.brand_id)) problems.push('brand_id must be a brand ref from search_brands, like b1.');
   const rivals = Array.isArray(input.rival_ids) ? input.rival_ids : [];
-  if (!rivals.length || rivals.some(id => !ctx.entities.has(id))) problems.push('rival_ids must be entity_ids from search_brands.');
+  if (!rivals.length || rivals.some(r => !tools.brandId(ctx, r))) problems.push('rival_ids must be brand refs from search_brands, like b2.');
   for (const k of ['headline', 'summary']) if (!input[k] || typeof input[k] !== 'string') problems.push(k + ' is required.');
   if (!Array.isArray(input.rival_owned_segments) || !input.rival_owned_segments.length) problems.push('rival_owned_segments needs at least one segment.');
   if (!Array.isArray(input.win_first) || !input.win_first.length) problems.push('win_first needs at least one item.');
@@ -254,15 +294,30 @@ function checkBrief(input, ctx) {
 
 // ── Loop ──────────────────────────────────────────────────────────────────────
 
-// Keep one moving cache breakpoint on the newest message, so each turn reads
-// the previous turn's prefix from cache. The system prompt carries the other.
-function moveCacheBreakpoint(messages) {
-  for (const m of messages) {
-    if (Array.isArray(m.content)) for (const block of m.content) delete block.cache_control;
+// For a provider with an input budget, a copy of the transcript whose tool
+// results keep fewer rows, tightening until the estimate fits. Rows arrive
+// strongest first, so the weakest go first, and the server still holds every
+// row, so earlier citations keep resolving.
+function trimResult(content, cap) {
+  let obj;
+  try { obj = JSON.parse(content); } catch (_) { return content; }
+  let changed = false;
+  for (const k of ['rows', 'rival_hotspots']) {
+    if (Array.isArray(obj[k]) && obj[k].length > cap) { obj[k] = obj[k].slice(0, cap); changed = true; }
   }
-  const last = messages[messages.length - 1];
-  if (typeof last.content === 'string') last.content = [{ type: 'text', text: last.content }];
-  last.content[last.content.length - 1].cache_control = { type: 'ephemeral' };
+  return changed ? JSON.stringify(obj) : content;
+}
+
+function fitTranscript(system, transcript, toolDefs, budget) {
+  if (!budget || llm.estimateTokens(system, transcript, toolDefs) <= budget) return transcript;
+  let view = transcript;
+  for (const cap of ROW_CAPS) {
+    view = transcript.map(t => (t.role === 'tool'
+      ? { ...t, results: t.results.map(r => ({ ...r, content: trimResult(r.content, cap) })) }
+      : t));
+    if (llm.estimateTokens(system, view, toolDefs) <= budget) break;
+  }
+  return view;
 }
 
 function addUsage(total, u) {
@@ -272,18 +327,48 @@ function addUsage(total, u) {
   }
 }
 
+const emptyUsage = () => ({ input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 });
+
+// ── Privacy ───────────────────────────────────────────────────────────────────
+// Prompts go to third-party model APIs, some on free tiers that may keep them.
+// So the only outside input that reaches a prompt is the three strings typed
+// for this run: brand, rivals and city. runTasteAgent takes nothing else (no
+// user, workspace, email or business context), this module and the tools it
+// calls never touch the database or session, and the strings are capped,
+// stripped of control characters and scrubbed of anything shaped like an
+// email address or phone number before use. test-taste-privacy.js checks all
+// three.
+const EMAIL_LIKE = /[^\s@]+@[^\s@]+\.[^\s@]+/g;
+const PHONE_LIKE = /\+?\d[\d\s().-]{6,}\d/g;
+const INPUT_MAX = 80;
+
+function cleanInput(value) {
+  return String(value == null ? '' : value)
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(EMAIL_LIKE, ' ')
+    .replace(PHONE_LIKE, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, INPUT_MAX);
+}
+
 async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set');
-  const brandName = String(brand || '').trim();
-  const rivalNames = (Array.isArray(rivals) ? rivals : [rivals]).map(r => String(r || '').trim()).filter(Boolean);
+  const brandName = cleanInput(brand);
+  const rivalNames = (Array.isArray(rivals) ? rivals : [rivals]).map(cleanInput).filter(Boolean);
   if (!brandName) throw new Error('brand is required');
   if (rivalNames.length < 1 || rivalNames.length > 2) throw new Error('give one or two rivals');
-  const cityName = city ? String(city).trim() : '';
+  const cityName = cleanInput(city);
+
+  const chain = llm.buildChain();
+  let link = 0;
+  let provider = llm.createProvider(chain[0]);
+  let budgetNoted = Boolean(provider.inputBudget);
 
   const ctx = tools.createContext();
   const steps = [];
   const warnings = [];
-  const usage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
+  const usage = emptyUsage();
+  const providers = [];  // [{ key, provider, model, turns, usage }] in the order they ran
   const started = Date.now();
   const deadline = started + timeoutMs;
   const controller = new AbortController();
@@ -301,7 +386,67 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
     emit(step);
   };
 
-  const messages = [{ role: 'user', content: userPrompt(brandName, rivalNames, cityName) }];
+  // One model turn on the current chain entry. A transient failure (429, 5xx,
+  // timeout) gets one backoff retry; if that fails, or the entry cannot work
+  // at all (bad key, unknown model), the run moves to the next entry for the
+  // rest of the run. A wait longer than MAX_BACKOFF_MS (a spent daily quota)
+  // cannot clear inside the run, so it moves on without waiting.
+  const callModel = async request => {
+    for (;;) {
+      let failure = null;
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        const remaining = deadline - Date.now();
+        if (remaining <= 1000) throw Object.assign(new Error('deadline'), { aborted: true });
+        try {
+          return await provider.complete({
+            ...request,
+            transcript: fitTranscript(request.system, request.transcript, request.tools, provider.inputBudget),
+            signal: controller.signal,
+            timeoutMs: Math.min(provider.timeoutMs, remaining),
+          });
+        } catch (err) {
+          if (err.aborted || controller.signal.aborted) throw err;
+          const verdict = llm.classifyFailure(err);
+          if (!verdict) throw err;
+          failure = { err, why: verdict.why };
+          if (verdict.action === 'skip' || attempt === 2) break;
+          const suggested = err.retryAfterMs ?? retryAfterMs(err);
+          if (suggested != null && suggested > MAX_BACKOFF_MS) break;
+          const wait = Math.max(BACKOFF_MS, suggested || 0);
+          if (deadline - Date.now() - wait < MIN_TURN_MS) break;
+          console.warn('[taste] ' + provider.label + ' ' + verdict.why + ', retrying in ' + wait + 'ms');
+          await sleep(wait);
+        }
+      }
+      if (link + 1 >= chain.length) throw failure.err;
+      const from = provider;
+      link += 1;
+      provider = llm.createProvider(chain[link]);
+      const step = openStep({
+        kind: 'switch', from: from.key, to: provider.key,
+        label: 'Switching from ' + from.label + ' to ' + provider.label + ' after a ' + failure.why,
+      });
+      closeStep(step, { status: 'done', summary: failure.err.message.slice(0, 200) });
+      if (provider.inputBudget && !budgetNoted) {
+        budgetNoted = true;
+        request.transcript.push({ role: 'user', text: BUDGET_NOTE });
+      }
+    }
+  };
+
+  // Provider call ids, made safe for every provider's id rules and unique
+  // across the run (a fallback provider sees the whole transcript).
+  const seenIds = new Set();
+  const callId = (raw, turn, i) => {
+    const base = String(raw || '').replace(/[^a-zA-Z0-9_-]/g, '_') || 'call_' + turn + '_' + i;
+    let id = base;
+    for (let n = 2; seenIds.has(id); n += 1) id = base + '_' + n;
+    seenIds.add(id);
+    return id;
+  };
+
+  const opening = userPrompt(brandName, rivalNames, cityName);
+  const transcript = [{ role: 'user', text: provider.inputBudget ? opening + '\n\n' + BUDGET_NOTE : opening }];
   let submitted = null;
   let turns = 0;
   let wrapUp = false;
@@ -312,73 +457,77 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
       turns += 1;
       if (!wrapUp && (turns === MAX_TURNS || deadline - Date.now() < WRAP_UP_MS)) {
         wrapUp = true;
-        const last = messages[messages.length - 1];
-        if (typeof last.content === 'string') last.content = [{ type: 'text', text: last.content }];
-        last.content.push({ type: 'text', text: 'Time is almost up. Call submit_brief now with what you have.' });
+        transcript.push({ role: 'user', text: 'Time is almost up. Call submit_brief now with what you have.' });
       }
-      moveCacheBreakpoint(messages);
 
-      const remaining = Math.max(5000, deadline - Date.now());
-      const response = await withRetry(() => getClient().messages.create({
-        model: MODEL,
-        max_tokens: MAX_TOKENS,
-        system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+      const res = await callModel({
+        system: SYSTEM_PROMPT,
+        transcript,
         tools: wrapUp ? [SUBMIT_TOOL] : ALL_TOOLS,
-        thinking: { type: 'adaptive' },
-        output_config: { effort: 'medium' },
-        messages,
-      }, { signal: controller.signal, timeout: remaining }), { label: 'taste agent' });
-      addUsage(usage, response.usage);
-      messages.push({ role: 'assistant', content: response.content });
+        finalOnly: wrapUp,
+      });
+      addUsage(usage, res.usage);
+      let used = providers[providers.length - 1];
+      if (!used || used.key !== provider.key) {
+        used = { key: provider.key, provider: provider.name, model: provider.model, turns: 0, usage: emptyUsage() };
+        providers.push(used);
+      }
+      used.turns += 1;
+      addUsage(used.usage, res.usage);
 
-      if (response.stop_reason === 'refusal') throw new Error('The model declined this request');
+      const calls = res.calls.map((c, i) => ({ ...c, id: callId(c.id, turns, i) }));
+      transcript.push({ role: 'assistant', source: provider.key, text: res.text, calls, native: res.native });
+
+      if (res.stopReason === 'refusal') throw new Error('The model declined this request');
 
       // Narration between tool calls goes to the trace as a note.
-      for (const block of response.content) {
-        if (block.type === 'text' && block.text.trim()) {
-          const note = openStep({ kind: 'note', label: sanitizeCopy(block.text.trim()) });
-          closeStep(note, { status: 'done' });
-        }
+      if (res.text) {
+        const note = openStep({ kind: 'note', label: sanitizeCopy(res.text) });
+        closeStep(note, { status: 'done' });
       }
 
-      const uses = response.content.filter(b => b.type === 'tool_use');
-      if (!uses.length) {
-        messages.push({ role: 'user', content: response.stop_reason === 'max_tokens'
+      if (!calls.length) {
+        transcript.push({ role: 'user', text: res.stopReason === 'max_tokens'
           ? 'Your reply was cut off. Call submit_brief with a shorter brief.'
           : 'Call submit_brief with the finished brief rather than replying in text.' });
         continue;
       }
 
-      const results = await Promise.all(uses.map(async use => {
-        if (use.name === 'submit_brief') {
-          const step = openStep({ kind: 'tool', tool: 'submit_brief', label: 'Writing the brief', turn: turns });
-          const problems = checkBrief(use.input, ctx);
+      const results = await Promise.all(calls.map(async call => {
+        const isSubmit = call.name === 'submit_brief';
+        const step = openStep({
+          kind: 'tool', tool: call.name, turn: turns, ...(isSubmit ? {} : { input: call.input }),
+          label: isSubmit ? 'Writing the brief' : tools.describeCall(ctx, call.name, call.input),
+        });
+        if (call.inputError) {
+          closeStep(step, { status: 'error', summary: call.inputError });
+          return { id: call.id, name: call.name, isError: true, content: call.inputError };
+        }
+        if (isSubmit) {
+          const problems = checkBrief(call.input, ctx);
           if (problems.length) {
             closeStep(step, { status: 'error', summary: problems.join(' ') });
-            return { type: 'tool_result', tool_use_id: use.id, is_error: true, content: problems.join(' ') };
+            return { id: call.id, name: call.name, isError: true, content: problems.join(' ') };
           }
-          submitted = use.input;
+          submitted = call.input;
           closeStep(step, { status: 'done', summary: 'Brief submitted' });
-          return { type: 'tool_result', tool_use_id: use.id, content: 'Brief received.' };
+          return { id: call.id, name: call.name, content: 'Brief received.' };
         }
-        const step = openStep({
-          kind: 'tool', tool: use.name, input: use.input, turn: turns,
-          label: tools.describeCall(ctx, use.name, use.input),
-        });
-        const out = await tools.executeTool(ctx, use.name, use.input);
+        const out = await tools.executeTool(ctx, call.name, call.input);
         closeStep(step, { status: out.ok ? 'done' : 'error', summary: out.ok ? out.summary : out.error });
         return out.ok
-          ? { type: 'tool_result', tool_use_id: use.id, content: JSON.stringify(out.result) }
-          : { type: 'tool_result', tool_use_id: use.id, is_error: true, content: out.error };
+          ? { id: call.id, name: call.name, content: JSON.stringify(out.result) }
+          : { id: call.id, name: call.name, isError: true, content: out.error };
       }));
-      // All results for one turn go back in a single user message.
-      messages.push({ role: 'user', content: results });
+      // All results for one turn go back together.
+      transcript.push({ role: 'tool', results });
     }
   } catch (err) {
-    const timedOut = controller.signal.aborted;
+    const timedOut = controller.signal.aborted || err.aborted;
     const e = new Error(timedOut ? 'The agent ran out of time before writing the brief' : err.message);
     e.steps = steps;
     e.usage = usage;
+    e.providers = providers;
     throw e;
   } finally {
     clearTimeout(timer);
@@ -391,11 +540,12 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
     steps,
     warnings,
     usage,
-    model: MODEL,
+    providers,
+    model: providers.map(p => p.provider + ':' + p.model).join(' then '),
     turns,
     duration_ms: Date.now() - started,
     input: { brand: brandName, rivals: rivalNames, city: cityName || null },
   };
 }
 
-module.exports = { runTasteAgent, MODEL };
+module.exports = { runTasteAgent, cleanInput, userPrompt, SYSTEM_PROMPT };

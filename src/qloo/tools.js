@@ -1,10 +1,9 @@
-// Taste Gap: Anthropic tool definitions over the Qloo client.
+// Taste Gap: agent tool definitions over the Qloo client.
 //
-// Each tool wraps one or more Qloo calls and hands the model a trimmed result:
-// names, ids and rounded scores, never the 40-odd property fields Qloo returns
-// per entity. The heavier data (images, the full heatmap grid, every scored
-// entity) is kept on the run context instead, so the UI can chart it and the
-// agent can attach real numbers to the brief without the model restating them.
+// Each tool wraps one or more Qloo calls and hands the model a trimmed result.
+// The heavier data (images, the full heatmap grid, raw 0 to 1 scores) is kept
+// on the run context instead, so the UI can chart it and the agent can attach
+// real numbers to the brief without the model restating them.
 //
 // The tools are composite on purpose. Two findings from the smoke tests
 // (scripts/qloo-smoke.js) shaped them:
@@ -17,8 +16,13 @@
 //     only the top cells, each labelled with a neighbourhood looked up through
 //     filter.location.geohash.
 //
-// Every id a tool accepts must have come out of search_brands or find_city in
-// the same run. That keeps the model from passing an id it invented.
+// What the model sees is compact, because the same results are resent on
+// every turn and the smallest provider budget (Groq, 8K tokens per minute)
+// has to fit a whole run: short refs (b1 for a brand, l1 for a city, e7 for a
+// scored entity, c3 for a map cell) instead of UUIDs, rows instead of repeated
+// keys, and scores as whole points out of 100. Refs are the only ids the
+// model needs: tools take b and l refs as input, and the brief cites e and c
+// refs as evidence. Raw Qloo ids are still accepted wherever a ref is.
 
 const qloo = require('./client');
 
@@ -34,8 +38,8 @@ const GEO_LABELED = 8;
 const GEO_OURS_TOP = 3;
 const GEO_MIN_POPULARITY = 0.4;
 
-// A cell counts as "led" by one side when the affinity gap passes this.
-const GEO_LEAD_THRESHOLD = 0.1;
+// A gap of this much (0 to 1 scale) is "strong", for entities and map cells.
+const STRONG_GAP = 0.1;
 
 // brand_positioning list caps (Nike vs Adidas returns 45 shared tags).
 const POSITIONING_SHARED_MAX = 15;
@@ -55,6 +59,11 @@ function r3(x) {
   return typeof x === 'number' && Number.isFinite(x) ? Math.round(x * 1000) / 1000 : null;
 }
 
+// Whole points out of 100, for what the model reads.
+function pts(x) {
+  return typeof x === 'number' && Number.isFinite(x) ? Math.round(x * 100) : null;
+}
+
 function toolError(message) {
   const e = new Error(message);
   e.toolError = true;
@@ -71,28 +80,64 @@ function createContext() {
     geo: {},                 // rival_id -> { locality, cells, hotspots, our_strongest, stats }
     demographics: {},        // rival_id -> { age, gender }
     positioning: {},         // rival_id -> { shared, brand_only, rival_only }
+    refs: new Map(),         // ref -> { kind, id, rival_id?, geohash? }
+    refKeys: new Map(),      // kind + ':' + key -> ref, so one thing keeps one ref
+    refCounts: {},
   };
 }
 
-function entityName(ctx, id) { return ctx.entities.get(id)?.name || id; }
-function localityName(ctx, id) { return ctx.localities.get(id)?.name || id; }
+const REF_PREFIX = { brand: 'b', locality: 'l', entity: 'e', cell: 'c' };
 
-function requireBrand(ctx, id, field) {
-  if (!id || !ctx.entities.has(id)) {
-    throw toolError(field + ' is not a brand from search_brands. Call search_brands and pass an entity_id it returned.');
-  }
+function makeRef(ctx, kind, key, value) {
+  const k = kind + ':' + key;
+  if (ctx.refKeys.has(k)) return ctx.refKeys.get(k);
+  ctx.refCounts[kind] = (ctx.refCounts[kind] || 0) + 1;
+  const ref = REF_PREFIX[kind] + ctx.refCounts[kind];
+  ctx.refKeys.set(k, ref);
+  ctx.refs.set(ref, { kind, ...value });
+  return ref;
 }
 
-function requireLocality(ctx, id) {
-  if (!id || !ctx.localities.has(id)) {
-    throw toolError('locality_id is not a city from find_city. Call find_city and pass a locality_id it returned.');
-  }
+// A brand ref (b1) or a raw entity_id from search_brands, to the entity_id.
+function brandId(ctx, v) {
+  const hit = ctx.refs.get(v);
+  if (hit && hit.kind === 'brand') return hit.id;
+  return ctx.entities.has(v) ? v : null;
 }
 
-function requirePair(ctx, brandId, rivalId) {
-  requireBrand(ctx, brandId, 'brand_id');
-  requireBrand(ctx, rivalId, 'rival_id');
-  if (brandId === rivalId) throw toolError('brand_id and rival_id must be different brands.');
+function localityId(ctx, v) {
+  const hit = ctx.refs.get(v);
+  if (hit && hit.kind === 'locality') return hit.id;
+  return ctx.localities.has(v) ? v : null;
+}
+
+function entityName(ctx, v) {
+  const id = brandId(ctx, v);
+  return (id && ctx.entities.get(id)?.name) || v;
+}
+
+function localityName(ctx, v) {
+  const id = localityId(ctx, v);
+  return (id && ctx.localities.get(id)?.name) || v;
+}
+
+function requireBrand(ctx, v, field) {
+  const id = brandId(ctx, v);
+  if (!id) throw toolError(field + ' must be a brand ref (like b1) from search_brands.');
+  return id;
+}
+
+function requireLocality(ctx, v) {
+  const id = localityId(ctx, v);
+  if (!id) throw toolError('locality_id must be a city ref (like l1) from find_city.');
+  return id;
+}
+
+function requirePair(ctx, input) {
+  const b = requireBrand(ctx, input.brand_id, 'brand_id');
+  const r = requireBrand(ctx, input.rival_id, 'rival_id');
+  if (b === r) throw toolError('brand_id and rival_id must be different brands.');
+  return [b, r];
 }
 
 const entitiesOf = d => d?.results?.entities || [];
@@ -119,13 +164,13 @@ async function searchBrands(ctx, { query }) {
   const results = (d?.results || []).map(e => {
     const p = e.properties || {};
     ctx.entities.set(e.entity_id, { name: e.name, image: p.image?.url || null, type: 'brand' });
+    const desc = p.short_description || '';
     return {
-      entity_id: e.entity_id,
+      ref: makeRef(ctx, 'brand', e.entity_id, { id: e.entity_id }),
       name: e.name,
-      popularity: r3(e.popularity),
-      description: p.short_description || null,
-      parent_organization: p.parent_organization || null,
-      official_site: p.official_site || null,
+      popularity: pts(e.popularity),
+      description: desc.length > 140 ? desc.slice(0, 137) + '...' : desc || null,
+      parent: p.parent_organization || null,
     };
   });
   return {
@@ -142,10 +187,9 @@ async function findCity(ctx, { query }) {
   const results = (d?.results || []).map(e => {
     ctx.localities.set(e.entity_id, { name: e.name, disambiguation: e.disambiguation || e.name });
     return {
-      locality_id: e.entity_id,
+      ref: makeRef(ctx, 'locality', e.entity_id, { id: e.entity_id }),
       name: e.name,
       disambiguation: e.disambiguation || null,
-      popularity: r3(e.popularity),
     };
   });
   return {
@@ -156,28 +200,29 @@ async function findCity(ctx, { query }) {
 
 // ── audience_gap ──────────────────────────────────────────────────────────────
 
-async function audienceGap(ctx, { brand_id, rival_id, domain, locality_id }) {
-  requirePair(ctx, brand_id, rival_id);
+async function audienceGap(ctx, input) {
+  const [brand, rival] = requirePair(ctx, input);
+  const { domain } = input;
   const cfg = DOMAINS[domain];
   if (!cfg) throw toolError('domain must be one of: ' + Object.keys(DOMAINS).join(', ') + '.');
-  if (domain === 'place' && !locality_id) throw toolError('The place domain needs a locality_id from find_city.');
-  if (locality_id) requireLocality(ctx, locality_id);
-  const loc = locality_id ? { 'filter.location': locality_id } : {};
+  if (domain === 'place' && !input.locality_id) throw toolError('The place domain needs a locality_id from find_city.');
+  const locality = input.locality_id ? requireLocality(ctx, input.locality_id) : null;
+  const loc = locality ? { 'filter.location': locality } : {};
 
   // Ask for two extra so the brand and rival themselves can be dropped from
   // the brand domain without coming up short.
   const rivalTop = await qloo.insights(cfg.type, {
-    'signal.interests.entities': rival_id, take: GAP_TAKE + 2, ...loc,
+    'signal.interests.entities': rival, take: GAP_TAKE + 2, ...loc,
   });
-  const exclude = new Set([brand_id, rival_id]);
+  const exclude = new Set([brand, rival]);
   const top = entitiesOf(rivalTop).filter(e => !exclude.has(e.entity_id)).slice(0, GAP_TAKE);
   if (!top.length) {
-    return { result: { domain, items: [], note: 'Qloo returned no ' + cfg.label + ' for this rival.' }, summary: 'No results' };
+    return { result: { domain, rows: [], note: 'Qloo returned no ' + cfg.label + ' for this rival.' }, summary: 'No results' };
   }
 
   const ids = top.map(e => e.entity_id);
   const cross = await qloo.insights(cfg.type, {
-    'signal.interests.entities': brand_id, 'filter.results.entities': ids, take: ids.length, ...loc,
+    'signal.interests.entities': brand, 'filter.results.entities': ids, take: ids.length, ...loc,
   });
   const ours = new Map(entitiesOf(cross).map(e => [e.entity_id, e.query?.affinity]));
 
@@ -185,6 +230,7 @@ async function audienceGap(ctx, { brand_id, rival_id, domain, locality_id }) {
     const rivalAff = r3(e.query?.affinity);
     const ourAff = r3(ours.get(e.entity_id));
     const item = {
+      ref: makeRef(ctx, 'entity', rival + ':' + e.entity_id, { id: e.entity_id, rival_id: rival }),
       entity_id: e.entity_id,
       name: e.name,
       domain,
@@ -201,25 +247,31 @@ async function audienceGap(ctx, { brand_id, rival_id, domain, locality_id }) {
 
   // A later call for the same rival and domain (say, city-scoped) replaces the
   // earlier one, and both stay findable in the index for evidence lookup.
-  ctx.gaps[rival_id] = ctx.gaps[rival_id] || {};
-  ctx.gaps[rival_id][domain] = items;
-  for (const it of items) ctx.gapIndex.set(rival_id + ':' + it.entity_id, it);
+  ctx.gaps[rival] = ctx.gaps[rival] || {};
+  ctx.gaps[rival][domain] = items;
+  for (const it of items) ctx.gapIndex.set(rival + ':' + it.entity_id, it);
 
   const scored = items.filter(it => it.gap != null);
-  const mean = scored.length ? r3(scored.reduce((s, it) => s + it.gap, 0) / scored.length) : null;
-  const strong = scored.filter(it => it.gap >= 0.1).length;
+  const mean = scored.length ? scored.reduce((s, it) => s + it.gap, 0) / scored.length : null;
   const lead = scored[0];
+  const columns = ['ref', 'name', 'rival', 'ours', 'gap', 'tags'];
+  if (domain === 'place') columns.push('neighborhood');
 
   return {
     result: {
       domain,
-      city: locality_id ? localityName(ctx, locality_id) : null,
-      mean_gap: mean,
-      strong_gaps: strong,
-      items: items.map(({ image, domain: _d, ...rest }) => rest),
+      city: locality ? localityName(ctx, locality) : null,
+      mean_gap: pts(mean),
+      strong_gaps: scored.filter(it => it.gap >= STRONG_GAP).length,
+      columns,
+      rows: items.map(it => {
+        const row = [it.ref, it.name, pts(it.rival_affinity), pts(it.our_affinity), pts(it.gap), it.descriptors.join(', ')];
+        if (domain === 'place') row.push(it.neighborhood);
+        return row;
+      }),
     },
     summary: lead
-      ? 'Biggest gap: ' + lead.name + ' (' + lead.rival_affinity + ' vs ' + lead.our_affinity + '), mean gap ' + mean
+      ? 'Biggest gap: ' + lead.name + ' (' + pts(lead.rival_affinity) + ' vs ' + pts(lead.our_affinity) + '), mean gap ' + pts(mean) + ' points'
       : 'No overlap scored',
   };
 }
@@ -255,12 +307,12 @@ async function labelCell(cell, signalId) {
 
 const cellLabel = c => c.neighborhood || c.area || c.geohash;
 
-async function geoGap(ctx, { brand_id, rival_id, locality_id }) {
-  requirePair(ctx, brand_id, rival_id);
-  requireLocality(ctx, locality_id);
+async function geoGap(ctx, input) {
+  const [brand, rival] = requirePair(ctx, input);
+  const locality = requireLocality(ctx, input.locality_id);
 
-  const [mine, theirs] = await Promise.all([brand_id, rival_id].map(id =>
-    qloo.insights('urn:heatmap', { 'signal.interests.entities': id, 'filter.location': locality_id })));
+  const [mine, theirs] = await Promise.all([brand, rival].map(id =>
+    qloo.insights('urn:heatmap', { 'signal.interests.entities': id, 'filter.location': locality })));
   const ours = new Map((mine?.results?.heatmap || []).map(p => [p.location.geohash, p]));
 
   const cells = [];
@@ -289,50 +341,49 @@ async function geoGap(ctx, { brand_id, rival_id, locality_id }) {
   const hotspots = [...pool].sort((a, b) => b.gap - a.gap).slice(0, GEO_HOTSPOTS).map(c => ({ ...c }));
   const ourStrongest = [...pool].sort((a, b) => a.gap - b.gap).slice(0, GEO_OURS_TOP).map(c => ({ ...c }));
   await Promise.all([
-    ...hotspots.slice(0, GEO_LABELED).map(c => labelCell(c, rival_id)),
-    ...ourStrongest.map(c => labelCell(c, brand_id)),
+    ...hotspots.slice(0, GEO_LABELED).map(c => labelCell(c, rival)),
+    ...ourStrongest.map(c => labelCell(c, brand)),
   ]);
+  for (const c of [...hotspots, ...ourStrongest]) {
+    c.ref = makeRef(ctx, 'cell', rival + ':' + c.geohash, { geohash: c.geohash, rival_id: rival });
+  }
 
   const sortedGaps = cells.map(c => c.gap).sort((a, b) => a - b);
   const stats = {
     cells_compared: cells.length,
     median_gap: sortedGaps[Math.floor(sortedGaps.length / 2)],
-    share_rival_leads: r3(cells.filter(c => c.gap >= GEO_LEAD_THRESHOLD).length / cells.length),
-    share_we_lead: r3(cells.filter(c => c.gap <= -GEO_LEAD_THRESHOLD).length / cells.length),
+    share_rival_leads: r3(cells.filter(c => c.gap >= STRONG_GAP).length / cells.length),
+    share_we_lead: r3(cells.filter(c => c.gap <= -STRONG_GAP).length / cells.length),
   };
-  ctx.geo[rival_id] = {
-    locality: { locality_id, name: localityName(ctx, locality_id) },
+  ctx.geo[rival] = {
+    locality: { locality_id: locality, name: localityName(ctx, locality) },
     cells, hotspots, our_strongest: ourStrongest, stats,
   };
 
-  const forModel = c => ({
-    geohash: c.geohash,
-    neighborhood: c.neighborhood ?? null,
-    area: c.area ?? null,
-    top_places: c.top_places,
-    rival_affinity: c.rival_affinity,
-    our_affinity: c.our_affinity,
-    gap: c.gap,
-    popularity: c.popularity,
-  });
+  const row = c => [c.ref, c.neighborhood || null, c.area || null, (c.top_places || []).join(', '),
+    pts(c.rival_affinity), pts(c.our_affinity), pts(c.gap)];
   const top = hotspots[0];
   return {
     result: {
-      city: localityName(ctx, locality_id),
-      ...stats,
-      rival_hotspots: hotspots.map(forModel),
-      our_strongest: ourStrongest.map(forModel),
+      city: localityName(ctx, locality),
+      cells_compared: stats.cells_compared,
+      median_gap: pts(stats.median_gap),
+      rival_leads_pct: pts(stats.share_rival_leads),
+      we_lead_pct: pts(stats.share_we_lead),
+      columns: ['ref', 'neighborhood', 'area', 'top_places', 'rival', 'ours', 'gap'],
+      rival_hotspots: hotspots.map(row),
+      our_strongest: ourStrongest.map(row),
     },
-    summary: 'Rival leads in ' + Math.round(stats.share_rival_leads * 100) + '% of ' + cells.length
-      + ' cells; widest gap in ' + cellLabel(top) + ' (' + top.rival_affinity + ' vs ' + top.our_affinity + ')',
+    summary: 'Rival leads in ' + pts(stats.share_rival_leads) + '% of ' + cells.length
+      + ' cells; widest gap in ' + cellLabel(top) + ' (' + pts(top.rival_affinity) + ' vs ' + pts(top.our_affinity) + ')',
   };
 }
 
 // ── demographic_gap ───────────────────────────────────────────────────────────
 
-async function demographicGap(ctx, { brand_id, rival_id }) {
-  requirePair(ctx, brand_id, rival_id);
-  const [mine, theirs] = await Promise.all([brand_id, rival_id].map(id =>
+async function demographicGap(ctx, input) {
+  const [brand, rival] = requirePair(ctx, input);
+  const [mine, theirs] = await Promise.all([brand, rival].map(id =>
     qloo.insights('urn:demographics', { 'signal.interests.entities': id })));
   const o = mine?.results?.demographics?.[0]?.query;
   const r = theirs?.results?.demographics?.[0]?.query;
@@ -342,20 +393,26 @@ async function demographicGap(ctx, { brand_id, rival_id }) {
   const withGap = x => ({ ...x, gap: x.ours != null && x.rival != null ? r3(x.rival - x.ours) : null });
   const age = AGE_BUCKETS.map(b => withGap(row(b, q => q.age?.[b])));
   const gender = ['female', 'male'].map(g => withGap(row(g, q => q.gender?.[g])));
-  ctx.demographics[rival_id] = { age, gender };
+  ctx.demographics[rival] = { age, gender };
 
+  const asRow = x => [x.key, pts(x.ours), pts(x.rival), pts(x.gap)];
   const widest = [...age].sort((a, b) => Math.abs(b.gap ?? 0) - Math.abs(a.gap ?? 0))[0];
   return {
-    result: { scale: '-1 to 1, positive means over-indexed', age, gender },
-    summary: 'Widest age gap: ' + widest.key.replace(/_/g, ' ') + ' (' + widest.rival + ' vs ' + widest.ours + ')',
+    result: {
+      scale: '-100 to 100, positive means over-indexed',
+      columns: ['group', 'ours', 'rival', 'gap'],
+      age: age.map(asRow),
+      gender: gender.map(asRow),
+    },
+    summary: 'Widest age gap: ' + widest.key.replace(/_/g, ' ') + ' (' + pts(widest.rival) + ' vs ' + pts(widest.ours) + ')',
   };
 }
 
 // ── brand_positioning ─────────────────────────────────────────────────────────
 
-async function brandPositioning(ctx, { brand_id, rival_id }) {
-  requirePair(ctx, brand_id, rival_id);
-  const d = await qloo.compare(brand_id, rival_id);
+async function brandPositioning(ctx, input) {
+  const [brand, rival] = requirePair(ctx, input);
+  const d = await qloo.compare(brand, rival);
   const r = d?.results || {};
   // The same tag name comes back under several subtypes and cases ("Athletes"
   // three times for Nike vs Adidas), and a shared tag can repeat under a or b.
@@ -380,24 +437,28 @@ async function brandPositioning(ctx, { brand_id, rival_id }) {
     return out.slice(0, POSITIONING_ONLY_MAX);
   };
   const out = { shared: shared.slice(0, POSITIONING_SHARED_MAX), brand_only: only(r.a), rival_only: only(r.b) };
-  ctx.positioning[rival_id] = out;
+  ctx.positioning[rival] = out;
   return {
-    result: out,
-    summary: shared.length + ' shared tags, ' + out.brand_only.length + ' only ours, ' + out.rival_only.length + ' only theirs',
+    result: {
+      shared: out.shared.map(t => t.name + ' (' + pts(t.score) + ')'),
+      ours_only: out.brand_only.map(t => t.name),
+      rival_only: out.rival_only.map(t => t.name),
+    },
+    summary: out.shared.length + ' shared tags, ' + out.brand_only.length + ' only ours, ' + out.rival_only.length + ' only theirs',
   };
 }
 
 // ── Definitions ───────────────────────────────────────────────────────────────
 
 const BRAND_PAIR = {
-  brand_id: { type: 'string', description: "Our brand's entity_id from search_brands." },
-  rival_id: { type: 'string', description: "The rival's entity_id from search_brands." },
+  brand_id: { type: 'string', description: "Our brand's ref from search_brands, like b1." },
+  rival_id: { type: 'string', description: "The rival's ref from search_brands, like b2." },
 };
 
 const TOOL_DEFS = [
   {
     name: 'search_brands',
-    description: 'Resolve a brand name to Qloo brand entities. Returns up to 5 candidates with entity_id, name, popularity (0 to 1) and a short description. Call it for our brand and for every rival before using any other tool, and pick the candidate that matches what the user meant.',
+    description: 'Resolve a brand name to Qloo brands. Returns up to 5 candidates, each with a ref (like b1), name, popularity (0 to 100) and description. Call it for our brand and every rival first, pick the candidate the user meant, and pass its ref to the other tools.',
     input_schema: {
       type: 'object',
       properties: { query: { type: 'string', description: 'The brand name as the user wrote it.' } },
@@ -406,7 +467,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'find_city',
-    description: 'Resolve a city name to Qloo localities. Returns up to 5 candidates with locality_id, name and disambiguation. Names repeat across places (New York the state and New York the city), so read the disambiguation and pick the city itself.',
+    description: 'Resolve a city name to Qloo localities. Returns up to 5 candidates with a ref (like l1), name and disambiguation. Names repeat across places (New York the state and New York the city), so read the disambiguation and pick the city itself.',
     input_schema: {
       type: 'object',
       properties: { query: { type: 'string', description: 'The city as the user wrote it.' } },
@@ -415,37 +476,37 @@ const TOOL_DEFS = [
   },
   {
     name: 'audience_gap',
-    description: "Where the rival's audience is that ours is not, in one taste domain. Takes the rival audience's top " + GAP_TAKE + " entities in the domain and scores the same entities for our audience. Affinity runs 0 to 1; gap is rival affinity minus ours, so a large positive gap is rival-owned territory. Also returns mean_gap and strong_gaps (items with a gap of 0.10 or more) for comparing domains. Domains: artist (music), movie, tv_show, brand (other brands) and place (venues, needs locality_id). locality_id is optional for the other domains and scopes the audience to that city.",
+    description: "Where the rival's audience is that ours is not, in one taste domain. Scores the rival audience's top " + GAP_TAKE + " entities in the domain for both audiences. Rows are [ref, name, rival, ours, gap, tags]: affinity 0 to 100, gap = rival minus ours, so a large positive gap is rival-owned territory. Also returns mean_gap and strong_gaps (rows with a gap of 10 or more) for comparing domains. Domains: artist (music), movie, tv_show, brand (other brands), place (venues, needs locality_id). locality_id is optional elsewhere and scopes the audience to that city.",
     input_schema: {
       type: 'object',
       properties: {
         ...BRAND_PAIR,
         domain: { type: 'string', enum: Object.keys(DOMAINS) },
-        locality_id: { type: 'string', description: 'A locality_id from find_city. Required for place.' },
+        locality_id: { type: 'string', description: 'A city ref from find_city, like l2. Required for place.' },
       },
       required: ['brand_id', 'rival_id', 'domain'],
     },
   },
   {
     name: 'geo_gap',
-    description: "Where on the map the rival's audience outweighs ours in one city. Joins both brands' Qloo heatmaps cell by cell and returns the " + GEO_HOTSPOTS + ' cells with the widest rival lead (the first ' + GEO_LABELED + ' labelled with a neighborhood and top places), the ' + GEO_OURS_TOP + " cells where we lead most, and the share of cells each side leads. Cells are identified by geohash; cite them by geohash in the brief.",
+    description: "Where on the map the rival's audience outweighs ours in one city. Joins both brands' Qloo heatmaps cell by cell. Returns the " + GEO_HOTSPOTS + ' cells with the widest rival lead (the first ' + GEO_LABELED + ' labelled with a neighborhood, borough and top places), the ' + GEO_OURS_TOP + ' cells where we lead most, and the percentage of cells each side leads by 10 or more. Rows are [ref, neighborhood, area, top_places, rival, ours, gap] on a 0 to 100 scale.',
     input_schema: {
       type: 'object',
       properties: {
         ...BRAND_PAIR,
-        locality_id: { type: 'string', description: 'A locality_id from find_city.' },
+        locality_id: { type: 'string', description: 'A city ref from find_city, like l2.' },
       },
       required: ['brand_id', 'rival_id', 'locality_id'],
     },
   },
   {
     name: 'demographic_gap',
-    description: "Age and gender mix of our audience against the rival's. Scores run -1 to 1, where positive means over-indexed. Age buckets: 24_and_younger, 25_to_29, 30_to_34, 35_to_44, 45_to_54, 55_and_older.",
+    description: "Age and gender mix of our audience against the rival's. Rows are [group, ours, rival, gap] on a -100 to 100 scale, where positive means over-indexed.",
     input_schema: { type: 'object', properties: BRAND_PAIR, required: ['brand_id', 'rival_id'] },
   },
   {
     name: 'brand_positioning',
-    description: "How Qloo tags the two brands themselves: tags they share (with a similarity score) and tags only one side carries. This describes the brands, not their audiences, so use it for positioning only.",
+    description: 'How Qloo tags the two brands themselves: tags they share (with a similarity score) and tags only one side carries. This describes the brands, not their audiences, so use it for positioning only.',
     input_schema: { type: 'object', properties: BRAND_PAIR, required: ['brand_id', 'rival_id'] },
   },
 ];
@@ -492,5 +553,5 @@ async function executeTool(ctx, name, input) {
 }
 
 module.exports = {
-  TOOL_DEFS, DOMAINS, createContext, executeTool, describeCall, entityName,
+  TOOL_DEFS, DOMAINS, createContext, executeTool, describeCall, entityName, brandId, localityId,
 };
