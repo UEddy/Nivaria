@@ -28,6 +28,7 @@ const Taste = (() => {
   const signed = n => (n == null ? 'n/a' : (n > 0 ? '+' : '') + n);
   const secs = ms => (ms == null ? '' : (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + 's');
   const num = n => (n == null ? 'n/a' : String(n));
+  const capFirst = s => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
 
   const DOMAIN_LABEL = { artist: 'Music', movie: 'Film', tv_show: 'TV', place: 'Places', brand: 'Other brands' };
   const AGE_LABEL = {
@@ -371,7 +372,9 @@ const Taste = (() => {
           <div>
             <div class="bc-comp-name">${brandLine(run)}</div>
             <div class="taste-sub">
-              ${run.example_key ? '<span class="badge badge-accent">Example</span> ' : ''}${run.city ? 'In ' + esc(run.city) : 'No city, so no places or map'}
+              ${run.example_key
+                ? '<span class="badge badge-accent">Example</span> · ' + (run.city ? esc(run.city) : 'No city, so no places or map')
+                : (run.city ? 'In ' + esc(run.city) : 'No city, so no places or map')}
             </div>
           </div>
         </div>
@@ -551,7 +554,7 @@ const Taste = (() => {
                 <div class="taste-win-title">${esc(w.segment)}</div>
                 <div>${esc(w.why)}</div>
                 <div class="taste-win-hook"><strong>Campaign hook:</strong> ${esc(w.campaign_hook)}</div>
-                ${(w.channels || []).length ? `<div class="bc-pattern-tags">${w.channels.map(c => `<span class="pattern-tag">${esc(c)}</span>`).join('')}</div>` : ''}
+                ${(w.channels || []).length ? `<div class="bc-pattern-tags">${w.channels.map(c => `<span class="pattern-tag taste-channel">${esc(capFirst(c))}</span>`).join('')}</div>` : ''}
               </div>
             </li>`).join('')}
         </ol>
@@ -673,6 +676,26 @@ const Taste = (() => {
     return c.label || c.neighborhood || c.area || 'This area';
   }
 
+  // The numbered hotspots for one rival: the brief's own, or else geo_gap's
+  // top cells from the run data (labelled ones first). Runs stored before the
+  // data carried hotspots fall back to the busiest cells with the widest
+  // rival lead, picked the way geo_gap picks them.
+  function hotspotsFor(run, rivalId) {
+    const own = (run.brief.geo_hotspots || []).filter(h => !h.rival_id || h.rival_id === rivalId);
+    if (own.length) return own;
+    const g = run.data.geo[rivalId];
+    let cells = g.hotspots || [];
+    if (!cells.length) {
+      const busy = g.cells.filter(c => (c.popularity || 0) >= 0.4);
+      cells = [...(busy.length >= 12 ? busy : g.cells)].sort((a, b) => b.gap - a.gap);
+    }
+    const rival = rivalName(run.brief, rivalId);
+    const ours = run.brief.brand?.name || run.brand;
+    return [...cells.filter(c => c.label), ...cells.filter(c => !c.label)].slice(0, 5).map(c => ({
+      ...c, note: rival + ' scores ' + num(pts(c.rival_affinity)) + ' here and ' + ours + ' scores ' + num(pts(c.our_affinity)) + '.',
+    }));
+  }
+
   function paintMap(run) {
     const el = document.getElementById('taste-map');
     const side = document.getElementById('taste-geo-side');
@@ -706,8 +729,8 @@ const Taste = (() => {
       ).addTo(map);
     }
 
-    // The brief's hotspots for this rival, numbered on the map and listed beside it.
-    const spots = brief.geo_hotspots.filter(h => !h.rival_id || h.rival_id === geoRival);
+    // This rival's hotspots, numbered on the map and listed beside it.
+    const spots = hotspotsFor(run, geoRival);
     spots.forEach((h, i) => {
       if (h.lat == null || h.lng == null) return;
       L.marker([h.lat, h.lng], {

@@ -324,10 +324,11 @@ const App = {
   applyProductMode() {
     App.productMode = App.user?.product_mode === 'taste' ? 'taste' : 'monitor';
     document.body.dataset.mode = App.productMode;
-    if (App.productMode === 'taste') {
-      const sub = document.querySelector('.logo-sub');
-      if (sub) sub.textContent = 'Taste Gap';
-    }
+    // The shell starts with these blank, so neither mode flashes the other's text.
+    const taste = App.productMode === 'taste';
+    document.title = taste ? 'Nivaria: Taste Gap' : 'Nivaria: Dashboard';
+    const sub = document.querySelector('.logo-sub');
+    if (sub) sub.textContent = taste ? 'Taste Gap' : 'Intelligence Platform';
   },
 
   updateUserUI() {

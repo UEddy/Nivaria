@@ -4101,6 +4101,8 @@ body[data-mode="taste"] [data-surface="monitor"] { display: none; }
 .taste-legend-ends { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--txt-3); margin-top: 5px; }
 .taste-geo-stats { display: flex; flex-direction: column; gap: 4px; }
 .taste-geo-stats strong { color: var(--txt); }
+/* Channel tags keep the model's sentence case (pattern-tag lowercases). */
+.pattern-tag.taste-channel { text-transform: none; }
 .taste-spots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .taste-spots li { display: flex; gap: 8px; align-items: flex-start; line-height: 1.5; }
 .taste-spots strong { color: var(--txt); }

@@ -71,9 +71,10 @@ Reading the data:
 Rules:
 - Every claim must rest on numbers from a tool result. Never invent statistics, audience sizes, revenue or trends. In evidence fields, cite rows by their ref (e3 for an entity, c2 for a map cell); the server attaches the scores. Only quote a number in prose if a tool returned it.
 - Refs (b1, l1, e3, c2) belong only in id and evidence fields. In prose, use the names.
-- Describe audiences by their tastes, places, and age and gender scores. Never infer or name race, ethnicity, religion, nationality or other protected traits, even when venues or neighborhoods seem to suggest one.
+- Describe audiences only by what the tools returned: their tastes, places, and age and gender scores. Never describe income, wealth, price sensitivity, spending habits, budgets, education, occupation or any other trait no tool returned. Never infer or name race, ethnicity, religion, nationality or other protected traits, even when venues or neighborhoods seem to suggest one.
 - Campaign hooks must come from the actual entities (a show, an artist, a venue, a neighborhood). Channels must be concrete, such as a creator partnership with a named show's audience or a pop-up in a named neighborhood.
-- Never use alcohol or hangovers as the angle of a campaign hook or channel: no bar or pub co-promotions, drinking occasions, game-day drinks, or morning-after framing. When the rival leads in bars or pubs, build the hook on that neighborhood or on the audience's other tastes.
+- Build campaign hooks and channels on coffee, food, music, film, TV, retail and neighborhoods. Bars, pubs, drinking and hangovers have no place in them. When the rival leads in bars or pubs, use that neighborhood or the audience's other tastes instead.
+- These rules shape what you write and are never part of it: do not mention them, and do not annotate a hook or channel with what it leaves out.
 - The headline states the finding and the move: the rival's strongest segment or neighborhood and what to win first. Never a generic title such as "Taste Gap Brief: Starbucks vs Dunkin'".
 - Never use em-dashes, en-dashes, or "+" as a connector between words or phrases. Write "and" instead, and use commas, periods, colons or parentheses.
 - Keep text tight: a headline under 110 characters, a summary of two or three sentences, and one or two sentences per insight.`;
@@ -200,17 +201,95 @@ function resolveCitation(ctx, ref, rivalId) {
 // Turn submit_brief input into the stored brief: sanitize the prose, then swap
 // every citation for the Qloo numbers behind it. Anything that does not
 // resolve is dropped and noted in warnings.
-// A ref that leaked into prose despite the prompt, e.g. "Closest taste gap
-// (e31)": drop parenthesised ref lists and bare refs, keep the sentence.
+//
+// Prose clean-up, for what slips past the prompt:
+// - A ref in prose, e.g. "Closest taste gap (e31)": drop parenthesised ref
+//   lists and bare refs, keep the sentence.
+// - A rule echoed back as an aside, e.g. a channel "Creator partnerships (no
+//   alcohol angle)": drop a bracketed aside that opens like an instruction
+//   ("no", "avoid", "without") or names a rule topic, and drop a channel that
+//   is nothing but such an instruction.
+// - A raw data key, e.g. "35_to_44" or "tv_show": written out in words.
 const REF_IN_PROSE = /\s*\((?:\s*[becl]\d{1,3}\s*,?)+\)|\b[becl]\d{1,3}\b/g;
-const stripRefs = s => (typeof s === 'string' ? s.replace(REF_IN_PROSE, '').replace(/\s{2,}/g, ' ').trim() : s);
+const RULE_START = /^\s*(no|not|never|avoid\w*|without|excluding|non)\b/i;
+const RULE_TOPIC = /\b(alcohol\w*|hangovers?|drinking|angle|rules?|instructions?|guidelines?|prompt|compliant)\b/i;
+const ASIDE = /\s*[([]([^()[\]]*)[)\]]/g;
 
-function stripRefsFromProse(b) {
+const isRuleEcho = s => RULE_START.test(s) || RULE_TOPIC.test(s);
+
+function humanizeKeys(s) {
+  return s
+    .replace(/\b(\d+)_to_(\d+)\b/g, '$1 to $2')
+    .replace(/\b(\d+)_and_(younger|older)\b/g, '$1 and $2')
+    .replace(/\btv_shows?\b/gi, 'TV')
+    .replace(/\b[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+\b/g, m => m.replace(/_/g, ' '));
+}
+
+function cleanProse(s) {
+  if (typeof s !== 'string') return s;
+  return humanizeKeys(s.replace(REF_IN_PROSE, '').replace(ASIDE, (m, inner) => (isRuleEcho(inner) ? '' : m)))
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+// Channel tags in sentence case: the first letter capitalized, and a tag the
+// model wrote in Title Case ("Out of Home Billboards") lowered word by word,
+// except names Qloo returned in this run (Staten Island, Florida Georgia Line),
+// platform names, and words with capitals inside them (TV, TikTok).
+const SMALL_WORDS = new Set(['a', 'an', 'and', 'at', 'by', 'for', 'in', 'of', 'on', 'or', 'the', 'to', 'with']);
+const PLATFORMS = new Set(['Instagram', 'Spotify', 'Pandora', 'Snapchat', 'Pinterest', 'Reddit', 'Twitch', 'Facebook', 'Hulu', 'Netflix', 'Google', 'Apple', 'Amazon', 'Discord', 'Uber', 'Yelp']);
+
+function sentenceCase(tag, names) {
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const words = tag.split(' ');
+  const big = words.filter(w => /^[a-z]/i.test(w) && !SMALL_WORDS.has(w.toLowerCase()));
+  if (words.length < 2 || big.length < 2 || !big.every(w => /^[A-Z]/.test(w))) return cap(tag);
+  // Character spans covered by a whole known name, matched as a phrase.
+  const spans = [];
+  for (const n of names) {
+    for (let i = tag.indexOf(n); i !== -1; i = tag.indexOf(n, i + n.length)) spans.push([i, i + n.length]);
+  }
+  let pos = 0;
+  return cap(words.map((w, i) => {
+    const at = tag.indexOf(w, pos);
+    pos = at + w.length;
+    const inName = spans.some(([a, z]) => at >= a && pos <= z);
+    return i === 0 || inName || PLATFORMS.has(w) || /[A-Z]/.test(w.slice(1)) ? w : w.toLowerCase();
+  }).join(' '));
+}
+
+// Every name this run saw (brands, entities, places, cities, map labels), for
+// sentenceCase to leave as written.
+function knownNames(ctx) {
+  const names = new Set();
+  const add = n => { if (typeof n === 'string' && n.trim().length > 1) names.add(n.trim()); };
+  for (const e of ctx.entities.values()) add(e.name);
+  for (const l of ctx.localities.values()) add(l.name);
+  for (const domains of Object.values(ctx.gaps)) {
+    for (const items of Object.values(domains)) for (const it of items) { add(it.name); add(it.neighborhood); }
+  }
+  for (const g of Object.values(ctx.geo)) {
+    for (const c of [...g.hotspots, ...g.our_strongest]) {
+      add(c.neighborhood); add(c.area);
+      for (const p of c.top_places || []) add(p);
+    }
+  }
+  return [...names];
+}
+
+function cleanBriefProse(b, ctx) {
+  const names = knownNames(ctx);
   const prose = obj => {
     for (const k of ['headline', 'summary', 'segment', 'insight', 'why', 'campaign_hook', 'label', 'note']) {
-      if (typeof obj[k] === 'string') obj[k] = stripRefs(obj[k]);
+      if (typeof obj[k] === 'string') obj[k] = cleanProse(obj[k]);
     }
-    if (Array.isArray(obj.channels)) obj.channels = obj.channels.map(stripRefs);
+    if (Array.isArray(obj.channels)) {
+      obj.channels = obj.channels
+        .map(cleanProse)
+        .filter(c => typeof c === 'string' && c && !(RULE_START.test(c) && RULE_TOPIC.test(c)))
+        .map(c => sentenceCase(c, names));
+    }
   };
   prose(b);
   for (const k of ['rival_owned_segments', 'win_first', 'geo_hotspots', 'demographic_gap', 'positioning']) {
@@ -219,8 +298,25 @@ function stripRefsFromProse(b) {
   return b;
 }
 
+// When the model cites no hotspot for a rival whose city was mapped, the
+// brief still lists the cells where that rival leads most, straight from
+// geo_gap: labelled cells first, then by gap.
+const FALLBACK_HOTSPOTS = 5;
+
+function serverHotspots(ctx, rivalId, brandId) {
+  const g = ctx.geo[rivalId];
+  if (!g) return [];
+  const rival = tools.entityName(ctx, rivalId);
+  const ours = brandId ? tools.entityName(ctx, brandId) : 'we';
+  const pick = [...g.hotspots.filter(c => c.label), ...g.hotspots.filter(c => !c.label)].slice(0, FALLBACK_HOTSPOTS);
+  return pick.map(c => ({
+    kind: 'cell', rival_id: rivalId, ...c,
+    note: sanitizeCopy(rival + ' scores ' + Math.round(c.rival_affinity * 100) + ' here and ' + ours + ' scores ' + Math.round(c.our_affinity * 100) + '.'),
+  }));
+}
+
 function assembleBrief(raw, ctx, warnings) {
-  const b = stripRefsFromProse(sanitizeCopyDeep(raw));
+  const b = cleanBriefProse(sanitizeCopyDeep(raw), ctx);
   const brandId = tools.brandId(ctx, b.brand_id);
   const rivalIds = (b.rival_ids || []).map(r => tools.brandId(ctx, r)).filter(Boolean);
   const brandRef = id => ({ entity_id: id, name: tools.entityName(ctx, id), image: ctx.entities.get(id)?.image || null });
@@ -254,6 +350,12 @@ function assembleBrief(raw, ctx, warnings) {
     // The cell's own "neighborhood, borough" label wins over the model's wording.
     hotspots.push({ ...hit, label: hit.label || h.label, note: h.note });
   }
+  for (const rivalId of Object.keys(ctx.geo)) {
+    if (hotspots.some(h => h.rival_id === rivalId)) continue;
+    const filled = serverHotspots(ctx, rivalId, brandId);
+    if (filled.length) warnings.push('The brief named no hotspots for ' + tools.entityName(ctx, rivalId) + ', so the top geo_gap cells are listed');
+    hotspots.push(...filled);
+  }
 
   const perRival = (arr, source) => (arr || [])
     .map(x => ({ ...x, rival_id: tools.brandId(ctx, x.rival_id) }))
@@ -278,7 +380,9 @@ function assembleBrief(raw, ctx, warnings) {
 function chartData(ctx) {
   const geo = {};
   for (const [rid, g] of Object.entries(ctx.geo)) {
-    geo[rid] = { locality: g.locality, stats: g.stats, cells: g.cells };
+    // hotspots: geo_gap's labelled cells where the rival leads most, so the UI
+    // can number them even when a brief lists none.
+    geo[rid] = { locality: g.locality, stats: g.stats, cells: g.cells, hotspots: g.hotspots };
   }
   return { gaps: ctx.gaps, geo, demographics: ctx.demographics, positioning: ctx.positioning };
 }
@@ -551,4 +655,4 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
   };
 }
 
-module.exports = { runTasteAgent, cleanInput, userPrompt, SYSTEM_PROMPT };
+module.exports = { runTasteAgent, cleanInput, userPrompt, assembleBrief, SYSTEM_PROMPT };
