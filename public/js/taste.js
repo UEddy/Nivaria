@@ -463,7 +463,7 @@ const Taste = (() => {
         ${traceSection(run, false)}
         ${footer(run)}`;
     } else {
-      body = (viewCached ? cachedBanner(run) : '<div id="taste-run-notice"></div>') + results(run) + traceSection(run, false) + footer(run);
+      body = (viewCached ? cachedBanner(run) : '<div id="taste-run-notice"></div>') + results(run) + footer(run);
     }
     root().innerHTML = `<div class="bc-wrap taste-wrap">${header(run)}${body}</div>`;
     if (run.status === 'done') afterResults(run);
@@ -498,11 +498,13 @@ const Taste = (() => {
     const icon = s.kind === 'switch' ? ICON.swap : s.kind === 'note' ? ICON.note
       : s.status === 'running' ? ICON.spin : s.status === 'error' ? ICON.err : ICON.ok;
     const cls = 'taste-step taste-step--' + (s.kind === 'tool' ? s.status : s.kind);
+    // The model's own narration between calls reads as a quote.
+    const label = s.kind === 'note' ? '"' + s.label + '"' : s.label;
     return `
       <li class="${cls}">
         <span class="taste-step-icon">${icon}</span>
         <span class="taste-step-main">
-          <span class="taste-step-label">${esc(s.label)}</span>
+          <span class="taste-step-label">${esc(label)}</span>
           ${stepSummary(s) ? `<span class="taste-step-sum">${esc(stepSummary(s))}</span>` : ''}
         </span>
         <span class="taste-step-time">${s.status === 'running' ? '' : secs(s.ms)}</span>
@@ -523,15 +525,89 @@ const Taste = (() => {
     return shown.map(traceItem).join('');
   }
 
+  // The model that wrote the brief: from the brief's provenance, else (older
+  // runs) the last model the run used.
+  function writerOf(run) {
+    const w = run.brief?.provenance?.written_by;
+    if (w) return w.label + ' · ' + w.model;
+    const last = (run.providers || [])[(run.providers || []).length - 1];
+    return last ? capFirst(last.provider) + ' · ' + last.model : '';
+  }
+
   function traceSection(run, open) {
     const list = (run.steps || []).filter(Boolean);
     if (!list.length) return '';
-    const tools = list.filter(s => s.kind === 'tool').length;
+    const tools = list.filter(s => s.kind === 'tool' && s.tool !== 'submit_brief').length;
+    const p = run.brief?.provenance;
+    const facts = [
+      tools + ' tool call' + (tools === 1 ? '' : 's'),
+      p?.qloo_calls ? p.qloo_calls + ' Qloo requests' : '',
+      run.turns ? run.turns + ' model turn' + (run.turns === 1 ? '' : 's') : '',
+      run.duration_ms ? secs(run.duration_ms) : '',
+    ].filter(Boolean).join(', ');
+    const writer = writerOf(run);
     return `
-      <details class="bc-section taste-trace-wrap" ${open ? 'open' : ''}>
-        <summary class="bc-section-label taste-summary">Agent trace: ${tools} tool calls${run.duration_ms ? ' in ' + secs(run.duration_ms) : ''}</summary>
+      <details class="bc-section taste-trace-wrap" id="taste-trace-section" ${open ? 'open' : ''}>
+        <summary class="taste-trace-head">
+          <span class="bc-section-label">How the agent built this brief</span>
+          <span class="taste-hint">${esc(facts)}${writer ? ' · written by ' + esc(writer) : ''}</span>
+        </summary>
         <ol class="taste-trace">${list.map(traceItem).join('')}</ol>
       </details>`;
+  }
+
+  // ── Provenance ──────────────────────────────────────────────────────────────
+  // Every score in a brief is attached by the server from this run's Qloo
+  // results, never written by the model, and a citation that cannot be found
+  // there is dropped. The note says so, with the counts, and the row under it
+  // names the Qloo endpoints that fed the brief.
+
+  // Older briefs carry no provenance: count their cited items here.
+  function countDataPoints(b) {
+    const keys = new Set();
+    const add = e => keys.add(e.kind === 'cell' ? 'c' + e.geohash : 'e' + e.entity_id);
+    for (const x of [...(b.rival_owned_segments || []), ...(b.win_first || [])]) (x.evidence || []).forEach(add);
+    for (const h of b.geo_hotspots || []) add({ ...h, kind: 'cell' });
+    return keys.size;
+  }
+
+  function proofBlock(run) {
+    const b = run.brief;
+    const p = b.provenance || {};
+    const points = p.data_points ?? countDataPoints(b);
+    const dropped = typeof p.dropped === 'number' ? p.dropped : null;
+    const count = points + ' Qloo data point' + (points === 1 ? '' : 's') + (dropped == null ? '' : ', ' + dropped + ' dropped');
+    const endpoints = p.endpoints || [];
+    const writer = readOnly ? (p.written_by ? p.written_by.label + ' · ' + p.written_by.model : '') : writerOf(run);
+    return `
+      <div class="bc-section taste-proof">
+        <details class="taste-proof-note">
+          <summary>
+            <span class="taste-proof-check">${ICON.ok}</span>
+            <span class="taste-proof-claim">Every number in this brief comes from Qloo. <span class="taste-proof-how">How we check</span></span>
+            <span class="taste-proof-count">${esc(count)}</span>
+          </summary>
+          <ol class="taste-proof-steps">
+            <li>The agent never writes a score. It cites the Qloo entities and map cells it used, by reference.</li>
+            <li>The server looks each citation up in this run's Qloo results and attaches Qloo's actual numbers.</li>
+            <li>A citation it cannot find there is removed before the brief is saved${dropped == null ? '' : dropped === 0 ? ': none this time' : ': ' + dropped + ' this time'}.</li>
+          </ol>
+        </details>
+        ${endpoints.length || writer ? `
+          <div class="taste-endpoints">
+            ${endpoints.length ? `<span class="taste-endpoints-label">Qloo endpoints used</span>
+              ${endpoints.map(e => `<span class="taste-endpoint" title="${esc(e.path)}">${esc(e.label)} <span class="taste-endpoint-n">${esc(String(e.calls))}</span></span>`).join('')}` : ''}
+            ${writer ? `<span class="taste-writer">Written by ${esc(writer)}${readOnly ? '' : ' · <a href="#taste-trace-section" onclick="Taste.openTrace(event)">Agent trace</a>'}</span>` : ''}
+          </div>` : ''}
+      </div>`;
+  }
+
+  function openTrace(e) {
+    e.preventDefault();
+    const t = document.getElementById('taste-trace-section');
+    if (!t) return;
+    t.open = true;
+    t.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function openStream(id, initial) {
@@ -613,6 +689,7 @@ const Taste = (() => {
         </div>`}
       </div>
       ${readOnly ? '' : '<div id="taste-share-panel"></div>'}
+      ${proofBlock(run)}
 
       <div class="bc-section bc-summary">
         <div class="bc-section-label">Executive summary</div>
@@ -634,6 +711,8 @@ const Taste = (() => {
             </li>`).join('')}
         </ol>
       </div>
+
+      ${readOnly ? '' : traceSection(run, true)}
 
       <div class="taste-section-title">Taste segments the rival owns</div>
       <div class="bc-grid">
@@ -1113,6 +1192,6 @@ const Taste = (() => {
     return id ? renderRun(id, { cached: query?.get('cached') === '1' }) : renderForm();
   }
 
-  return { render, renderRuns, renderShared, rerun, copy, showGeo, markFallback, share, revokeShare, copyShare, send, sendWithWebhook };
+  return { render, renderRuns, renderShared, rerun, copy, showGeo, markFallback, share, revokeShare, copyShare, send, sendWithWebhook, openTrace };
 })();
 window.Taste = Taste;

@@ -157,6 +157,19 @@ function rawBrief({ brand, rival, artist }, extra = {}) {
   check('no em or en dash in the warnings or the rebuilt headline', !/[\u2013\u2014]/.test(parts.join(' ') + p.headline));
   console.warn = origWarn;
 
+  console.log('provenance');
+  const clean = assembleBrief(rawBrief(run), run.ctx, []);
+  check('the brief counts the Qloo data points it cites', clean.provenance.data_points === 1 + clean.geo_hotspots.length && clean.provenance.dropped === 0,
+    JSON.stringify(clean.provenance));
+  const invented = assembleBrief(rawBrief(run, {
+    win_first: [{ rank: 1, segment: 'Indie pop listeners', why: 'x', campaign_hook: 'y', channels: [], evidence: [run.artist[0], 'e999', 'c999'] }],
+    geo_hotspots: [{ ref: 'c998', label: 'x', note: 'y' }],
+  }), run.ctx, []);
+  check('citations the model invented are dropped and counted', invented.provenance.dropped === 3
+    && invented.win_first[0].evidence.length === 1, JSON.stringify(invented.provenance));
+  check('each Qloo endpoint the run called is counted', run.ctx.calls.search === 3 && run.ctx.calls.insights >= 1
+    && run.ctx.calls.cross_scoring === 1 && run.ctx.calls.heatmap === 2, JSON.stringify(run.ctx.calls));
+
   console.log('\n' + passed + ' passed, ' + failed + ' failed');
   process.exit(failed ? 1 : 0);
 })().catch(err => { console.error(err); process.exit(1); });

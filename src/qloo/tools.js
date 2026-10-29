@@ -87,7 +87,29 @@ function createContext() {
     refs: new Map(),         // ref -> { kind, id, rival_id?, geohash? }
     refKeys: new Map(),      // kind + ':' + key -> ref, so one thing keeps one ref
     refCounts: {},
+    calls: {},               // Qloo endpoint key -> requests made, for the brief's provenance
   };
+}
+
+// The Qloo endpoints the tools call, in the order a run reaches them, for the
+// brief's "Qloo endpoints used" row. Cross-scoring is /v2/insights with
+// filter.results.entities: the rival audience's top entities, scored for ours.
+const ENDPOINTS = [
+  { key: 'search', label: 'Search', path: '/search' },
+  { key: 'insights', label: 'Insights', path: '/v2/insights' },
+  { key: 'cross_scoring', label: 'Cross-scoring', path: '/v2/insights with filter.results.entities' },
+  { key: 'heatmap', label: 'Heatmap', path: '/v2/insights, filter.type urn:heatmap' },
+  { key: 'demographics', label: 'Demographics', path: '/v2/insights, filter.type urn:demographics' },
+  { key: 'compare', label: 'Compare', path: '/v2/analysis/compare' },
+];
+
+function counted(ctx, key, n = 1) {
+  ctx.calls[key] = (ctx.calls[key] || 0) + n;
+}
+
+// The endpoints this run called, each with its request count.
+function endpointsUsed(ctx) {
+  return ENDPOINTS.filter(e => ctx.calls[e.key]).map(e => ({ ...e, calls: ctx.calls[e.key] }));
 }
 
 const REF_PREFIX = { brand: 'b', locality: 'l', entity: 'e', cell: 'c' };
@@ -164,6 +186,7 @@ function descriptors(e) {
 
 async function searchBrands(ctx, { query }) {
   if (!query || typeof query !== 'string') throw toolError('query is required.');
+  counted(ctx, 'search');
   const d = await qloo.search(query.trim(), { types: 'urn:entity:brand', take: 5 });
   const results = (d?.results || []).map(e => {
     const p = e.properties || {};
@@ -233,6 +256,7 @@ function insideBoundary(rings, lat, lng) {
 
 async function findCity(ctx, { query }) {
   if (!query || typeof query !== 'string') throw toolError('query is required.');
+  counted(ctx, 'search');
   const d = await qloo.search(query.trim(), { types: 'urn:entity:locality', take: 5 });
   const { city, passedOver } = pickCity(d?.results || []);
   if (!city) return { result: { query, city: null, note: 'Qloo found no city by that name.' }, summary: 'No cities matched' };
@@ -273,6 +297,7 @@ async function audienceGap(ctx, input) {
   // outline from find_city are dropped, so the place domain asks for spares.
   // Two extra cover the brand and rival themselves in the brand domain.
   const boundary = domain === 'place' ? ctx.localities.get(locality)?.boundary : null;
+  counted(ctx, 'insights');
   const rivalTop = await qloo.insights(cfg.type, {
     'signal.interests.entities': rival, take: GAP_TAKE + (boundary ? PLACE_SPARES : 2), ...loc,
   });
@@ -285,6 +310,7 @@ async function audienceGap(ctx, input) {
   }
 
   const ids = top.map(e => e.entity_id);
+  counted(ctx, 'cross_scoring');
   const cross = await qloo.insights(cfg.type, {
     'signal.interests.entities': brand, 'filter.results.entities': ids, take: ids.length, ...loc,
   });
@@ -374,7 +400,8 @@ function placeLabel(neighborhood, area) {
   return neighborhood || area || null;
 }
 
-async function labelCell(cell, signalId) {
+async function labelCell(ctx, cell, signalId) {
+  counted(ctx, 'insights');
   try {
     const d = await qloo.insights('urn:entity:place', {
       'signal.interests.entities': signalId, 'filter.location.geohash': cell.geohash, take: 3,
@@ -398,6 +425,7 @@ async function geoGap(ctx, input) {
   const [brand, rival] = requirePair(ctx, input);
   const locality = requireLocality(ctx, input.locality_id);
 
+  counted(ctx, 'heatmap', 2);
   const [mine, theirs] = await Promise.all([brand, rival].map(id =>
     qloo.insights('urn:heatmap', { 'signal.interests.entities': id, 'filter.location': locality })));
   const ours = new Map((mine?.results?.heatmap || []).map(p => [p.location.geohash, p]));
@@ -428,8 +456,8 @@ async function geoGap(ctx, input) {
   const hotspots = [...pool].sort((a, b) => b.gap - a.gap).slice(0, GEO_HOTSPOTS).map(c => ({ ...c }));
   const ourStrongest = [...pool].sort((a, b) => a.gap - b.gap).slice(0, GEO_OURS_TOP).map(c => ({ ...c }));
   await Promise.all([
-    ...hotspots.slice(0, GEO_LABELED).map(c => labelCell(c, rival)),
-    ...ourStrongest.map(c => labelCell(c, brand)),
+    ...hotspots.slice(0, GEO_LABELED).map(c => labelCell(ctx, c, rival)),
+    ...ourStrongest.map(c => labelCell(ctx, c, brand)),
   ]);
   for (const c of [...hotspots, ...ourStrongest]) {
     c.ref = makeRef(ctx, 'cell', rival + ':' + c.geohash, { geohash: c.geohash, rival_id: rival });
@@ -470,6 +498,7 @@ async function geoGap(ctx, input) {
 
 async function demographicGap(ctx, input) {
   const [brand, rival] = requirePair(ctx, input);
+  counted(ctx, 'demographics', 2);
   const [mine, theirs] = await Promise.all([brand, rival].map(id =>
     qloo.insights('urn:demographics', { 'signal.interests.entities': id })));
   const o = mine?.results?.demographics?.[0]?.query;
@@ -499,6 +528,7 @@ async function demographicGap(ctx, input) {
 
 async function brandPositioning(ctx, input) {
   const [brand, rival] = requirePair(ctx, input);
+  counted(ctx, 'compare');
   const d = await qloo.compare(brand, rival);
   const r = d?.results || {};
   // The same tag name comes back under several subtypes and cases ("Athletes"
@@ -607,21 +637,24 @@ const EXECUTORS = {
   brand_positioning: brandPositioning,
 };
 
-// One line for the live trace, written before the call runs.
+// One sentence for the trace, written before the call runs, naming the Qloo
+// endpoint the tool calls.
+const DOMAIN_PLURAL = { artist: 'artists', movie: 'films', tv_show: 'TV shows', place: 'places', brand: 'brands' };
+
 function describeCall(ctx, name, input = {}) {
   const brand = entityName(ctx, input.brand_id);
   const rival = entityName(ctx, input.rival_id);
   const city = input.locality_id ? localityName(ctx, input.locality_id) : null;
   switch (name) {
-    case 'search_brands': return 'Looking up "' + input.query + '" in Qloo';
-    case 'find_city': return 'Finding the city "' + input.query + '"';
+    case 'search_brands': return 'Looking up the brand "' + input.query + '" with Qloo search';
+    case 'find_city': return 'Finding the city "' + input.query + '" with Qloo search';
     case 'audience_gap': {
-      const label = DOMAINS[input.domain]?.label || input.domain;
-      return 'Comparing ' + brand + ' and ' + rival + ' audiences in ' + label + (city ? ' in ' + city : '');
+      const what = DOMAIN_PLURAL[input.domain] || input.domain;
+      return 'Pulling the top ' + what + ' for ' + rival + ' fans with Qloo insights, then cross-scoring them for ' + brand + ' fans' + (city ? ' in ' + city : '');
     }
-    case 'geo_gap': return 'Mapping where ' + rival + "'s audience outweighs " + brand + "'s in " + city;
-    case 'demographic_gap': return 'Comparing the age and gender mix of ' + brand + ' and ' + rival + ' audiences';
-    case 'brand_positioning': return 'Comparing how Qloo tags ' + brand + ' and ' + rival;
+    case 'geo_gap': return 'Mapping both audiences across ' + city + ' with Qloo heatmaps, then naming the hotspots with Qloo insights';
+    case 'demographic_gap': return 'Comparing the age and gender mix of both audiences with Qloo demographics';
+    case 'brand_positioning': return 'Comparing how Qloo tags ' + brand + ' and ' + rival + ' with Qloo compare';
     default: return 'Running ' + name;
   }
 }
@@ -640,5 +673,5 @@ async function executeTool(ctx, name, input) {
 }
 
 module.exports = {
-  TOOL_DEFS, DOMAINS, createContext, executeTool, describeCall, entityName, brandId, localityId,
+  TOOL_DEFS, DOMAINS, ENDPOINTS, createContext, executeTool, describeCall, endpointsUsed, entityName, brandId, localityId,
 };

@@ -4253,3 +4253,38 @@ body[data-mode="taste"] [data-surface="monitor"] { display: none; }
   .share-tag { display: none; }
   .share-main { padding: 16px; }
 }
+
+/* Provenance: every number comes from Qloo, how it is checked, and which
+   Qloo endpoints and model produced the brief. One quiet line until opened. */
+.taste-proof { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; padding-bottom: 12px; }
+.taste-proof-note > summary {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  cursor: pointer; list-style: none; font-size: 13.5px; color: var(--txt-2);
+}
+.taste-proof-note > summary::-webkit-details-marker { display: none; }
+.taste-proof-check {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--accent-dim); color: var(--accent-2); flex: none;
+}
+.taste-proof-claim { flex: 1 1 220px; min-width: 0; font-weight: 600; color: var(--txt); }
+.taste-proof-how { font-weight: 600; color: var(--accent-2); margin-left: 4px; text-decoration: underline; text-underline-offset: 3px; }
+.taste-proof-note[open] .taste-proof-how { text-decoration: none; }
+.taste-proof-count { margin-left: auto; font-size: 12.5px; color: var(--txt-3); font-variant-numeric: tabular-nums; }
+.taste-proof-steps { margin: 10px 0 0 28px; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--txt-2); line-height: 1.55; }
+.taste-endpoints { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+.taste-endpoints-label { color: var(--txt-3); font-weight: 600; margin-right: 2px; }
+.taste-endpoint {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--txt-2); background: var(--bg-2);
+}
+.taste-endpoint-n { color: var(--txt-3); font-variant-numeric: tabular-nums; }
+.taste-writer { margin-left: auto; color: var(--txt-3); }
+.taste-writer a { color: var(--accent-2); font-weight: 600; }
+.taste-trace-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.taste-trace-head .bc-section-label { margin-bottom: 0; }
+@media (max-width: 640px) {
+  .taste-proof-count, .taste-writer { margin-left: 28px; width: 100%; }
+  .taste-writer { margin-left: 0; }
+}

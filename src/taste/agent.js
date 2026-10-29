@@ -356,8 +356,20 @@ function serverHotspots(ctx, rivalId, brandId) {
   }));
 }
 
+// Distinct Qloo-scored items the brief cites (entities and map cells), each
+// shown with the numbers the server attached.
+function countDataPoints(brief) {
+  const keys = new Set();
+  const add = e => keys.add(e.kind === 'cell' ? 'c:' + (e.rival_id || '') + ':' + e.geohash : 'e:' + (e.rival_id || '') + ':' + e.entity_id);
+  for (const s of brief.rival_owned_segments) s.evidence.forEach(add);
+  for (const w of brief.win_first) w.evidence.forEach(add);
+  for (const h of brief.geo_hotspots) add({ ...h, kind: 'cell' });
+  return keys.size;
+}
+
 function assembleBrief(raw, ctx, warnings) {
   const b = cleanBriefProse(sanitizeCopyDeep(raw), ctx, warnings);
+  let dropped = 0;
   const brandId = tools.brandId(ctx, b.brand_id);
   const rivalIds = (b.rival_ids || []).map(r => tools.brandId(ctx, r)).filter(Boolean);
   const brandRef = id => ({ entity_id: id, name: tools.entityName(ctx, id), image: ctx.entities.get(id)?.image || null });
@@ -367,7 +379,7 @@ function assembleBrief(raw, ctx, warnings) {
     for (const ref of refs || []) {
       const hit = resolveCitation(ctx, ref, rivalId);
       if (hit) out.push(hit);
-      else warnings.push('Dropped unresolved citation ' + ref + ' in ' + where);
+      else { dropped += 1; warnings.push('Dropped unresolved citation ' + ref + ' in ' + where); }
     }
     return out;
   };
@@ -388,7 +400,7 @@ function assembleBrief(raw, ctx, warnings) {
   const hotspots = [];
   for (const h of b.geo_hotspots || []) {
     const hit = resolveCitation(ctx, h.ref || h.geohash, null);
-    if (!hit || hit.kind !== 'cell') { warnings.push('Dropped hotspot ' + (h.ref || h.geohash)); continue; }
+    if (!hit || hit.kind !== 'cell') { dropped += 1; warnings.push('Dropped hotspot ' + (h.ref || h.geohash)); continue; }
     // The cell's own "neighborhood, borough" label wins over the model's wording.
     hotspots.push({ ...hit, label: hit.label || h.label, note: h.note });
   }
@@ -404,7 +416,7 @@ function assembleBrief(raw, ctx, warnings) {
     .filter(x => x.rival_id && source[x.rival_id])
     .map(x => ({ rival_id: x.rival_id, summary: x.summary, ...source[x.rival_id] }));
 
-  return {
+  const brief = {
     brand: brandId ? brandRef(brandId) : null,
     rivals: rivalIds.map(brandRef),
     headline: b.headline || fallbackHeadline(ctx, segments, brandId, rivalIds),
@@ -415,6 +427,10 @@ function assembleBrief(raw, ctx, warnings) {
     demographic_gap: perRival(b.demographic_gap, ctx.demographics),
     positioning: perRival(b.positioning, ctx.positioning),
   };
+  // How the numbers were checked: citations resolved against this run's Qloo
+  // results, and those that could not be (runTasteAgent adds the rest).
+  brief.provenance = { data_points: countDataPoints(brief), dropped };
+  return brief;
 }
 
 // Everything the UI charts, straight from Qloo: gaps per domain, the full
@@ -652,7 +668,7 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
         const isSubmit = call.name === 'submit_brief';
         const step = openStep({
           kind: 'tool', tool: call.name, turn: turns, ...(isSubmit ? {} : { input: call.input }),
-          label: isSubmit ? 'Writing the brief' : tools.describeCall(ctx, call.name, call.input),
+          label: isSubmit ? 'Writing the brief with ' + provider.label : tools.describeCall(ctx, call.name, call.input),
         });
         if (call.inputError) {
           closeStep(step, { status: 'error', summary: call.inputError });
@@ -692,6 +708,18 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
   }
 
   const brief = assembleBrief(submitted, ctx, warnings);
+  // The rest of the provenance: the Qloo endpoints this run called, with
+  // counts, and the model that wrote the brief (the last one used).
+  const writer = providers[providers.length - 1];
+  brief.provenance = {
+    ...brief.provenance,
+    endpoints: tools.endpointsUsed(ctx),
+    qloo_calls: Object.values(ctx.calls).reduce((n, c) => n + c, 0),
+    tool_calls: steps.filter(s => s.kind === 'tool' && s.tool !== 'submit_brief').length,
+    turns,
+    duration_ms: Date.now() - started,
+    written_by: writer ? { provider: writer.provider, label: llm.PROVIDERS[writer.provider]?.label || writer.provider, model: writer.model } : null,
+  };
   return {
     brief,
     data: chartData(ctx),

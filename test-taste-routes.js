@@ -153,6 +153,16 @@ async function main() {
   check('hotspots are labelled neighborhood, borough', run.brief.geo_hotspots.length > 0
     && run.brief.geo_hotspots.every(h => h.label && !/County/.test(h.label))
     && run.brief.geo_hotspots.some(h => /^[^,]+, [^,]+$/.test(h.label)), JSON.stringify(run.brief.geo_hotspots.map(h => h.label)));
+  const prov = run.brief.provenance || {};
+  check('the brief says how many Qloo data points it cites and how many were dropped', prov.data_points > 0 && prov.dropped === 0, JSON.stringify(prov));
+  check('and which Qloo endpoints fed it, with counts', ['search', 'insights', 'cross_scoring', 'heatmap', 'demographics', 'compare']
+    .every(k => (prov.endpoints || []).some(e => e.key === k && e.calls > 0))
+    && prov.qloo_calls === prov.endpoints.reduce((n, e) => n + e.calls, 0), JSON.stringify(prov.endpoints));
+  check('and which model wrote it', prov.written_by?.provider === 'scripted' && prov.written_by.model === 'script', JSON.stringify(prov.written_by));
+  check('every trace step names its Qloo endpoint in a sentence', run.steps.filter(s => s.kind === 'tool' && s.tool !== 'submit_brief')
+    .every(s => /with Qloo (search|insights|heatmaps|demographics|compare)/.test(s.label))
+    && /^Writing the brief with Scripted stand-in/.test(run.steps.find(s => s.tool === 'submit_brief')?.label || ''),
+    run.steps.map(s => s.label).join(' | ').slice(0, 300));
   check('stored trace matches the streamed one', run.steps.length === new Set(steps.map(s => s.n)).size);
   check('model is the scripted stand-in', /^scripted:/.test(run.model || ''), run.model);
   check('no em or en dash in the brief', !/[\u2013\u2014]/.test(JSON.stringify(run.brief)));
