@@ -4010,7 +4010,6 @@ body[data-mode="taste"] [data-surface="monitor"] { display: none; }
 .taste-notice { border-color: var(--border-accent); }
 .taste-notice--error { border-color: rgba(239,68,68,0.3); background: var(--red-dim); }
 .taste-notice a { color: var(--accent-2); font-weight: 600; }
-.taste-logo { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--bg-elevated); }
 
 /* Form */
 .taste-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
@@ -4185,3 +4184,17 @@ body[data-mode="taste"] [data-surface="monitor"] { display: none; }
 .taste-example-wins strong { color: var(--txt); }
 .taste-example-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 .taste-sub .badge { margin-right: 4px; }
+
+/* Taste Gap header: our brand and each rival, image or neutral initial */
+.taste-marks { display: flex; flex-shrink: 0; }
+.taste-mark {
+  width: 44px; height: 44px; border-radius: 50%; overflow: hidden; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #fff; border: 2px solid var(--bg-2);
+  box-shadow: var(--shadow-xs);
+}
+.taste-mark + .taste-mark { margin-left: -10px; }
+.taste-mark img { width: 100%; height: 100%; object-fit: contain; }
+.taste-mark--ph { background: var(--bg-elevated); color: var(--txt-2); font-weight: 800; font-size: 16px; border-color: var(--border-2); }
+/* OpenStreetMap tiles are light only; darken them for the dark theme. */
+[data-theme="dark"] .taste-map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9); }

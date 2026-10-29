@@ -130,7 +130,9 @@ app.use(helmet({
       scriptSrcAttr:  ["'unsafe-inline'"],
       styleSrc:       ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc:        ["'self'", 'https://fonts.gstatic.com'],
-      imgSrc:         ["'self'", 'data:', 'https:'],
+      // 'https:' covers brand images from Qloo, whose hosts vary. The Taste Gap
+      // map's OpenStreetMap tiles are listed explicitly for the record.
+      imgSrc:         ["'self'", 'data:', 'https://tile.openstreetmap.org', 'https:'],
       connectSrc:     ["'self'"],
       // player.vimeo.com hosts the lazy-loaded landing-page demo embed.
       frameSrc:       ["'self'", 'https://player.vimeo.com'],

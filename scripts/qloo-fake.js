@@ -54,6 +54,15 @@ function entity(type, i, signal, scale) {
   };
 }
 
+// Brands starting with S get an inline image and brands starting with G a
+// broken image URL, so the UI's image and placeholder paths both get used.
+function fakeImage(query) {
+  const c = String(query).trim()[0]?.toLowerCase();
+  if (c === 's') return { image: { url: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="#1e7a4f"/></svg>') } };
+  if (c === 'g') return { image: { url: 'https://images.invalid/missing.png' } };
+  return {};
+}
+
 async function search(query, { types } = {}) {
   if (types === 'urn:entity:locality') {
     return { results: [{ entity_id: 'locality-' + slug(query), name: title(query), disambiguation: title(query) + ', city' }] };
@@ -63,7 +72,7 @@ async function search(query, { types } = {}) {
       entity_id: 'brand-' + slug(query),
       name: title(query),
       popularity: 0.8 + hash(query) / 5,
-      properties: { short_description: 'A consumer brand (synthetic test data).' },
+      properties: { short_description: 'A consumer brand (synthetic test data).', ...fakeImage(query) },
     }],
   };
 }

@@ -358,11 +358,16 @@ const Taste = (() => {
   function header(run) {
     const label = run.status === 'done' ? 'Brief ready' : run.status === 'error' ? 'Run failed' : 'Running';
     const cls = run.status === 'done' ? 'taste-state--done' : run.status === 'error' ? 'taste-state--error' : 'taste-state--running';
-    const brand = run.brief?.brand;
+    // Our brand and each rival, with Qloo's image when there is one and a
+    // neutral initial otherwise (also when an image fails to load).
+    const marks = [
+      run.brief?.brand || { name: run.brand },
+      ...(run.brief?.rivals?.length ? run.brief.rivals : run.rivals.map(name => ({ name }))),
+    ];
     return `
       <div class="bc-header">
         <div class="bc-left">
-          ${brand?.image ? `<img class="taste-logo" src="${esc(brand.image)}" alt="" width="52" height="52">` : avatarHtml(run.brand, 52)}
+          <div class="taste-marks">${marks.map(brandMark).join('')}</div>
           <div>
             <div class="bc-comp-name">${brandLine(run)}</div>
             <div class="taste-sub">
@@ -375,6 +380,20 @@ const Taste = (() => {
           <div class="bc-threat-date">${formatDate(run.created_at)}</div>
         </div>
       </div>`;
+  }
+
+  function brandMark(b) {
+    const initial = esc((String(b.name || '?').trim()[0] || '?').toUpperCase());
+    const ph = `<span class="taste-mark taste-mark--ph" title="${esc(b.name)}">${initial}</span>`;
+    if (!b.image) return ph;
+    return `<span class="taste-mark" title="${esc(b.name)}"><img src="${esc(b.image)}" alt="${esc(b.name)}" width="44" height="44"
+      referrerpolicy="no-referrer" onerror="Taste.markFallback(this)" data-initial="${initial}"></span>`;
+  }
+
+  function markFallback(img) {
+    const span = img.parentElement;
+    span.classList.add('taste-mark--ph');
+    span.textContent = img.dataset.initial || '?';
   }
 
   function paintRun(run) {
@@ -663,13 +682,14 @@ const Taste = (() => {
     const brief = run.brief;
     const rival = rivalName(brief, geoRival);
     const ours = brief.brand?.name || run.brand;
-    const light = document.documentElement.getAttribute('data-theme') === 'light';
-
     map = L.map(el, { scrollWheelZoom: false, attributionControl: true });
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/' + (light ? 'light_all' : 'dark_all') + '/{z}/{x}/{y}{r}.png', {
-      maxZoom: 18,
-      subdomains: 'abcd',
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    // Standard OpenStreetMap tiles. Their usage policy needs a Referer, and
+    // helmet's default Referrer-Policy is no-referrer, so the tiles carry
+    // their own policy. Dark mode darkens the tile layer in CSS only.
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      referrerPolicy: 'strict-origin-when-cross-origin',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
     }).addTo(map);
 
     const ring = vizColor('--viz-surface');
@@ -869,6 +889,6 @@ const Taste = (() => {
     return id ? renderRun(id) : renderForm();
   }
 
-  return { render, renderRuns, rerun, copy, showGeo };
+  return { render, renderRuns, rerun, copy, showGeo, markFallback };
 })();
 window.Taste = Taste;
