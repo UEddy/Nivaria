@@ -37,6 +37,10 @@ const GEO_MIN_POPULARITY = 0.4;
 // A cell counts as "led" by one side when the affinity gap passes this.
 const GEO_LEAD_THRESHOLD = 0.1;
 
+// brand_positioning list caps (Nike vs Adidas returns 45 shared tags).
+const POSITIONING_SHARED_MAX = 15;
+const POSITIONING_ONLY_MAX = 12;
+
 const DOMAINS = {
   artist:  { type: 'urn:entity:artist',  label: 'music' },
   movie:   { type: 'urn:entity:movie',   label: 'film' },
@@ -223,26 +227,33 @@ async function audienceGap(ctx, { brand_id, rival_id, domain, locality_id }) {
 // ── geo_gap ───────────────────────────────────────────────────────────────────
 
 // The neighbourhood a cell sits in, read off the top places Qloo returns for
-// that geohash. Best-effort: a failed lookup leaves the cell unlabelled.
+// that geohash. Many places carry no neighbourhood name but all carry the
+// borough or county (geocode.admin2_region), so area is the fallback label.
+// Best-effort: a failed lookup leaves the cell unlabelled.
+function mostCommon(values) {
+  const counts = {};
+  for (const v of values) if (v) counts[v] = (counts[v] || 0) + 1;
+  const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  return best ? best[0] : null;
+}
+
 async function labelCell(cell, signalId) {
   try {
     const d = await qloo.insights('urn:entity:place', {
       'signal.interests.entities': signalId, 'filter.location.geohash': cell.geohash, take: 3,
     });
     const places = entitiesOf(d);
-    const counts = {};
-    for (const p of places) {
-      const n = p.properties?.geocode?.name;
-      if (n) counts[n] = (counts[n] || 0) + 1;
-    }
-    const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-    cell.neighborhood = best ? best[0] : null;
+    cell.neighborhood = mostCommon(places.map(p => p.properties?.geocode?.name));
+    cell.area = mostCommon(places.map(p => p.properties?.geocode?.admin2_region));
     cell.top_places = places.map(p => p.name).slice(0, 3);
   } catch (_) {
     cell.neighborhood = null;
+    cell.area = null;
     cell.top_places = [];
   }
 }
+
+const cellLabel = c => c.neighborhood || c.area || c.geohash;
 
 async function geoGap(ctx, { brand_id, rival_id, locality_id }) {
   requirePair(ctx, brand_id, rival_id);
@@ -297,6 +308,7 @@ async function geoGap(ctx, { brand_id, rival_id, locality_id }) {
   const forModel = c => ({
     geohash: c.geohash,
     neighborhood: c.neighborhood ?? null,
+    area: c.area ?? null,
     top_places: c.top_places,
     rival_affinity: c.rival_affinity,
     our_affinity: c.our_affinity,
@@ -312,7 +324,7 @@ async function geoGap(ctx, { brand_id, rival_id, locality_id }) {
       our_strongest: ourStrongest.map(forModel),
     },
     summary: 'Rival leads in ' + Math.round(stats.share_rival_leads * 100) + '% of ' + cells.length
-      + ' cells; widest gap in ' + (top.neighborhood || top.geohash) + ' (' + top.rival_affinity + ' vs ' + top.our_affinity + ')',
+      + ' cells; widest gap in ' + cellLabel(top) + ' (' + top.rival_affinity + ' vs ' + top.our_affinity + ')',
   };
 }
 
@@ -345,11 +357,29 @@ async function brandPositioning(ctx, { brand_id, rival_id }) {
   requirePair(ctx, brand_id, rival_id);
   const d = await qloo.compare(brand_id, rival_id);
   const r = d?.results || {};
-  const shared = (r.tags || []).map(t => ({ name: t.name, subtype: t.subtype || null, score: r3(t.query?.score) }));
-  // compare can list a shared tag again under a or b; keep each tag in one bucket.
-  const sharedNames = new Set(shared.map(t => t.name));
-  const only = arr => (arr || []).filter(t => !sharedNames.has(t.name)).map(t => ({ name: t.name, subtype: t.subtype || null }));
-  const out = { shared, brand_only: only(r.a), rival_only: only(r.b) };
+  // The same tag name comes back under several subtypes and cases ("Athletes"
+  // three times for Nike vs Adidas), and a shared tag can repeat under a or b.
+  // Keep each name once per bucket, shared tags best score first, and cap the
+  // lists: positioning is a line or two in the brief, not a tag dump.
+  const key = t => String(t.name || '').trim().toLowerCase();
+  const sharedKeys = new Set();
+  const shared = [];
+  for (const t of [...(r.tags || [])].sort((x, y) => (y.query?.score || 0) - (x.query?.score || 0))) {
+    if (!key(t) || sharedKeys.has(key(t))) continue;
+    sharedKeys.add(key(t));
+    shared.push({ name: t.name, subtype: t.subtype || null, score: r3(t.query?.score) });
+  }
+  const only = arr => {
+    const seen = new Set(sharedKeys);
+    const out = [];
+    for (const t of arr || []) {
+      if (!key(t) || seen.has(key(t))) continue;
+      seen.add(key(t));
+      out.push({ name: t.name, subtype: t.subtype || null });
+    }
+    return out.slice(0, POSITIONING_ONLY_MAX);
+  };
+  const out = { shared: shared.slice(0, POSITIONING_SHARED_MAX), brand_only: only(r.a), rival_only: only(r.b) };
   ctx.positioning[rival_id] = out;
   return {
     result: out,
