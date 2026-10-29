@@ -288,6 +288,7 @@ const App = {
       delete App.user.csrfToken; // keep user object clean
     }
 
+    App.applyProductMode();
     App.backfillTimezone();
     App.updateUserUI();
     App.updateBadges();
@@ -312,6 +313,21 @@ const App = {
     u.timezone = detected;
     try { sessionStorage.removeItem('cs-greeting'); } catch (_) {}
     try { API.updateProfile({ timezone: detected }).catch(() => {}); } catch (_) {}
+  },
+
+  // PRODUCT_MODE=taste (from /auth/me): the app is Taste Gap only. Nav items
+  // carry data-surface="taste" or "monitor" and CSS shows the set for the mode
+  // on body[data-mode]; route() sends the monitoring pages to Taste Gap.
+  productMode: 'monitor',
+  MONITOR_PAGES: ['', 'dashboard', 'history', 'competitors', 'deals', 'roi', 'settings', 'onboarding'],
+
+  applyProductMode() {
+    App.productMode = App.user?.product_mode === 'taste' ? 'taste' : 'monitor';
+    document.body.dataset.mode = App.productMode;
+    if (App.productMode === 'taste') {
+      const sub = document.querySelector('.logo-sub');
+      if (sub) sub.textContent = 'Taste Gap';
+    }
   },
 
   updateUserUI() {
@@ -361,7 +377,15 @@ const App = {
     const routeQuery = new URLSearchParams(queryStr);
 
     const [base, ...rest] = pathPart.split('/').filter(Boolean);
-    const page = base || 'dashboard';
+    let page = base || 'dashboard';
+
+    // Taste mode hides the monitoring surfaces, so their routes (and the bare
+    // #/ the logo links to) open Taste Gap instead.
+    if (App.productMode === 'taste' && App.MONITOR_PAGES.includes(page)) {
+      history.replaceState(null, '', '#/taste');
+      page = 'taste';
+      rest.length = 0;
+    }
 
     document.querySelectorAll('.nav-item').forEach(a => {
       const p = a.dataset.page;
@@ -442,6 +466,18 @@ const App = {
       // flash.
       if (!document.getElementById('profile-shell')) root.innerHTML = Skeleton.cards(3);
       Profile.render(routeQuery, id).then(transition);
+    } else if (page === 'taste') {
+      el('page-title').textContent = id ? 'Taste Gap brief' : 'Taste Gap';
+      el('page-sub').textContent = id
+        ? 'Where the rival\'s audience is that yours is not'
+        : 'Find the audiences a rival owns, and which to win first';
+      root.innerHTML = Skeleton.cards(3);
+      Taste.render(id).then(transition);
+    } else if (page === 'runs') {
+      el('page-title').textContent = 'Runs';
+      el('page-sub').textContent = 'Every Taste Gap brief you have run';
+      root.innerHTML = Skeleton.table();
+      Taste.renderRuns().then(transition);
     } else if (page === 'onboarding') {
       el('page-title').textContent = 'Welcome to Nivaria';
       el('page-sub').textContent = 'One quick step to personalize your analyses';

@@ -671,7 +671,11 @@ router.get('/me', (req, res) => {
     req.session.save(() => {});
   }
 
-  res.json({ ...user, csrfToken: req.session.csrfToken });
+  // PRODUCT_MODE=taste runs the app as Taste Gap only: the SPA swaps its nav
+  // and routes for the Taste Gap view and hides the monitoring surfaces.
+  const product_mode = process.env.PRODUCT_MODE === 'taste' ? 'taste' : 'monitor';
+
+  res.json({ ...user, product_mode, csrfToken: req.session.csrfToken });
 });
 
 // ── Forgot password — Step 1: request OTP ─────────────────────────────────────

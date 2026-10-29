@@ -10,6 +10,8 @@
   <link rel="stylesheet" href="/css/styles.css">
   <!-- Phase 13: guided product tour (Driver.js, vendored, ~5KB gzipped). -->
   <link rel="stylesheet" href="/js/vendor/driver.css">
+  <!-- Leaflet 1.9.4, vendored (the CSP allows scripts from 'self' only). -->
+  <link rel="stylesheet" href="/js/vendor/leaflet/leaflet.css">
   <link rel="icon" href="/assets/monogram-solid.svg">
 
   <!-- PWA: installable standalone shell (manifest and icons only, no service
@@ -74,9 +76,27 @@
       </div>
 
       <nav class="sidebar-nav">
-        <div class="nav-section-label">Overview</div>
+        <!-- Taste Gap nav (PRODUCT_MODE=taste). The data-surface attribute decides
+             which nav items show for the product mode; see App.applyProductMode. -->
+        <div class="nav-section-label" data-surface="taste">Taste Gap</div>
 
-        <a href="#/" class="nav-item" data-page="dashboard">
+        <a href="#/taste" class="nav-item" data-page="taste" data-surface="taste">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+          </svg>
+          <span>New brief</span>
+        </a>
+
+        <a href="#/runs" class="nav-item" data-page="runs" data-surface="taste">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span>Runs</span>
+        </a>
+
+        <div class="nav-section-label" data-surface="monitor">Overview</div>
+
+        <a href="#/" class="nav-item" data-page="dashboard" data-surface="monitor">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
             <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
@@ -84,7 +104,7 @@
           <span>Dashboard</span>
         </a>
 
-        <a href="#/history" class="nav-item" data-page="history">
+        <a href="#/history" class="nav-item" data-page="history" data-surface="monitor">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
           </svg>
@@ -92,7 +112,7 @@
           <span class="nav-badge nav-badge--alert" id="nav-alert-count"></span>
         </a>
 
-        <a href="#/competitors" class="nav-item" data-page="competitors">
+        <a href="#/competitors" class="nav-item" data-page="competitors" data-surface="monitor">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
             <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
@@ -101,7 +121,7 @@
           <span class="nav-badge" id="nav-competitor-count"></span>
         </a>
 
-        <a href="#/deals" class="nav-item" data-page="deals">
+        <a href="#/deals" class="nav-item" data-page="deals" data-surface="monitor">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
           </svg>
@@ -118,7 +138,7 @@
           <span>Profile</span>
         </a>
 
-        <a href="#/settings" class="nav-item" data-page="settings">
+        <a href="#/settings" class="nav-item" data-page="settings" data-surface="monitor">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -175,7 +195,7 @@
 
           <!-- Phase 13: manual tour re-launch. Always available, ignores the
                once-per-user autostart guard. -->
-          <button class="tour-launch" id="tour-launch" type="button"
+          <button class="tour-launch" id="tour-launch" type="button" data-surface="monitor"
                   title="Take a tour" aria-label="Take a product tour"
                   onclick="window.Tour && Tour.start()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -258,6 +278,8 @@
   <script src="/js/settings.js"></script>
   <script src="/js/profile.js"></script>
   <script src="/js/account.js"></script>
+  <script src="/js/vendor/leaflet/leaflet.js"></script>
+  <script src="/js/taste.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>
