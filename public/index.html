@@ -7,7 +7,7 @@
   <meta name="description" content="Nivaria shows a consumer brand where a rival's audience is that its own is not, across music, film, TV, places and other brands, and which segments to win first. Powered by Qloo.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/landing.css">
   <link rel="icon" href="/assets/monogram-solid.svg">
 
@@ -15,7 +15,7 @@
        worker by design). iOS ignores the manifest for icon/standalone, so the
        apple-* meta tags below are required for Add to Home Screen there. -->
   <link rel="manifest" href="/manifest.webmanifest">
-  <meta name="theme-color" content="#4338CA">
+  <meta name="theme-color" content="#000000">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -82,157 +82,180 @@
 
   <!-- ── Navbar ─────────────────────────────────────────────── -->
   <header class="lp-header" role="banner">
-  <nav class="lp-nav" id="lp-nav" role="navigation" aria-label="Main navigation">
-    <div class="lp-nav-inner">
-      <a href="/" class="lp-logo" aria-label="Nivaria home">
-        <img class="lp-logo-mark" src="/assets/monogram-solid.svg" alt="" aria-hidden="true" width="34" height="34">
-        <span class="lp-logo-name">Nivaria</span>
-      </a>
-
-      <div class="lp-nav-right">
-        <button class="lp-theme-btn" id="lp-theme-btn" aria-label="Toggle color theme">
-          <!-- icon injected by JS -->
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        </button>
-        <a href="/login" class="lp-btn lp-btn-ghost">Login</a>
-        <a href="/register" class="lp-btn lp-btn-primary">Get started</a>
-        <button class="lp-mobile-menu-btn" id="lp-mobile-menu-btn" aria-label="Toggle mobile menu" aria-expanded="false">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-          </svg>
-        </button>
+    <nav class="lp-nav" id="lp-nav" aria-label="Main navigation">
+      <div class="lp-nav-inner">
+        <a href="/" class="lp-logo" aria-label="Nivaria home">
+          <img class="lp-logo-mark" src="/assets/monogram-solid.svg" alt="" aria-hidden="true" width="26" height="26">
+          <span class="lp-logo-name">Nivaria</span>
+        </a>
+        <div class="lp-nav-links">
+          <a href="#how">How it works</a>
+          <a href="#qloo">Qloo</a>
+          <a href="#faq">FAQ</a>
+        </div>
+        <div class="lp-nav-right">
+          <a href="/login" class="lp-nav-login">Log in</a>
+          <a href="/register" class="lp-btn lp-btn-white lp-btn-sm">Get started</a>
+          <button class="lp-menu-btn" id="lp-menu-btn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="lp-menu">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/></svg>
+          </button>
+        </div>
       </div>
-    </div>
-
-    <!-- Mobile dropdown -->
-    <div id="lp-mobile-menu" style="display:none;flex-direction:column;padding:16px 24px 20px;gap:10px;background:var(--lp-bg-2);border-top:1px solid var(--lp-border);">
-      <a href="/login" class="lp-btn lp-btn-ghost" style="width:100%;justify-content:center;">Login</a>
-      <a href="/register" class="lp-btn lp-btn-primary" style="width:100%;justify-content:center;">Get started</a>
-    </div>
-  </nav>
+      <div class="lp-menu" id="lp-menu" hidden>
+        <a href="#how">How it works</a>
+        <a href="#qloo">Qloo</a>
+        <a href="#faq">FAQ</a>
+        <a href="/login">Log in</a>
+      </div>
+    </nav>
   </header>
 
   <main id="main">
 
   <!-- ── Hero ───────────────────────────────────────────────── -->
   <section class="lp-hero" aria-labelledby="lp-hero-h1">
-    <video id="lp-hero-video" class="lp-hero-video" autoplay muted loop playsinline aria-hidden="true">
-      <source src="/assets/hero-data.mp4.mp4" type="video/mp4">
-    </video>
-    <div class="lp-hero-overlay" aria-hidden="true"></div>
-    <div class="lp-hero-content">
-      <p class="lp-hero-eyebrow">Audience intelligence for consumer brands</p>
-      <h1 class="lp-hero-headline" id="lp-hero-h1">
-        See the audiences your rival owns, and which to win first.
+    <div class="lp-container">
+      <a href="#qloo" class="lp-pill">
+        <span class="lp-pill-dot" aria-hidden="true"></span>
+        Powered by Qloo Taste AI
+      </a>
+      <h1 class="lp-hero-h1" id="lp-hero-h1">
+        See the audiences your rival owns, <span class="lp-muted">and which to win first.</span>
       </h1>
-      <p class="lp-hero-sub">
-        Name your brand and one or two rivals. Nivaria's agent reads Qloo taste data on both audiences across music, film, TV, places and other brands, maps where each side leads in your city, and writes a brief that ranks the segments to go after, with campaign hooks built from real tastes.
-      </p>
       <div class="lp-hero-actions">
-        <a href="/register" class="lp-btn lp-btn-primary lp-btn-lg">
-          Get started
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
-          </svg>
-        </a>
-        <a href="#how" class="lp-btn lp-btn-lg lp-btn-onvideo">
-          See how it works
-        </a>
+        <a href="/register" class="lp-btn lp-btn-white">Get started</a>
+        <button type="button" class="lp-btn lp-btn-dark" data-demo hidden>Try the live demo</button>
       </div>
-      <p class="lp-hero-trust">Powered by Qloo. Free to use, no credit card.</p>
-    </div>
-  </section>
+      <p class="lp-demo-error" data-demo-error role="alert" hidden></p>
 
-  <!-- ── Value proposition ──────────────────────────────────── -->
-  <section class="lp-section lp-alt" id="value" aria-labelledby="lp-rd-h">
-    <div class="lp-container">
-      <div class="lp-rd-header lp-animate">
-        <div class="lp-section-label">Audience intelligence</div>
-        <h2 class="lp-section-title" id="lp-rd-h">Your rival's customers are not a mystery. Their tastes are measurable.</h2>
-        <p class="lp-section-sub">Share of voice tells you who is louder. Nivaria tells you who your rival reaches that you do not, what those people love, and where they are.</p>
-      </div>
-
-      <div class="lp-rd-grid">
-
-        <article class="lp-rd-card lp-animate" data-delay="1">
-          <span class="lp-rd-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
-            </svg>
-          </span>
-          <h3 class="lp-rd-title">Find the segments they own</h3>
-          <p class="lp-rd-desc">The artists, shows, films and brands your rival's audience over-indexes on and yours does not, grouped into segments you can name and target.</p>
-        </article>
-
-        <article class="lp-rd-card lp-animate" data-delay="2">
-          <span class="lp-rd-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-            </svg>
-          </span>
-          <h3 class="lp-rd-title">See where they are on the map</h3>
-          <p class="lp-rd-desc">Add a city and the agent compares both audiences neighborhood by neighborhood, so you know where the rival leads and where you already win.</p>
-        </article>
-
-        <article class="lp-rd-card lp-animate" data-delay="3">
-          <span class="lp-rd-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>
-            </svg>
-          </span>
-          <h3 class="lp-rd-title">Know which to win first</h3>
-          <p class="lp-rd-desc">A ranked list with the reason, a campaign hook drawn from the actual tastes, and concrete channels, like a creator partnership or a pop-up in a named neighborhood.</p>
-        </article>
-
+      <!-- Product illustration: generic step labels and skeleton bars, no data. -->
+      <div class="lp-shot lp-animate" aria-hidden="true">
+        <div class="lp-shot-trace">
+          <div class="lp-shot-label">Live trace</div>
+          <ol class="lp-trace">
+            <li class="done"><i></i>Looking up your brand in Qloo</li>
+            <li class="done"><i></i>Looking up the rival</li>
+            <li class="done"><i></i>Finding the city</li>
+            <li class="done"><i></i>Comparing audiences in music</li>
+            <li class="done"><i></i>Comparing audiences in TV</li>
+            <li class="done"><i></i>Mapping where each audience leads</li>
+            <li class="run"><i></i>Writing the brief</li>
+          </ol>
+        </div>
+        <div class="lp-shot-brief">
+          <div class="lp-shot-head">
+            <span class="lp-mark"></span><span class="lp-mark lp-mark-2"></span>
+            <span class="lp-shot-title">Your brand vs Rival</span>
+          </div>
+          <div class="lp-bar w70"></div>
+          <div class="lp-bar w45 dim"></div>
+          <div class="lp-shot-label">Win these first</div>
+          <ul class="lp-wins">
+            <li><b>1</b><span class="lp-bar w60"></span></li>
+            <li><b>2</b><span class="lp-bar w50"></span></li>
+            <li><b>3</b><span class="lp-bar w40"></span></li>
+          </ul>
+          <div class="lp-dots lp-dots-sm"></div>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- ── Problem ────────────────────────────────────────────── -->
-  <section class="lp-section" id="problem" aria-labelledby="lp-problem-h">
-    <div class="lp-container">
-      <div class="lp-problem-inner lp-animate">
-        <div class="lp-section-label">The problem</div>
-        <h2 class="lp-section-title lp-problem-lead" id="lp-problem-h">Your rival's fans binge a reality show you have never heard of and pack a neighborhood you have never run a campaign in.</h2>
-        <p class="lp-problem-sub">Surveys are slow, social listening is noisy, and demographics alone say little about what people actually love. So brands keep fighting over the same audience while the rival quietly owns the next one.</p>
-      </div>
+  <!-- ── Domains strip ──────────────────────────────────────── -->
+  <section class="lp-strip" aria-label="What a brief compares">
+    <div class="lp-container lp-strip-inner">
+      <span>Music</span><span>Film</span><span>TV</span><span>Places</span><span>Other brands</span><span>Demographics</span><span>City heatmaps</span>
     </div>
   </section>
 
-  <!-- ── How it works ───────────────────────────────────────── -->
-  <section class="lp-section lp-how lp-alt" id="how" aria-labelledby="lp-how-h">
+  <!-- ── How it works: tabbed showcase ─────────────────────── -->
+  <section class="lp-section" id="how" aria-labelledby="lp-how-h">
     <div class="lp-container">
-      <div class="lp-how-header lp-animate">
-        <div class="lp-section-label">How it works</div>
-        <h2 class="lp-section-title" id="lp-how-h">From two brand names to a ranked plan in a few minutes</h2>
-        <p class="lp-section-sub">An AI agent does the research. You watch every step it takes, live.</p>
-      </div>
-      <div class="lp-steps-grid">
+      <h2 class="lp-h2 lp-animate" id="lp-how-h">
+        An agent you can watch. <span class="lp-muted">It plans the research, runs every Qloo comparison in parallel and writes the brief while you follow each step.</span>
+      </h2>
 
-        <div class="lp-step lp-animate" data-delay="1">
-          <div class="lp-step-num" aria-hidden="true">1</div>
-          <h3 class="lp-step-title">Name your brand and rivals</h3>
-          <p class="lp-step-desc">Type your brand, one or two rivals and, if you like, a city. Suggestions come straight from Qloo, so every name resolves to a real brand.</p>
+      <div class="lp-tabs lp-animate">
+        <div class="lp-tablist" role="tablist" aria-label="Parts of a brief">
+          <button role="tab" id="tab-trace" aria-controls="panel-trace" aria-selected="true">Live trace</button>
+          <button role="tab" id="tab-segments" aria-controls="panel-segments" aria-selected="false" tabindex="-1">Segments</button>
+          <button role="tab" id="tab-map" aria-controls="panel-map" aria-selected="false" tabindex="-1">Map</button>
+          <button role="tab" id="tab-audience" aria-controls="panel-audience" aria-selected="false" tabindex="-1">Audience</button>
+          <button role="tab" id="tab-win" aria-controls="panel-win" aria-selected="false" tabindex="-1">Win first</button>
         </div>
 
-        <div class="lp-step lp-animate" data-delay="2">
-          <div class="lp-step-num" aria-hidden="true">2</div>
-          <h3 class="lp-step-title">The agent plans the research</h3>
-          <p class="lp-step-desc">It decides which comparisons to run and fires them in parallel: audience gaps per domain, demographics, brand positioning and the city map.</p>
+        <div class="lp-panel" role="tabpanel" id="panel-trace" aria-labelledby="tab-trace">
+          <div class="lp-panel-copy">
+            <h3>Live trace</h3>
+            <p>Every lookup and comparison streams to the screen as it runs, and stays with the brief, so you can see how each finding was reached.</p>
+          </div>
+          <div class="lp-panel-visual" aria-hidden="true">
+            <ol class="lp-trace lp-trace-lg">
+              <li class="done"><i></i>Comparing audiences in film<em class="lp-bar w30"></em></li>
+              <li class="done"><i></i>Comparing audiences in other brands<em class="lp-bar w40"></em></li>
+              <li class="done"><i></i>Comparing the age and gender mix<em class="lp-bar w25"></em></li>
+              <li class="done"><i></i>Comparing how Qloo tags both brands<em class="lp-bar w35"></em></li>
+              <li class="run"><i></i>Mapping where each audience leads<em class="lp-bar w20 dim"></em></li>
+            </ol>
+          </div>
         </div>
 
-        <div class="lp-step lp-animate" data-delay="3">
-          <div class="lp-step-num" aria-hidden="true">3</div>
-          <h3 class="lp-step-title">Qloo answers with taste data</h3>
-          <p class="lp-step-desc">Each comparison scores both audiences on the same artists, shows, films, places and brands, so every gap is a like-for-like number.</p>
+        <div class="lp-panel" role="tabpanel" id="panel-segments" aria-labelledby="tab-segments" hidden>
+          <div class="lp-panel-copy">
+            <h3>Segments the rival owns</h3>
+            <p>The artists, shows, films, places and brands the rival's audience over-indexes on and yours does not, grouped into segments, with both audiences' scores beside every one.</p>
+          </div>
+          <div class="lp-panel-visual" aria-hidden="true">
+            <div class="lp-rows">
+              <div><span class="lp-bar w40"></span><span class="lp-pair"><i class="r w80"></i><i class="o w30"></i></span></div>
+              <div><span class="lp-bar w30"></span><span class="lp-pair"><i class="r w70"></i><i class="o w25"></i></span></div>
+              <div><span class="lp-bar w45"></span><span class="lp-pair"><i class="r w65"></i><i class="o w35"></i></span></div>
+              <div><span class="lp-bar w35"></span><span class="lp-pair"><i class="r w55"></i><i class="o w30"></i></span></div>
+            </div>
+            <div class="lp-key"><span><i class="o"></i>Your audience</span><span><i class="r"></i>Rival's audience</span></div>
+          </div>
         </div>
 
-        <div class="lp-step lp-animate" data-delay="4">
-          <div class="lp-step-num" aria-hidden="true">4</div>
-          <h3 class="lp-step-title">You get a cited brief</h3>
-          <p class="lp-step-desc">Segments the rival owns, where they are on the map, who they are, and what to win first. Every claim links back to the Qloo score behind it.</p>
+        <div class="lp-panel" role="tabpanel" id="panel-map" aria-labelledby="tab-map" hidden>
+          <div class="lp-panel-copy">
+            <h3>Where on the map</h3>
+            <p>Add a city and both audiences are compared neighborhood by neighborhood. The hotspots worth a campaign are numbered and named.</p>
+          </div>
+          <div class="lp-panel-visual" aria-hidden="true">
+            <div class="lp-dots"></div>
+            <div class="lp-key"><span><i class="o"></i>You lead</span><span><i class="n"></i>Even</span><span><i class="r"></i>Rival leads</span></div>
+          </div>
         </div>
 
+        <div class="lp-panel" role="tabpanel" id="panel-audience" aria-labelledby="tab-audience" hidden>
+          <div class="lp-panel-copy">
+            <h3>Who the audiences are</h3>
+            <p>The age and gender mix of both audiences on one chart, so you can see who the rival reaches that you do not.</p>
+          </div>
+          <div class="lp-panel-visual" aria-hidden="true">
+            <div class="lp-diverge">
+              <div><i class="o l w40"></i><i class="r rt w25"></i></div>
+              <div><i class="o rt w35"></i><i class="r rt w55"></i></div>
+              <div><i class="o rt w20"></i><i class="r l w30"></i></div>
+              <div><i class="o l w30"></i><i class="r l w45"></i></div>
+              <div><i class="o rt w25"></i><i class="r rt w15"></i></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="lp-panel" role="tabpanel" id="panel-win" aria-labelledby="tab-win" hidden>
+          <div class="lp-panel-copy">
+            <h3>Which to win first</h3>
+            <p>A ranked plan: why each segment, a campaign hook built from the actual tastes, and concrete channels such as a creator partnership or a pop-up in a named neighborhood.</p>
+          </div>
+          <div class="lp-panel-visual" aria-hidden="true">
+            <ul class="lp-wins lp-wins-lg">
+              <li><b>1</b><span><span class="lp-bar w70"></span><span class="lp-chips"><em></em><em></em></span></span></li>
+              <li><b>2</b><span><span class="lp-bar w55"></span><span class="lp-chips"><em></em><em></em></span></span></li>
+              <li><b>3</b><span><span class="lp-bar w60"></span><span class="lp-chips"><em></em></span></span></li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -240,325 +263,112 @@
   <!-- ── Powered by Qloo ────────────────────────────────────── -->
   <section class="lp-section" id="qloo" aria-labelledby="lp-qloo-h">
     <div class="lp-container">
-      <div class="lp-rd-header lp-animate">
-        <div class="lp-section-label">Powered by Qloo</div>
-        <h2 class="lp-section-title" id="lp-qloo-h">Built on Qloo's Taste AI</h2>
-        <p class="lp-section-sub">Qloo maps how tastes connect across music, film, TV, dining, places and brands. Nivaria turns that into a head-to-head read on two audiences. Without Qloo there is no brief: every number in it comes from a Qloo response.</p>
-      </div>
-
-      <div class="lp-rd-grid">
-
-        <article class="lp-rd-card lp-animate" data-delay="1">
-          <h3 class="lp-rd-title">Audience gaps</h3>
-          <p class="lp-rd-desc">Qloo Insights lists the rival audience's top artists, films, shows, places and brands, then scores your audience on exactly those entities. The difference is the gap.</p>
+      <h2 class="lp-h2 lp-animate" id="lp-qloo-h">
+        Every number comes from Qloo. <span class="lp-muted">The model cites Qloo results by reference and the server attaches the scores, so nothing in a brief is invented.</span>
+      </h2>
+      <div class="lp-grid lp-grid-5">
+        <article class="lp-card lp-animate">
+          <code>/v2/insights</code>
+          <h3>Audience gaps</h3>
+          <p>Scores both audiences on the rival's top artists, films, shows, places and brands.</p>
         </article>
-
-        <article class="lp-rd-card lp-animate" data-delay="2">
-          <h3 class="lp-rd-title">The geo-gap map</h3>
-          <p class="lp-rd-desc">Qloo heatmaps for both brands in one city land on the same grid. Nivaria joins them cell by cell and labels the hotspots with real neighborhoods.</p>
+        <article class="lp-card lp-animate">
+          <code>urn:heatmap</code>
+          <h3>The city map</h3>
+          <p>Both brands on one city grid, joined cell by cell and labelled with real neighborhoods.</p>
         </article>
-
-        <article class="lp-rd-card lp-animate" data-delay="3">
-          <h3 class="lp-rd-title">Who the audiences are</h3>
-          <p class="lp-rd-desc">Qloo demographics show how each audience over or under-indexes by age and gender, side by side.</p>
+        <article class="lp-card lp-animate">
+          <code>urn:demographics</code>
+          <h3>Who they are</h3>
+          <p>Age and gender affinity for each audience, side by side.</p>
         </article>
-
-        <article class="lp-rd-card lp-animate" data-delay="1">
-          <h3 class="lp-rd-title">Brand positioning</h3>
-          <p class="lp-rd-desc">Qloo's compare analysis shows the tags both brands share and the ones only the rival carries.</p>
+        <article class="lp-card lp-animate">
+          <code>/v2/analysis/compare</code>
+          <h3>Positioning</h3>
+          <p>The tags both brands share and the ones only the rival carries.</p>
         </article>
-
-        <article class="lp-rd-card lp-animate" data-delay="2">
-          <h3 class="lp-rd-title">Brand search</h3>
-          <p class="lp-rd-desc">Qloo search resolves what you type to the right brand and city, and powers the suggestions in the form.</p>
+        <article class="lp-card lp-animate">
+          <code>/search</code>
+          <h3>Brand search</h3>
+          <p>Resolves what you type to the right brand and city.</p>
         </article>
-
-        <article class="lp-rd-card lp-animate" data-delay="3">
-          <h3 class="lp-rd-title">Numbers the model cannot invent</h3>
-          <p class="lp-rd-desc">The agent cites Qloo rows by reference and the server attaches the scores. A citation that does not match a Qloo result is dropped.</p>
-        </article>
-
       </div>
     </div>
   </section>
 
-  <div class="lp-stripe" aria-hidden="true"></div>
-
-  <!-- ── Features ───────────────────────────────────────────── -->
-  <section class="lp-features lp-section lp-alt" id="features" aria-labelledby="lp-features-h">
+  <!-- ── Who it is for ──────────────────────────────────────── -->
+  <section class="lp-section" id="who" aria-labelledby="lp-who-h">
     <div class="lp-container">
-      <div class="lp-features-header lp-animate">
-        <div class="lp-section-label">What you get</div>
-        <h2 class="lp-section-title" id="lp-features-h">A brief you can act on this week</h2>
-        <p class="lp-section-sub">Evidence, a map and a plan, in the same brief your team can copy and share.</p>
-      </div>
-      <div class="lp-features-grid">
-
-        <article class="lp-feature-col lp-animate" data-delay="1">
-          <img
-            src="/assets/monitor.svg.svg"
-            alt="Live agent trace illustration"
-            class="lp-feature-img"
-            loading="lazy"
-          >
-          <h3 class="lp-feature-title">An agent you can watch</h3>
-          <p class="lp-feature-desc">Every lookup and comparison streams to the screen as it runs, so you see exactly how the brief was built.</p>
+      <h2 class="lp-h2 lp-animate" id="lp-who-h">
+        Built for brands that compete for the same customers. <span class="lp-muted">For whoever decides where the next campaign, partnership or opening goes.</span>
+      </h2>
+      <div class="lp-grid lp-grid-4">
+        <article class="lp-card lp-card-tall lp-animate">
+          <h3>Brand and marketing leads</h3>
+          <p>Decide which audience to go after next with evidence, and brief the team in one page.</p>
         </article>
-
-        <article class="lp-feature-col lp-animate" data-delay="2">
-          <img
-            src="/assets/analysis.svg.svg"
-            alt="Audience analysis illustration"
-            class="lp-feature-img"
-            loading="lazy"
-          >
-          <h3 class="lp-feature-title">Segments with evidence</h3>
-          <p class="lp-feature-desc">Each segment the rival owns comes with the entities behind it and both audiences' scores, not a vague persona.</p>
+        <article class="lp-card lp-card-tall lp-animate">
+          <h3>Growth and media teams</h3>
+          <p>Turn rival-owned tastes into targeting: the creators, shows and interests to build audiences around.</p>
         </article>
-
-        <article class="lp-feature-col lp-animate" data-delay="3">
-          <img
-            src="/assets/radar.svg.svg"
-            alt="Map illustration"
-            class="lp-feature-img"
-            loading="lazy"
-          >
-          <h3 class="lp-feature-title">A map of the gap</h3>
-          <p class="lp-feature-desc">Every neighborhood colored by which brand's audience leads, with the hotspots worth a campaign numbered and explained.</p>
+        <article class="lp-card lp-card-tall lp-animate">
+          <h3>Partnerships and sponsorship</h3>
+          <p>Find the artists, shows and venues your rival's fans love before you sign the next deal.</p>
         </article>
-
-      </div>
-
-      <div class="lp-spec lp-animate" data-delay="4">
-        <h3 class="lp-spec-h">What is in a brief</h3>
-        <ul class="lp-spec-grid">
-          <li class="lp-spec-item">
-            <span class="lp-spec-term">Rival-owned segments</span>
-            <span class="lp-spec-desc">Clusters of artists, shows, films, places and brands where the rival's audience over-indexes and yours does not.</span>
-          </li>
-          <li class="lp-spec-item">
-            <span class="lp-spec-term">Win-first ranking</span>
-            <span class="lp-spec-desc">The segments to go after first, each with the reason, a campaign hook and concrete channels.</span>
-          </li>
-          <li class="lp-spec-item">
-            <span class="lp-spec-term">Geo-gap map</span>
-            <span class="lp-spec-desc">Both audiences compared across a city, with the rival's strongest neighborhoods and yours.</span>
-          </li>
-          <li class="lp-spec-item">
-            <span class="lp-spec-term">Demographics</span>
-            <span class="lp-spec-desc">Age and gender mix of each audience on one chart, with a table view.</span>
-          </li>
-          <li class="lp-spec-item">
-            <span class="lp-spec-term">Brand positioning</span>
-            <span class="lp-spec-desc">The tags both brands share and the ones only the rival carries.</span>
-          </li>
-          <li class="lp-spec-item">
-            <span class="lp-spec-term">Cited evidence</span>
-            <span class="lp-spec-desc">Every claim carries the Qloo scores behind it, attached by the server, never typed by the model.</span>
-          </li>
-          <li class="lp-spec-item">
-            <span class="lp-spec-term">Live agent trace</span>
-            <span class="lp-spec-desc">Each step the agent takes, streamed as it happens and kept with the brief.</span>
-          </li>
-          <li class="lp-spec-item">
-            <span class="lp-spec-term">Two rivals at once</span>
-            <span class="lp-spec-desc">Compare against one or two rivals, with the map and charts switchable per rival.</span>
-          </li>
-          <li class="lp-spec-item">
-            <span class="lp-spec-term">Runs history</span>
-            <span class="lp-spec-desc">Every brief you have run, ready to reopen or run again with fresh data.</span>
-          </li>
-        </ul>
-      </div>
-
-      <div class="lp-features-note lp-animate" data-delay="4" style="max-width:760px;margin:48px auto 0;text-align:center;">
-        <p class="lp-features-note-text" style="font-size:0.95rem;line-height:1.7;color:var(--lp-txt-2);">
-          Nivaria works on aggregated, anonymized taste data from Qloo. Only the brand, rival and city you type are sent to the AI model, never your account details. Audiences are described by their tastes, places, age and gender, never by protected traits.
-        </p>
+        <article class="lp-card lp-card-tall lp-animate">
+          <h3>Retail and field marketing</h3>
+          <p>See which neighborhoods lean to the rival before choosing where to open, sample or run a pop-up.</p>
+        </article>
       </div>
     </div>
   </section>
 
-  <div class="lp-stripe" aria-hidden="true"></div>
-
-  <!-- ── For Whom ────────────────────────────────────────────── -->
-  <section class="lp-section" id="for-whom" aria-labelledby="lp-forwhom-h">
-    <div class="lp-container">
-      <div class="lp-forwhom-header lp-animate">
-        <div class="lp-section-label">Who it is for</div>
-        <h2 class="lp-section-title" id="lp-forwhom-h">Built for consumer brands that compete for the same customers</h2>
-        <p class="lp-section-sub">For the people who decide where the next campaign, partnership or store opening goes.</p>
-      </div>
-      <div class="lp-forwhom-layout">
-      <ul class="lp-forwhom-list" aria-label="Audiences Nivaria serves">
-
-        <li class="lp-forwhom-item lp-animate" data-delay="1">
-          <span class="lp-forwhom-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 11l18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>
-            </svg>
-          </span>
-          <div class="lp-forwhom-body">
-            <h3 class="lp-forwhom-title">Brand and marketing leads</h3>
-            <p class="lp-forwhom-desc">Decide which audience to go after next with evidence, not a hunch, and brief the team in one page.</p>
-          </div>
-        </li>
-
-        <li class="lp-forwhom-item lp-animate" data-delay="2">
-          <span class="lp-forwhom-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>
-            </svg>
-          </span>
-          <div class="lp-forwhom-body">
-            <h3 class="lp-forwhom-title">Growth and media teams</h3>
-            <p class="lp-forwhom-desc">Turn rival-owned tastes into targeting: the creators, shows and interests to build audiences around.</p>
-          </div>
-        </li>
-
-        <li class="lp-forwhom-item lp-animate" data-delay="3">
-          <span class="lp-forwhom-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-          </span>
-          <div class="lp-forwhom-body">
-            <h3 class="lp-forwhom-title">Partnerships and sponsorship</h3>
-            <p class="lp-forwhom-desc">Find the artists, shows and venues your rival's fans love, before you sign the next deal.</p>
-          </div>
-        </li>
-
-        <li class="lp-forwhom-item lp-animate" data-delay="4">
-          <span class="lp-forwhom-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-            </svg>
-          </span>
-          <div class="lp-forwhom-body">
-            <h3 class="lp-forwhom-title">Retail and field marketing</h3>
-            <p class="lp-forwhom-desc">See which neighborhoods lean to the rival before choosing where to open, sample or run a pop-up.</p>
-          </div>
-        </li>
-
-        <li class="lp-forwhom-item lp-animate" data-delay="5">
-          <span class="lp-forwhom-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>
-            </svg>
-          </span>
-          <div class="lp-forwhom-body">
-            <h3 class="lp-forwhom-title">Agencies and challenger brands</h3>
-            <p class="lp-forwhom-desc">Bring a client a fresh read on a category leader's audience, and a plan to take a slice of it.</p>
-          </div>
-        </li>
-
-      </ul>
-
-        <!-- App mockup (illustration, not real data) -->
-        <div class="lp-forwhom-media lp-animate" data-delay="2" aria-hidden="true">
-          <div class="lp-mockup">
-            <div class="lp-mockup-bar">
-              <div class="lp-mock-dot"></div>
-              <div class="lp-mock-dot"></div>
-              <div class="lp-mock-dot"></div>
-            </div>
-            <div class="lp-mockup-body">
-              <div class="lp-mock-stat-row">
-                <div class="lp-mock-stat">
-                  <div class="lp-mock-stat-label">Segments</div>
-                  <div class="lp-mock-stat-val">4</div>
-                </div>
-                <div class="lp-mock-stat">
-                  <div class="lp-mock-stat-label">Map hotspots</div>
-                  <div class="lp-mock-stat-val green">3</div>
-                </div>
-                <div class="lp-mock-stat">
-                  <div class="lp-mock-stat-label">Win first</div>
-                  <div class="lp-mock-stat-val yellow">3</div>
-                </div>
-              </div>
-              <div class="lp-mock-row">
-                <div class="lp-mock-card">
-                  <div class="lp-mock-avatar" style="background:linear-gradient(135deg,#6366F1,#4F46E5)"></div>
-                  <span class="lp-mock-name">Reality TV fans</span>
-                  <span class="lp-mock-badge high">#1</span>
-                  <span class="lp-mock-time">TV</span>
-                </div>
-                <div class="lp-mock-card">
-                  <div class="lp-mock-avatar" style="background:linear-gradient(135deg,#06B6D4,#0891B2)"></div>
-                  <span class="lp-mock-name">R&amp;B listeners</span>
-                  <span class="lp-mock-badge medium">#2</span>
-                  <span class="lp-mock-time">Music</span>
-                </div>
-                <div class="lp-mock-card">
-                  <div class="lp-mock-avatar" style="background:linear-gradient(135deg,#10B981,#059669)"></div>
-                  <span class="lp-mock-name">Neighborhood hotspot</span>
-                  <span class="lp-mock-badge low">#3</span>
-                  <span class="lp-mock-time">Map</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
+  <!-- ── FAQ ────────────────────────────────────────────────── -->
+  <section class="lp-section" id="faq" aria-labelledby="lp-faq-h">
+    <div class="lp-container lp-narrow">
+      <h2 class="lp-faq-h" id="lp-faq-h">Frequently asked questions</h2>
+      <div class="lp-faq">
+        <details>
+          <summary>What is Nivaria?</summary>
+          <p>An AI agent for consumer brands. Name your brand and one or two rivals, and it reads Qloo taste data on both audiences and writes a brief: the segments the rival owns, where they are in your city, and which to win first.</p>
+        </details>
+        <details>
+          <summary>Where does the data come from?</summary>
+          <p>Qloo's Taste AI, which links tastes across music, film, TV, places and brands. Every score in a brief is a Qloo number attached by the server, and a claim the model cannot back with a Qloo result is dropped.</p>
+        </details>
+        <details>
+          <summary>What does the AI model see?</summary>
+          <p>Only the brand, rival and city you type, and Qloo's results. Never your account details. Audiences are described by their tastes, places, age and gender, never by protected traits.</p>
+        </details>
+        <details>
+          <summary>Do I need a city?</summary>
+          <p>No. Without one you get the audience gaps, demographics and positioning. With one you also get places and the map.</p>
+        </details>
+        <details>
+          <summary>How long does a brief take?</summary>
+          <p>A few minutes at most. You watch each step live, and the finished brief is saved to your runs so you can open it again or run it with fresh data.</p>
+        </details>
+        <details>
+          <summary>What is the live demo?</summary>
+          <p>A shared account with finished example briefs, so you can look around without signing up. Briefs you run there are visible to other demo visitors.</p>
+        </details>
+        <details>
+          <summary>What does it cost?</summary>
+          <p>Nivaria is free to use.</p>
+        </details>
       </div>
     </div>
   </section>
-
-  <div class="lp-stripe" aria-hidden="true"></div>
-
-  <!-- ── What makes Nivaria different ────────────────────────── -->
-  <section class="lp-section lp-alt" id="different" aria-label="What makes Nivaria different">
-    <div class="lp-container">
-      <div class="lp-pricing-header">
-        <div class="lp-section-label lp-animate">Why Nivaria</div>
-        <h2 class="lp-section-title lp-animate" data-delay="1">What makes Nivaria different</h2>
-      </div>
-      <div class="lp-diff-grid">
-        <div class="lp-diff-card lp-animate">
-          <h3 class="lp-diff-name">An agent, not a dashboard</h3>
-          <p class="lp-diff-desc">It decides what to compare, runs it, and writes the answer. You do not build reports.</p>
-        </div>
-        <div class="lp-diff-card lp-animate" data-delay="1">
-          <h3 class="lp-diff-name">Cited, not invented</h3>
-          <p class="lp-diff-desc">Every number is a Qloo score attached by the server. Unsupported claims are dropped.</p>
-        </div>
-        <div class="lp-diff-card lp-animate" data-delay="2">
-          <h3 class="lp-diff-name">Across every domain</h3>
-          <p class="lp-diff-desc">Music, film, TV, places and other brands in one read, because tastes travel together.</p>
-        </div>
-        <div class="lp-diff-card lp-animate">
-          <h3 class="lp-diff-name">Down to the neighborhood</h3>
-          <p class="lp-diff-desc">A city map of where each audience leads, labelled with real places.</p>
-        </div>
-        <div class="lp-diff-card lp-animate" data-delay="1">
-          <h3 class="lp-diff-name">A plan, ranked</h3>
-          <p class="lp-diff-desc">Segments come back in the order to win them, each with a hook and channels.</p>
-        </div>
-        <div class="lp-diff-card lp-animate" data-delay="2">
-          <h3 class="lp-diff-name">Private by design</h3>
-          <p class="lp-diff-desc">Only the names you type reach the AI model. Your account data never does.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <div class="lp-stripe" aria-hidden="true"></div>
 
   <!-- ── Final CTA ───────────────────────────────────────────── -->
-  <section class="lp-cta-section" aria-labelledby="lp-cta-h">
+  <section class="lp-cta" aria-labelledby="lp-cta-h">
     <div class="lp-container">
-      <h2 class="lp-cta-headline lp-animate" id="lp-cta-h">
-        Find the audiences your <span class="lp-cta-accent">rival</span> owns.
-      </h2>
-      <p class="lp-cta-sub lp-animate" data-delay="1">Run your first brief in a few minutes, or open a finished example as soon as you sign in.</p>
-      <a href="/register" class="lp-btn lp-btn-primary lp-btn-lg lp-animate" data-delay="2">
-        Get started
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
-        </svg>
-      </a>
-      <p class="lp-cta-note lp-animate" data-delay="3">Free to use. Powered by Qloo.</p>
+      <h2 class="lp-cta-h" id="lp-cta-h">Find the audiences your rival owns.</h2>
+      <div class="lp-hero-actions lp-cta-actions">
+        <a href="/register" class="lp-btn lp-btn-white">Get started</a>
+        <button type="button" class="lp-btn lp-btn-dark" data-demo hidden>Try the live demo</button>
+      </div>
+      <p class="lp-demo-error" data-demo-error role="alert" hidden></p>
     </div>
   </section>
 
@@ -567,36 +377,35 @@
   <!-- ── Footer ─────────────────────────────────────────────── -->
   <footer class="lp-footer" role="contentinfo">
     <div class="lp-container">
-      <div class="lp-footer-top">
+      <div class="lp-footer-card">
         <div class="lp-footer-brand">
           <a href="/" class="lp-logo" aria-label="Nivaria home">
-            <img class="lp-logo-mark" src="/assets/monogram-solid.svg" alt="" aria-hidden="true" width="30" height="30">
+            <img class="lp-logo-mark" src="/assets/monogram-solid.svg" alt="" aria-hidden="true" width="26" height="26">
             <span class="lp-logo-name">Nivaria</span>
           </a>
-          <p class="lp-footer-tagline">Know where your rival's audience is, and go win it.</p>
+          <p>Know where your rival's audience is, and go win it.</p>
         </div>
-        <div class="lp-footer-cols">
-          <nav class="lp-footer-col" aria-label="Product">
-            <h4 class="lp-footer-col-title">Product</h4>
-            <a href="#features">Features</a>
-            <a href="#how">How it works</a>
-            <a href="#qloo">Powered by Qloo</a>
-          </nav>
-          <nav class="lp-footer-col" aria-label="Company">
-            <h4 class="lp-footer-col-title">Company</h4>
-            <a href="#for-whom">For Whom</a>
-            <a href="mailto:support@nivaria.app">Contact support</a>
-          </nav>
-          <nav class="lp-footer-col" aria-label="Legal">
-            <h4 class="lp-footer-col-title">Legal</h4>
-            <a href="/terms">Terms of Service</a>
-            <a href="/privacy">Privacy Policy</a>
-            <a href="/cookies">Cookie Policy</a>
-          </nav>
+        <nav class="lp-footer-col" aria-label="Product">
+          <h4>Product</h4>
+          <a href="#how">How it works</a>
+          <a href="#qloo">Powered by Qloo</a>
+          <a href="#faq">FAQ</a>
+          <a href="/login">Log in</a>
+        </nav>
+        <nav class="lp-footer-col" aria-label="Company">
+          <h4>Company</h4>
+          <a href="mailto:support@nivaria.app">Contact support</a>
+        </nav>
+        <nav class="lp-footer-col" aria-label="Legal">
+          <h4>Legal</h4>
+          <a href="/terms">Terms of Service</a>
+          <a href="/privacy">Privacy Policy</a>
+          <a href="/cookies">Cookie Policy</a>
+        </nav>
+        <div class="lp-footer-bottom">
+          <span>&copy; 2026 Nivaria</span>
+          <span>Powered by Qloo</span>
         </div>
-      </div>
-      <div class="lp-footer-bottom">
-        <span class="lp-footer-copy">&copy; 2026 Nivaria. All rights reserved.</span>
       </div>
     </div>
   </footer>

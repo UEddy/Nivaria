@@ -1,140 +1,136 @@
-/* Landing page — scroll effects, theme toggle, animations */
+/* Landing page: navbar, mobile menu, scroll reveals, the "How it works" tabs,
+   the decorative dot maps and the one-click live demo. */
 
 (function () {
-  const THEME_KEY = 'lp-theme';
-
-  // ── Theme ──────────────────────────────────────────────────
-  function getSystemTheme() {
-    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-  }
-
-  function applyTheme(val) {
-    const resolved = val === 'system' ? getSystemTheme() : val;
-    document.documentElement.setAttribute('data-lp-theme', resolved);
-    localStorage.setItem(THEME_KEY, val);
-    updateThemeIcon(resolved);
-  }
-
-  function updateThemeIcon(resolved) {
-    const btn = document.getElementById('lp-theme-btn');
-    if (!btn) return;
-    btn.innerHTML = resolved === 'light'
-      ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`
-      : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
-  }
-
-  function initTheme() {
-    const saved = localStorage.getItem(THEME_KEY) || 'system';
-    applyTheme(saved);
-
-    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
-      if ((localStorage.getItem(THEME_KEY) || 'system') === 'system') applyTheme('system');
-    });
-
-    const btn = document.getElementById('lp-theme-btn');
-    if (btn) {
-      btn.addEventListener('click', () => {
-        const current = localStorage.getItem(THEME_KEY) || 'system';
-        const resolved = current === 'system' ? getSystemTheme() : current;
-        applyTheme(resolved === 'light' ? 'dark' : 'light');
-      });
-    }
-  }
-
-  // ── Navbar scroll ──────────────────────────────────────────
-  function initNavScroll() {
+  // ── Navbar border once the page scrolls ──────────────────────────────────
+  function initNav() {
     const nav = document.getElementById('lp-nav');
     if (!nav) return;
-    let ticking = false;
-    function update() {
-      nav.classList.toggle('scrolled', window.scrollY > 20);
-      ticking = false;
-    }
-    window.addEventListener('scroll', () => {
-      if (!ticking) { requestAnimationFrame(update); ticking = true; }
-    }, { passive: true });
+    const update = () => nav.classList.toggle('scrolled', window.scrollY > 8);
+    window.addEventListener('scroll', update, { passive: true });
     update();
   }
 
-  // ── Scroll animations ─────────────────────────────────────
-  function initScrollAnimations() {
+  // ── Mobile menu ──────────────────────────────────────────────────────────
+  function initMenu() {
+    const btn = document.getElementById('lp-menu-btn');
+    const menu = document.getElementById('lp-menu');
+    if (!btn || !menu) return;
+    const set = open => {
+      menu.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+      btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    };
+    btn.addEventListener('click', () => set(menu.hidden));
+    menu.addEventListener('click', e => { if (e.target.closest('a')) set(false); });
+  }
+
+  // ── Reveal on scroll ─────────────────────────────────────────────────────
+  function initReveal() {
     const targets = document.querySelectorAll('.lp-animate');
-    if (!targets.length) return;
-
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach(e => {
-        if (e.isIntersecting) {
-          e.target.classList.add('lp-visible');
-          io.unobserve(e.target);
-        }
-      });
-    }, { threshold: 0.12 });
-
+    if (!('IntersectionObserver' in window)) {
+      targets.forEach(t => t.classList.add('lp-visible'));
+      return;
+    }
+    const io = new IntersectionObserver(entries => {
+      for (const e of entries) {
+        if (e.isIntersecting) { e.target.classList.add('lp-visible'); io.unobserve(e.target); }
+      }
+    }, { rootMargin: '0px 0px -8% 0px' });
     targets.forEach(t => io.observe(t));
   }
 
-  // ── Mobile menu ────────────────────────────────────────────
-  function initMobileMenu() {
-    const btn = document.getElementById('lp-mobile-menu-btn');
-    const menu = document.getElementById('lp-mobile-menu');
-    if (!btn || !menu) return;
-    btn.addEventListener('click', () => {
-      const open = menu.style.display === 'flex';
-      menu.style.display = open ? 'none' : 'flex';
+  // ── Tabs (ARIA tablist: click, arrows, Home and End) ─────────────────────
+  function initTabs() {
+    const list = document.querySelector('.lp-tablist');
+    if (!list) return;
+    const tabs = [...list.querySelectorAll('[role="tab"]')];
+    const select = tab => {
+      for (const t of tabs) {
+        const on = t === tab;
+        t.setAttribute('aria-selected', String(on));
+        t.tabIndex = on ? 0 : -1;
+        document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+      }
+    };
+    list.addEventListener('click', e => {
+      const tab = e.target.closest('[role="tab"]');
+      if (tab) select(tab);
+    });
+    list.addEventListener('keydown', e => {
+      const i = tabs.indexOf(document.activeElement);
+      if (i === -1) return;
+      const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+      if (next === undefined) return;
+      e.preventDefault();
+      const tab = tabs[(next + tabs.length) % tabs.length];
+      tab.focus();
+      select(tab);
     });
   }
 
-  // ── Hero video fallback ────────────────────────────────────
-  // Also honours prefers-reduced-motion: the loop is indefinite background
-  // motion, so for those visitors we hold it on the first frame rather than
-  // playing it. The overlay gradient still reads the same either way.
-  function initVideo() {
-    const video = document.getElementById('lp-hero-video');
-    if (!video) return;
-    video.addEventListener('error', () => {
-      video.style.display = 'none';
+  // ── Decorative dot maps ──────────────────────────────────────────────────
+  // A fixed pattern in the map's colors (blue you lead, gray even, red rival
+  // leads). It is an illustration and carries no data.
+  function initDots() {
+    const blue = [57, 135, 229], mid = [56, 56, 53], red = [230, 103, 103];
+    document.querySelectorAll('.lp-dots').forEach(el => {
+      const n = Number(getComputedStyle(el).getPropertyValue('--n')) || 12;
+      const rows = el.classList.contains('lp-dots-sm') ? 2 : 6;
+      for (let i = 0; i < n * rows; i += 1) {
+        const x = i % n, y = Math.floor(i / n);
+        const t = Math.max(-1, Math.min(1, Math.sin(x * 0.9 + y * 0.55) * 0.6 + Math.cos(x * 0.35 - y * 0.8) * 0.5));
+        const pole = t >= 0 ? red : blue;
+        const c = mid.map((m, k) => Math.round(m + (pole[k] - m) * Math.abs(t)));
+        const d = document.createElement('span');
+        d.style.background = 'rgb(' + c.join(',') + ')';
+        d.style.transform = 'scale(' + (0.55 + ((Math.sin(i * 1.7) + 1) / 2) * 0.45).toFixed(2) + ')';
+        el.appendChild(d);
+      }
     });
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      video.removeAttribute('autoplay');
-      video.autoplay = false;
-      video.pause();
+  }
+
+  // ── One-click live demo ──────────────────────────────────────────────────
+  // The buttons stay hidden unless the server has a demo account. A click
+  // signs the visitor into it (POST /api/auth/demo) and opens the app.
+  async function initDemo() {
+    const buttons = [...document.querySelectorAll('[data-demo]')];
+    if (!buttons.length) return;
+    try {
+      const res = await fetch('/api/auth/config', { credentials: 'same-origin' });
+      const cfg = await res.json();
+      if (!cfg.demo) return;
+    } catch (_) {
+      return;
+    }
+    for (const btn of buttons) {
+      btn.hidden = false;
+      btn.addEventListener('click', async () => {
+        const error = btn.closest('section').querySelector('[data-demo-error]');
+        if (error) error.hidden = true;
+        buttons.forEach(b => { b.disabled = true; });
+        const label = btn.textContent;
+        btn.textContent = 'Opening the demo...';
+        try {
+          const res = await fetch('/api/auth/demo', { method: 'POST', credentials: 'same-origin' });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.redirect) { window.location.href = data.redirect; return; }
+          throw new Error(data.error || 'The live demo is not available right now.');
+        } catch (err) {
+          if (error) { error.textContent = err.message; error.hidden = false; }
+          buttons.forEach(b => { b.disabled = false; });
+          btn.textContent = label;
+        }
+      });
     }
   }
 
-  // ── Demo video (lazy Vimeo embed) ──────────────────────────
-  // Nothing is requested from Vimeo until the visitor clicks the facade, so the
-  // initial page render is never blocked by the player. On click we build the
-  // iframe with a clean parameter set (no title/byline/portrait) and autoplay it,
-  // which is allowed because the click is a user gesture.
-  function initDemoVideo() {
-    const btn = document.getElementById('lp-demo-play');
-    if (!btn) return;
-    btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-vimeo-id');
-      if (!id) return;
-      const iframe = document.createElement('iframe');
-      // Official Vimeo embed params (badge/autopause/player_id/app_id) plus a clean
-      // chrome set (no title/byline/portrait) and autoplay, allowed under the click.
-      iframe.src = 'https://player.vimeo.com/video/' + encodeURIComponent(id) +
-        '?badge=0&autopause=0&player_id=0&app_id=58479' +
-        '&autoplay=1&title=0&byline=0&portrait=0&dnt=1';
-      iframe.title = 'Nivaria product demo';
-      iframe.loading = 'lazy';
-      iframe.allow = 'autoplay; fullscreen; picture-in-picture';
-      iframe.setAttribute('allowfullscreen', '');
-      const frame = btn.closest('.lp-video-frame');
-      if (!frame) return;
-      frame.replaceChildren(iframe);
-    }, { once: true });
-  }
-
-  // ── Init ──────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
-    initTheme();
-    initNavScroll();
-    initScrollAnimations();
-    initMobileMenu();
-    initVideo();
-    initDemoVideo();
+    initNav();
+    initMenu();
+    initReveal();
+    initTabs();
+    initDots();
+    initDemo();
   });
 })();
