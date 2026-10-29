@@ -8,6 +8,9 @@
 //   GET    /runs/:id           one run: brief, chart data and trace
 //   GET    /runs/:id/events    the live trace as server-sent events
 //   POST   /runs/:id/rerun     start a new run with the same inputs
+//   GET    /search?q=          brand suggestions for the form (Qloo /search),
+//                              exported as router.search and mounted ahead
+//                              of this router with its own limiter
 //
 // A user has at most one run going at a time: each run fans out a few dozen
 // Qloo calls under a 10 per second cap, and a second run would only queue
@@ -15,11 +18,17 @@
 
 const express = require('express');
 const runs = require('../tasteRuns');
+const qloo = require('../qloo/client');
+const { sanitizeCopy } = require('../lib/sanitizeText');
 
 const router = express.Router();
 
 // A comment line to keep proxies from closing an idle stream.
 const HEARTBEAT_MS = 20 * 1000;
+
+const SEARCH_MIN = 2;
+const SEARCH_MAX = 80;
+const SEARCH_TAKE = 6;
 
 function start(req, res, input, rerunOf) {
   const problem = runs.configProblem();
@@ -102,5 +111,30 @@ router.get('/runs/:id/events', (req, res) => {
   heartbeat = setInterval(() => res.write(': ping\n\n'), HEARTBEAT_MS);
   req.on('close', () => { clearInterval(heartbeat); unsubscribe(); ended = true; });
 });
+
+// Brand suggestions as the user types. Names only, plus a short description
+// so two brands with one name can be told apart. Qloo answers repeat queries
+// from the client's cache, and a failure returns no suggestions rather than an
+// error: the form works without them.
+router.search = async (req, res) => {
+  const q = String(req.query.q || '').trim().slice(0, SEARCH_MAX);
+  if (q.length < SEARCH_MIN || !String(process.env.QLOO_API_KEY || '').trim()) return res.json({ results: [] });
+  try {
+    const d = await qloo.search(q, { types: 'urn:entity:brand', take: SEARCH_TAKE });
+    const seen = new Set();
+    const results = [];
+    for (const e of d?.results || []) {
+      const name = String(e.name || '').trim();
+      if (!name || seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+      const desc = String(e.properties?.short_description || '').trim();
+      results.push({ name, description: desc ? sanitizeCopy(desc.length > 90 ? desc.slice(0, 87) + '...' : desc) : null });
+    }
+    res.json({ results });
+  } catch (err) {
+    console.warn('[taste] search failed: ' + err.message);
+    res.json({ results: [] });
+  }
+};
 
 module.exports = router;

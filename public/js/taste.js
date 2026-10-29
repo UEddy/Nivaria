@@ -158,7 +158,109 @@ const Taste = (() => {
       </div>`;
 
     document.getElementById('taste-form').addEventListener('submit', submit);
+    for (const id of ['taste-brand', 'taste-rival', 'taste-rival2']) attachSuggest(document.getElementById(id));
     document.getElementById('taste-brand').focus();
+  }
+
+  // ── Brand autocomplete ──────────────────────────────────────────────────────
+  // Suggestions from Qloo's brand search (/api/taste/search) under each brand
+  // input, as an ARIA combobox: arrows move, Enter picks, Escape closes. One
+  // request per pause in typing, answers cached per query, and a late answer
+  // for an older query is dropped.
+
+  const suggestCache = new Map();
+
+  async function suggestionsFor(q) {
+    const key = q.toLowerCase();
+    if (!suggestCache.has(key)) {
+      const { results } = await API.get('/taste/search?q=' + encodeURIComponent(q));
+      suggestCache.set(key, results || []);
+    }
+    return suggestCache.get(key);
+  }
+
+  function attachSuggest(input) {
+    const wrap = input.parentElement;
+    wrap.classList.add('taste-suggest-wrap');
+    const list = document.createElement('ul');
+    list.className = 'taste-suggest';
+    list.id = input.id + '-list';
+    list.setAttribute('role', 'listbox');
+    list.hidden = true;
+    wrap.appendChild(list);
+    input.setAttribute('role', 'combobox');
+    input.setAttribute('aria-autocomplete', 'list');
+    input.setAttribute('aria-expanded', 'false');
+    input.setAttribute('aria-controls', list.id);
+
+    let items = [];
+    let active = -1;
+    let timer = null;
+    let seq = 0;
+
+    const close = () => {
+      list.hidden = true;
+      active = -1;
+      input.setAttribute('aria-expanded', 'false');
+      input.removeAttribute('aria-activedescendant');
+    };
+    const paint = () => {
+      if (!items.length) { close(); return; }
+      list.innerHTML = items.map((r, i) => `
+        <li role="option" id="${list.id}-${i}" data-i="${i}" aria-selected="${i === active}"
+            class="taste-suggest-item${i === active ? ' active' : ''}">
+          <span class="taste-suggest-name">${esc(r.name)}</span>
+          ${r.description ? `<span class="taste-suggest-desc">${esc(r.description)}</span>` : ''}
+        </li>`).join('');
+      list.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+      if (active >= 0) input.setAttribute('aria-activedescendant', list.id + '-' + active);
+      else input.removeAttribute('aria-activedescendant');
+    };
+    const choose = i => {
+      input.value = items[i].name;
+      items = [];
+      close();
+    };
+
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      const q = input.value.trim();
+      if (q.length < 2) { items = []; close(); return; }
+      timer = setTimeout(async () => {
+        const mine = ++seq;
+        try {
+          const results = await suggestionsFor(q);
+          if (mine !== seq || input.value.trim() !== q) return;
+          items = results;
+          active = -1;
+          if (document.activeElement === input) paint();
+        } catch (_) { /* suggestions are optional */ }
+      }, 250);
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (!items.length) return;
+        e.preventDefault();
+        const n = items.length;
+        active = list.hidden ? (e.key === 'ArrowDown' ? 0 : n - 1) : (active + (e.key === 'ArrowDown' ? 1 : -1) + n) % n;
+        paint();
+      } else if (e.key === 'Enter' && !list.hidden && active >= 0) {
+        e.preventDefault();
+        choose(active);
+      } else if (e.key === 'Escape' && !list.hidden) {
+        e.preventDefault();
+        close();
+      }
+    });
+    // mousedown, not click, so the pick lands before the input loses focus.
+    list.addEventListener('mousedown', e => {
+      const li = e.target.closest('[data-i]');
+      if (!li) return;
+      e.preventDefault();
+      choose(Number(li.dataset.i));
+    });
+    input.addEventListener('blur', () => setTimeout(close, 100));
   }
 
   async function submit(e) {

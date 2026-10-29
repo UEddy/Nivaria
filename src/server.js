@@ -272,6 +272,9 @@ app.use('/api/roi',   limits.api, requireAuth, csrfProtect, roiRouter);
 app.use('/api/admin/outbound', limits.api, requireAuth, csrfProtect, requireOutboundAccess, outboundRouter);
 
 // Taste Gap: standard protected mounting. Runs are scoped to their creator.
+// Brand autocomplete answers first, under its own per-user limit, so typing
+// never spends the general API budget.
+app.get('/api/taste/search', requireAuth, limits.tasteSearch, tasteRouter.search);
 app.use('/api/taste', limits.api, requireAuth, csrfProtect, tasteRouter);
 
 // Phase 10: GDPR account routes (protected). Per-endpoint rate limits live

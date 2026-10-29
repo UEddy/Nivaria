@@ -92,9 +92,17 @@ async function main() {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => { req.userId = Number(req.headers['x-test-user']); next(); });
-  app.use('/api/taste', require('./src/routes/taste'));
+  const tasteRouter = require('./src/routes/taste');
+  app.get('/api/taste/search', tasteRouter.search);
+  app.use('/api/taste', tasteRouter);
   const server = app.listen(0);
   const port = server.address().port;
+
+  console.log('search');
+  const found = await request(port, 'GET', '/api/taste/search?q=glossier');
+  check('search returns brand names', found.json?.results?.[0]?.name === 'Glossier', found.text);
+  const short = await request(port, 'GET', '/api/taste/search?q=g');
+  check('one character returns no suggestions', Array.isArray(short.json?.results) && short.json.results.length === 0, short.text);
 
   console.log('status and validation');
   const st = await request(port, 'GET', '/api/taste/status');

@@ -40,6 +40,10 @@ module.exports = {
   // human ever would, don't trip the limiter; production omits the var and keeps 100.
   api: makeLimiter(15 * 60 * 1000, parseInt(process.env.RATE_LIMIT_API_MAX, 10) || 100, 15),
 
+  // Taste Gap brand autocomplete: one request per pause in typing, so it gets
+  // its own budget instead of eating the general API limit. Per user.
+  tasteSearch: makeUserLimiter(15 * 60 * 1000, 300, 15),
+
   // ── Phase 10: account endpoints (per user) ──────────────────────────────────
   accountDelete:   makeUserLimiter(60 * 60 * 1000, 3, 60),  // 3 / user / hour (paranoia)
 
