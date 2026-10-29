@@ -21,6 +21,9 @@ const router = express.Router();
 const { getDb } = require('../db');
 const { logAudit } = require('../lib/audit');
 const limits = require('../middleware/rateLimits');
+const { isDemoEmail } = require('../lib/demoAccount');
+
+const DEMO_LOCKED = 'This is the shared demo account, so it cannot be changed or deleted.';
 
 const GRACE_DAYS = 30;
 
@@ -160,6 +163,7 @@ router.get('/export', (req, res) => {
 // destroy the account on its own. The session is destroyed so the user is
 // logged out, and the client is told to land on the landing page.
 router.post('/delete', limits.accountDelete, async (req, res) => {
+  if (isDemoEmail(req.user.email)) return res.status(403).json({ error: DEMO_LOCKED });
   if (!passwordOk(req)) return res.status(401).json({ error: 'Password is incorrect.' });
 
   const db = getDb();
@@ -206,6 +210,7 @@ router.put('/profile', (req, res) => {
   const args = [];
 
   if (req.body?.firstName !== undefined) {
+    if (isDemoEmail(req.user.email)) return res.status(403).json({ error: DEMO_LOCKED });
     const err = validateFirstName(req.body.firstName);
     if (err) return res.status(400).json({ error: err });
     const name = String(req.body.firstName).trim();

@@ -9,6 +9,7 @@ const { notifyNewSignup } = require('../telegram');
 const limits          = require('../middleware/rateLimits');
 const rateLimit       = require('express-rate-limit');
 const { createPersonalWorkspace } = require('../lib/workspace');
+const { isDemoEmail }   = require('../lib/demoAccount');
 const googleLogin     = require('../googleLoginOAuth');
 
 // Dedicated limiter for the Google OAuth callback — discourages anyone trying to
@@ -687,7 +688,9 @@ router.post('/forgot/request', limits.reset, async (req, res) => {
   const db   = getDb();
   const user = db.prepare('SELECT id FROM users WHERE email = ? AND email_verified = 1').get(email);
 
-  if (user) {
+  // The shared demo login never gets a reset code. The response stays the
+  // generic one, as for an unknown email.
+  if (user && !isDemoEmail(email)) {
     const existingReset = db.prepare(
       "SELECT code FROM otp_codes WHERE email = ? AND purpose = 'reset' AND used = 0 AND expires_at > datetime('now') ORDER BY id DESC LIMIT 1"
     ).get(email);
@@ -732,6 +735,7 @@ router.post('/forgot/reset', async (req, res) => {
 
   const pwError = validatePassword(password, email);
   if (pwError) return res.status(400).json({ error: pwError });
+  if (isDemoEmail(email)) return res.status(403).json({ error: 'The shared demo account password cannot be changed.' });
 
   const db  = getDb();
   const otp = db.prepare(

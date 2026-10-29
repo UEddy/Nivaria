@@ -37,6 +37,7 @@ const { requireOutboundAccess } = require('./outbound/access');
 const tasteRouter = require('./routes/taste');
 const { closeInterruptedRuns } = require('./tasteRuns');
 const { ensureExamples } = require('./tasteExamples');
+const { ensureDemoAccount } = require('./lib/demoAccount');
 
 // ── DB-backed session store ────────────────────────────────────────────────────
 
@@ -367,6 +368,7 @@ initDb().then(() => {
   }, 60 * 60 * 1000);
 
   logAnthropicKeyStatus();
+  ensureDemoAccount();
   closeInterruptedRuns();
   startScheduler();
   app.listen(PORT, () => {
