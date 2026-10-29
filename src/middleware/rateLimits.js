@@ -58,6 +58,9 @@ module.exports = {
   // Login: 10 req / IP / 15 min (per-email limit handled in route)
   login: makeLimiter(15 * 60 * 1000, 10, 15),
 
+  // One-click live demo sign-in (POST /api/auth/demo): 20 / IP / 15 min.
+  demoLogin: makeLimiter(15 * 60 * 1000, 20, 15),
+
   // Registration (send OTP): 5 req / IP / hour
   register: makeLimiter(60 * 60 * 1000, 5, 60),
 

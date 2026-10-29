@@ -9,7 +9,7 @@ const { notifyNewSignup } = require('../telegram');
 const limits          = require('../middleware/rateLimits');
 const rateLimit       = require('express-rate-limit');
 const { createPersonalWorkspace } = require('../lib/workspace');
-const { isDemoEmail }   = require('../lib/demoAccount');
+const { isDemoEmail, demoUser } = require('../lib/demoAccount');
 const googleLogin     = require('../googleLoginOAuth');
 
 // Dedicated limiter for the Google OAuth callback — discourages anyone trying to
@@ -488,7 +488,37 @@ router.post('/login', limits.login, async (req, res) => {
 // Public config probe so the login page can hide the Google button when the
 // feature isn't configured (no client id/secret set). Cheap, unauthenticated.
 router.get('/config', (_req, res) => {
-  res.json({ google: googleLogin.isConfigured() });
+  res.json({ google: googleLogin.isConfigured(), demo: Boolean(demoUser()) });
+});
+
+// ── One-click live demo ────────────────────────────────────────────────────────
+// The landing page's "Try the live demo" button. Signs the visitor straight
+// into the shared demo account (DEMO_LOGIN_EMAIL) with no form and no OTP. It
+// can only ever sign into that one account, it is off (404) when
+// DEMO_LOGIN_EMAIL is unset, and it is rate-limited per IP. A cross-origin POST
+// is refused, so another site cannot quietly sign a visitor into the demo. The
+// account itself cannot change its password, rename or delete itself (see
+// isDemoEmail in this file and routes/account.js).
+router.post('/demo', limits.demoLogin, (req, res) => {
+  const origin = req.get('origin');
+  if (origin && origin !== req.protocol + '://' + req.get('host')) {
+    return res.status(403).json({ error: 'Start the live demo from the Nivaria home page.' });
+  }
+  const user = demoUser();
+  if (!user) return res.status(404).json({ error: 'The live demo is not available right now.' });
+
+  getDb().prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
+  // Same session setup as a password login, including a fresh session id.
+  req.session.regenerate(err => {
+    if (err) return res.status(500).json({ error: 'Session error' });
+    req.session.userId         = user.id;
+    req.session.sessionVersion = user.session_version;
+    req.session.csrfToken      = crypto.randomBytes(32).toString('hex');
+    req.session.save(err2 => {
+      if (err2) return res.status(500).json({ error: 'Session error' });
+      res.json({ success: true, redirect: '/app#/taste' });
+    });
+  });
 });
 
 // Initiate: stash a random state (plus the client's timezone, remember-me choice

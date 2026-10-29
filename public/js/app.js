@@ -289,6 +289,8 @@ const App = {
     }
 
     App.applyProductMode();
+    // The shared demo account: say so, since everyone in it sees the same runs.
+    if (App.user.is_demo) el('demo-banner').hidden = false;
     App.backfillTimezone();
     App.updateUserUI();
     App.updateBadges();

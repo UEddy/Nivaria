@@ -24,10 +24,10 @@ function check(name, ok, detail) {
   else { failed += 1; console.log('  FAIL ' + name + (detail ? ': ' + detail : '')); }
 }
 
-function boot(password) {
+function boot(password, { demoEmail = EMAIL } = {}) {
   const child = spawn(process.execPath, ['src/server.js'], {
     cwd: __dirname,
-    env: { ...process.env, PORT: String(PORT), DATABASE_PATH: path.join(tmp, 'test.db'), DEMO_LOGIN_EMAIL: EMAIL, DEMO_LOGIN_PASSWORD: password, TASTE_EXAMPLES: 'off' },
+    env: { ...process.env, PORT: String(PORT), DATABASE_PATH: path.join(tmp, 'test.db'), DEMO_LOGIN_EMAIL: demoEmail, DEMO_LOGIN_PASSWORD: password, TASTE_EXAMPLES: 'off' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';
@@ -86,6 +86,25 @@ async function main() {
   check('a reset request gets the generic answer', forgot.status === 200, JSON.stringify(forgot.json));
   const reset = await call('', null, 'POST', '/api/auth/forgot/reset', { email: EMAIL, token: 'x', password: 'Another-password-456' });
   check('a password reset is refused', reset.status === 403, JSON.stringify(reset.json));
+  const config = await (await fetch(B + '/api/auth/config')).json();
+  check('auth config reports the live demo', config.demo === true, JSON.stringify(config));
+  const oneClick = await fetch(B + '/api/auth/demo', { method: 'POST', headers: { Origin: B } });
+  const oneClickJson = await oneClick.json();
+  const demoCookie = (oneClick.headers.get('set-cookie') || '').split(';')[0];
+  check('one-click demo signs in with no credentials', oneClick.status === 200 && oneClickJson.redirect === '/app#/taste' && Boolean(demoCookie), JSON.stringify(oneClickJson));
+  const demoMe = await call(demoCookie, null, 'GET', '/api/auth/me');
+  check('the one-click session is the demo account, flagged as demo', demoMe.status === 200 && demoMe.json.email === EMAIL && demoMe.json.is_demo === true);
+  const demoDel = await call(demoCookie, demoMe.json.csrfToken, 'POST', '/api/account/delete', { password: 'first-password-123', confirmEmail: EMAIL });
+  check('a one-click session cannot delete the account', demoDel.status === 403);
+  const crossSite = await fetch(B + '/api/auth/demo', { method: 'POST', headers: { Origin: 'https://evil.example' } });
+  check('a cross-origin demo sign-in is refused', crossSite.status === 403 && !crossSite.headers.get('set-cookie'));
+  const noOrigin = await fetch(B + '/api/auth/demo', { method: 'POST' });
+  check('a demo sign-in without an Origin header still works', noOrigin.status === 200);
+  let limited = 0;
+  for (let i = 0; i < 20 && !limited; i += 1) {
+    if ((await fetch(B + '/api/auth/demo', { method: 'POST' })).status === 429) limited = i + 4;
+  }
+  check('demo sign-ins are rate-limited per IP (20 per 15 minutes)', limited === 21, 'first 429 on request ' + limited);
   await stop(first.child);
 
   const second = await boot('second-password-456');
@@ -93,6 +112,11 @@ async function main() {
   check('the old password stops working', (await login('first-password-123')).status === 401);
   check('the new password works', (await login('second-password-456')).status === 200);
   await stop(second.child);
+
+  const off = await boot('second-password-456', { demoEmail: '' });
+  check('with DEMO_LOGIN_EMAIL unset, the config hides the demo', (await (await fetch(B + '/api/auth/config')).json()).demo === false);
+  check('with DEMO_LOGIN_EMAIL unset, the demo endpoint is off', (await fetch(B + '/api/auth/demo', { method: 'POST', headers: { Origin: B } })).status === 404);
+  await stop(off.child);
 
   fs.rmSync(tmp, { recursive: true, force: true });
   console.log('\n' + passed + ' passed, ' + failed + ' failed');

@@ -61,4 +61,12 @@ function ensureDemoAccount() {
   console.log('✅ Demo login created for ' + email);
 }
 
-module.exports = { ensureDemoAccount, isDemoEmail };
+// The demo account's row, when the demo login is configured and the account
+// exists (ensureDemoAccount ran at boot). Used by the one-click live demo.
+function demoUser() {
+  const email = demoEmail();
+  if (!email) return null;
+  return getDb().prepare('SELECT * FROM users WHERE email = ? AND email_verified = 1').get(email) || null;
+}
+
+module.exports = { ensureDemoAccount, isDemoEmail, demoUser };
