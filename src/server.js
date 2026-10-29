@@ -36,6 +36,7 @@ const { requireOutboundAccess } = require('./outbound/access');
 // Taste Gap: Qloo audience-gap agent runs.
 const tasteRouter = require('./routes/taste');
 const { closeInterruptedRuns } = require('./tasteRuns');
+const { ensureExamples } = require('./tasteExamples');
 
 // ── DB-backed session store ────────────────────────────────────────────────────
 
@@ -370,6 +371,8 @@ initDb().then(() => {
   startScheduler();
   app.listen(PORT, () => {
     console.log(`\n🔍 Nivaria — http://localhost:${PORT}\n`);
+    // Seeded Taste Gap examples, generated once in the background.
+    ensureExamples().catch(err => console.warn('[taste] examples failed: ' + err.message));
   });
 }).catch(err => {
   console.error('Failed to start:', err);

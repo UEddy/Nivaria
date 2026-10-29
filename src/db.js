@@ -635,6 +635,8 @@ const SCHEMA = `
   -- own JSON. data holds Qloo results (gaps, heatmap cells, demographics), which
   -- the hackathon rules allow caching server-side but never committing, and this
   -- database is git-ignored. rerun_of points at the run this one repeated.
+  -- example_key marks a seeded example run (src/tasteExamples.js): owned by no
+  -- user (created_by 0), readable by every signed-in user.
   CREATE TABLE IF NOT EXISTS taste_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     created_by INTEGER NOT NULL,
@@ -655,6 +657,7 @@ const SCHEMA = `
     turns INTEGER,
     duration_ms INTEGER,
     error_message TEXT,
+    example_key TEXT,
     FOREIGN KEY (created_by) REFERENCES users(id)
   );
   CREATE INDEX IF NOT EXISTS idx_taste_runs_creator ON taste_runs(created_by, created_at DESC);
@@ -865,6 +868,12 @@ async function initDb() {
   // trigger could not be dated sort below dated-fresh leads (see store.js
   // freshnessRank). The table may not exist on a brand-new DB until SCHEMA runs
   // above, so guard on it being present.
+  // Taste Gap: example_key arrived after the table did (seeded example runs).
+  const tasteRunCols = (sqlDb.exec('PRAGMA table_info(taste_runs)')[0]?.values || []).map(v => v[1]);
+  if (tasteRunCols.length && !tasteRunCols.includes('example_key')) {
+    sqlDb.run('ALTER TABLE taste_runs ADD COLUMN example_key TEXT');
+  }
+
   const outboundLeadCols = (sqlDb.exec('PRAGMA table_info(outbound_leads)')[0]?.values || []).map(v => v[1]);
   if (outboundLeadCols.length && !outboundLeadCols.includes('trigger_at')) {
     sqlDb.run('ALTER TABLE outbound_leads ADD COLUMN trigger_at DATETIME');

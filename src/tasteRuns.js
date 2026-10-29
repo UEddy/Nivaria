@@ -30,7 +30,10 @@ function parseJson(v, fallback) {
 }
 
 // Columns for the Runs list: everything except the large JSON blobs.
-const SUMMARY_COLS = 'id, created_at, finished_at, status, brand, rivals, city, rerun_of, headline, model, turns, duration_ms, error_message';
+const SUMMARY_COLS = 'id, created_at, finished_at, status, brand, rivals, city, rerun_of, headline, model, turns, duration_ms, error_message, example_key';
+
+// Seeded example runs (src/tasteExamples.js) belong to no user.
+const EXAMPLE_OWNER = 0;
 
 function hydrate(row, { full = false } = {}) {
   if (!row) return null;
@@ -46,8 +49,11 @@ function hydrate(row, { full = false } = {}) {
   return out;
 }
 
+// A user's own run, or a finished example run, which every user may read.
 function getRunForUser(id, userId) {
-  return hydrate(getDb().prepare('SELECT * FROM taste_runs WHERE id = ? AND created_by = ?').get(id, userId), { full: true });
+  return hydrate(getDb().prepare(
+    'SELECT * FROM taste_runs WHERE id = ? AND (created_by = ? OR example_key IS NOT NULL)'
+  ).get(id, userId), { full: true });
 }
 
 function listRunsForUser(userId, limit = 50) {
@@ -55,6 +61,30 @@ function listRunsForUser(userId, limit = 50) {
     .prepare(`SELECT ${SUMMARY_COLS} FROM taste_runs WHERE created_by = ? ORDER BY id DESC LIMIT ?`)
     .all(userId, limit)
     .map(r => hydrate(r));
+}
+
+// Finished example runs with the parts of the brief a preview card needs.
+function listExamples() {
+  return getDb()
+    .prepare("SELECT id, example_key, finished_at, brand, rivals, city, model, brief FROM taste_runs WHERE example_key IS NOT NULL AND status = 'done' ORDER BY id")
+    .all()
+    .map(r => {
+      const brief = parseJson(r.brief, {}) || {};
+      return {
+        id: r.id,
+        example_key: r.example_key,
+        finished_at: r.finished_at,
+        brand: r.brand,
+        rivals: parseJson(r.rivals, []),
+        city: r.city,
+        model: r.model,
+        headline: brief.headline || '',
+        summary: brief.summary || '',
+        win_first: (brief.win_first || []).slice(0, 3).map(w => ({ rank: w.rank, segment: w.segment, campaign_hook: w.campaign_hook })),
+        segments: (brief.rival_owned_segments || []).length,
+        hotspots: (brief.geo_hotspots || []).length,
+      };
+    });
 }
 
 function activeRunForUser(userId) {
@@ -96,6 +126,7 @@ function finish(id, fields, entry) {
 
 async function execute(id, input) {
   const entry = live.get(id);
+  let ok = false;
   try {
     const run = await runTasteAgent({
       ...input,
@@ -116,6 +147,7 @@ async function execute(id, input) {
       turns: run.turns,
       duration_ms: run.duration_ms,
     }, entry);
+    ok = true;
   } catch (err) {
     console.warn('[taste] run ' + id + ' failed: ' + err.message);
     const providers = err.providers || [];
@@ -127,16 +159,44 @@ async function execute(id, input) {
       model: providers.map(p => p.provider + ':' + p.model).join(' then ') || null,
     }, entry);
   }
+  return ok;
+}
+
+function insertRun(ownerId, input, rerunOf) {
+  const { lastInsertRowid: id } = getDb().prepare(
+    "INSERT INTO taste_runs (created_by, status, brand, rivals, city, rerun_of) VALUES (?, 'running', ?, ?, ?, ?)"
+  ).run(ownerId, input.brand, JSON.stringify(input.rivals), input.city, rerunOf);
+  live.set(id, { steps: [], listeners: new Set(), ended: false });
+  return id;
 }
 
 // Insert the row and start the agent in the background. Returns the new row.
 function startRun(userId, input, { rerunOf = null } = {}) {
-  const { lastInsertRowid: id } = getDb().prepare(
-    "INSERT INTO taste_runs (created_by, status, brand, rivals, city, rerun_of) VALUES (?, 'running', ?, ?, ?, ?)"
-  ).run(userId, input.brand, JSON.stringify(input.rivals), input.city, rerunOf);
-  live.set(id, { steps: [], listeners: new Set(), ended: false });
+  const id = insertRun(userId, input, rerunOf);
   execute(id, { brand: input.brand, rivals: input.rivals, city: input.city });
   return hydrate(getDb().prepare(`SELECT ${SUMMARY_COLS} FROM taste_runs WHERE id = ?`).get(id));
+}
+
+// Generate one example run and wait for it. On success it takes over key from
+// any older example; a failed attempt is deleted so the next boot retries.
+// Returns the new run id, or null on failure.
+async function runExample(key, input) {
+  const id = insertRun(EXAMPLE_OWNER, input, null);
+  const ok = await execute(id, { brand: input.brand, rivals: input.rivals, city: input.city });
+  const db = getDb();
+  if (!ok) {
+    db.prepare('DELETE FROM taste_runs WHERE id = ?').run(id);
+    return null;
+  }
+  db.savepoint(() => {
+    db.prepare('DELETE FROM taste_runs WHERE example_key = ? AND id != ?').run(key, id);
+    db.prepare('UPDATE taste_runs SET example_key = ? WHERE id = ?').run(key, id);
+  });
+  return id;
+}
+
+function exampleKeys() {
+  return getDb().prepare("SELECT example_key FROM taste_runs WHERE example_key IS NOT NULL AND status = 'done'").all().map(r => r.example_key);
 }
 
 // Listen to a live run. Returns an unsubscribe function, or null when the run
@@ -156,12 +216,15 @@ function liveSteps(id) {
 // A restart loses the background work, so a row still marked running at boot
 // can never finish. Close it out instead of leaving the UI waiting.
 function closeInterruptedRuns() {
+  // An example attempt cut off by the restart is retried by the next
+  // ensureExamples(), so drop it instead of keeping a failed row.
+  getDb().prepare("DELETE FROM taste_runs WHERE created_by = ? AND example_key IS NULL AND status = 'running'").run(EXAMPLE_OWNER);
   getDb().prepare(
     "UPDATE taste_runs SET status = 'error', error_message = 'The server restarted during this run. Run it again.', finished_at = CURRENT_TIMESTAMP WHERE status = 'running'"
   ).run();
 }
 
 module.exports = {
-  startRun, getRunForUser, listRunsForUser, activeRunForUser, normalizeInput, configProblem,
+  startRun, getRunForUser, listRunsForUser, listExamples, runExample, exampleKeys, activeRunForUser, normalizeInput, configProblem,
   subscribe, liveSteps, closeInterruptedRuns,
 };

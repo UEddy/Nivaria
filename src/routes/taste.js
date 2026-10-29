@@ -3,6 +3,7 @@
 // started them; every lookup is scoped by req.userId.
 //
 //   GET    /status             whether this server can start a run
+//   GET    /examples           the seeded example briefs, featured first
 //   POST   /runs               start a run { brand, rivals: [1 or 2], city? }
 //   GET    /runs               the user's runs, newest first (no blobs)
 //   GET    /runs/:id           one run: brief, chart data and trace
@@ -18,6 +19,7 @@
 
 const express = require('express');
 const runs = require('../tasteRuns');
+const examples = require('../tasteExamples');
 const qloo = require('../qloo/client');
 const { sanitizeCopy } = require('../lib/sanitizeText');
 
@@ -42,6 +44,10 @@ function start(req, res, input, rerunOf) {
 router.get('/status', (req, res) => {
   const problem = runs.configProblem();
   res.json({ ready: !problem, problem });
+});
+
+router.get('/examples', (req, res) => {
+  res.json({ examples: examples.listExamples() });
 });
 
 router.post('/runs', (req, res) => {

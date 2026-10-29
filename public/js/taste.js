@@ -79,8 +79,11 @@ const Taste = (() => {
   async function renderForm() {
     let status = { ready: true };
     let recent = [];
+    let examples = [];
     try {
-      [status, { runs: recent }] = await Promise.all([API.get('/taste/status'), API.get('/taste/runs')]);
+      [status, { runs: recent }, { examples }] = await Promise.all([
+        API.get('/taste/status'), API.get('/taste/runs'), API.get('/taste/examples'),
+      ]);
     } catch (e) {
       toast(e.message, 'error');
     }
@@ -97,6 +100,8 @@ const Taste = (() => {
             Every number in the brief comes from Qloo.
           </div>
         </div>
+
+        ${exampleCards(examples)}
 
         ${status.ready ? '' : `
           <div class="bc-section taste-notice">
@@ -263,6 +268,53 @@ const Taste = (() => {
     input.addEventListener('blur', () => setTimeout(close, 100));
   }
 
+  // Seeded examples (generated for real once, served from the database), so a
+  // finished brief is one click away before anyone runs anything.
+  function exampleCards(list) {
+    if (!list.length) return '';
+    const title = ex => brandLine(ex) + (ex.city ? ' in ' + esc(ex.city) : '');
+    const featured = list.find(ex => ex.featured) || list[0];
+    const rest = list.filter(ex => ex !== featured);
+    const facts = ex => [
+      ex.segments ? ex.segments + ' rival-owned segments' : '',
+      ex.hotspots ? ex.hotspots + ' map hotspots' : '',
+    ].filter(Boolean).join(', ');
+    return `
+      <div class="taste-section-title">See a finished brief</div>
+      <div class="bc-section bc-response taste-example taste-example--featured">
+        <div class="bc-section-header">
+          <div class="bc-section-label">Featured example</div>
+          <span class="taste-hint">${esc(facts(featured))}</span>
+        </div>
+        <div class="taste-example-title">${title(featured)}</div>
+        <h2 class="bc-headline taste-example-headline">${esc(featured.headline)}</h2>
+        <div class="bc-section-body">${esc(featured.summary)}</div>
+        ${featured.win_first.length ? `
+          <ol class="taste-example-wins">
+            ${featured.win_first.map(w => `
+              <li><span class="taste-rank">${esc(String(w.rank))}</span>
+                <span><strong>${esc(w.segment)}</strong>. ${esc(w.campaign_hook)}</span></li>`).join('')}
+          </ol>` : ''}
+        <div class="taste-example-actions">
+          <a class="btn btn-primary btn-sm" href="#/taste/${featured.id}">Open the full brief</a>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="Taste.rerun(${featured.id})">Run it yourself</button>
+        </div>
+      </div>
+      ${rest.map(ex => `
+        <div class="bc-section taste-example">
+          <div class="bc-section-header">
+            <div class="bc-section-label">Example${ex.city ? '' : ', no city'}</div>
+            <span class="taste-hint">${esc(facts(ex))}</span>
+          </div>
+          <div class="taste-example-title">${title(ex)}</div>
+          <div class="bc-section-body">${esc(ex.headline)}</div>
+          <div class="taste-example-actions">
+            <a class="btn btn-secondary btn-sm" href="#/taste/${ex.id}">Open the brief</a>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="Taste.rerun(${ex.id})">Run it yourself</button>
+          </div>
+        </div>`).join('')}`;
+  }
+
   async function submit(e) {
     e.preventDefault();
     const f = e.target;
@@ -313,7 +365,9 @@ const Taste = (() => {
           ${brand?.image ? `<img class="taste-logo" src="${esc(brand.image)}" alt="" width="52" height="52">` : avatarHtml(run.brand, 52)}
           <div>
             <div class="bc-comp-name">${brandLine(run)}</div>
-            <div class="taste-sub">${run.city ? 'In ' + esc(run.city) : 'No city, so no places or map'}</div>
+            <div class="taste-sub">
+              ${run.example_key ? '<span class="badge badge-accent">Example</span> ' : ''}${run.city ? 'In ' + esc(run.city) : 'No city, so no places or map'}
+            </div>
           </div>
         </div>
         <div class="bc-threat ${cls}">

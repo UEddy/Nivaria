@@ -4174,3 +4174,14 @@ body[data-mode="taste"] [data-surface="monitor"] { display: none; }
 .taste-suggest-item:hover, .taste-suggest-item.active { background: var(--bg-active); }
 .taste-suggest-name { font-size: 13.5px; font-weight: 600; color: var(--txt); }
 .taste-suggest-desc { font-size: 12px; color: var(--txt-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Taste Gap seeded examples */
+.taste-example { display: flex; flex-direction: column; gap: 8px; }
+.taste-example .bc-section-header { margin-bottom: 0; }
+.taste-example-title { font-size: 13px; font-weight: 700; color: var(--txt-2); }
+.taste-example-headline { font-size: 19px; }
+.taste-example-wins { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.taste-example-wins li { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; color: var(--txt-2); line-height: 1.55; }
+.taste-example-wins strong { color: var(--txt); }
+.taste-example-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.taste-sub .badge { margin-right: 4px; }
