@@ -29,11 +29,11 @@ const API = (() => {
 
     const data = await res.json().catch(() => ({}));
 
-    // Phase 10: a 402 upgrade_required from any gated endpoint shows the upgrade
-    // modal centrally — the backend owns the message + upgradeUrl, the frontend
-    // just renders. The call still rejects so the caller can stop its flow.
-    if (res.status === 402 && data && data.error === 'upgrade_required' && !reqOpts.noGateModal) {
-      try { window.showUpgradeModal && window.showUpgradeModal(data); } catch (_) {}
+    // A 403 plan_limit from any gated endpoint shows the plan-limit notice
+    // centrally; the backend owns the message. The call still rejects so the
+    // caller can stop its flow.
+    if (res.status === 403 && data && data.error === 'plan_limit' && !reqOpts.noGateModal) {
+      try { window.showPlanLimitModal && window.showPlanLimitModal(data); } catch (_) {}
     }
 
     if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), data);
@@ -48,19 +48,7 @@ const API = (() => {
 
     // Auth
     getMe:   ()     => API.get('/auth/me'),
-    setTier: (tier) => API.put('/auth/me/tier', { tier }),
     logout:  ()     => API.post('/auth/logout'),
-
-    // Phase 10 — billing. State is webhook-driven server-side.
-    getSubscription:     ()           => API.get('/billing/subscription'),
-    checkout:            (tier='pro') => API.post('/billing/checkout', { tier }),
-    billingPortal:       ()           => API.post('/billing/portal'),
-    cancelSubscription:  ()           => API.post('/billing/cancel'),
-    resumeSubscription:  ()           => API.post('/billing/resume'),
-    reconcile:           ()           => API.post('/billing/reconcile'),
-
-    // Phase 10 — waitlist (Team/Business). Public endpoint.
-    joinWaitlist: (data) => API.post('/waitlist', data),
 
     // Phase 10 — GDPR account rights. delete/cancel use fresh-auth (password),
     // so a wrong password must NOT redirect to /login (silent401). Delete is an

@@ -40,12 +40,8 @@ module.exports = {
   // human ever would, don't trip the limiter; production omits the var and keeps 100.
   api: makeLimiter(15 * 60 * 1000, parseInt(process.env.RATE_LIMIT_API_MAX, 10) || 100, 15),
 
-  // ── Phase 10: payment + account endpoints (per-user unless noted) ───────────
-  billingCheckout: makeUserLimiter(60 * 60 * 1000, 10, 60), // 10 / user / hour
-  billingPortal:   makeUserLimiter(60 * 60 * 1000, 30, 60), // 30 / user / hour
-  billingReconcile: makeUserLimiter(60 * 60 * 1000, 5, 60), // 5 / user / hour
+  // ── Phase 10: account endpoints (per user) ──────────────────────────────────
   accountDelete:   makeUserLimiter(60 * 60 * 1000, 3, 60),  // 3 / user / hour (paranoia)
-  waitlist:        makeLimiter(60 * 60 * 1000, 5, 60),       // 5 / IP / hour (public)
 
   // Login: 10 req / IP / 15 min (per-email limit handled in route)
   login: makeLimiter(15 * 60 * 1000, 10, 15),

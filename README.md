@@ -14,7 +14,7 @@ I built Nivaria from the ground up as a full-stack solution to help B2B business
 
 - Email and OTP-based authentication with verification on registration
 - Password reset flow with rate-limited OTP delivery
-- Three-tier pricing (Free, Pro, Team) with usage enforcement on every protected route
+- One fixed plan for every account (5 monitored pages, every feature on), enforced server-side on every protected route
 - Competitor monitoring dashboard with paused or active state and per-source change history
 - AI-generated briefs: headline, summary, threat score (low, medium, high), recommended response, and sales talking points
 - Slack and Discord webhook alerts when changes are detected
@@ -57,7 +57,7 @@ I built Nivaria from the ground up as a full-stack solution to help B2B business
    ```bash
    cp .env.example .env
    ```
-   At minimum, set `ANTHROPIC_API_KEY` and `RESEND_API_KEY` in the new `.env`. Lemon Squeezy variables (see "Plans & billing" below) are optional until you wire up payments.
+   At minimum, set `ANTHROPIC_API_KEY` and `RESEND_API_KEY` in the new `.env`.
 4. Start the server:
    ```bash
    npm start
@@ -98,28 +98,24 @@ Sales representatives log deal outcomes and Nivaria quantifies what competitors 
 - Two logging paths, both optimized for speed: an inline form on the Deals page (no modal), and the Slack slash command below.
 - Correlations recompute nightly per user (2:30 AM) and on demand when the Revenue Impact Dashboard is opened.
 
-## Plans & billing (Lemon Squeezy)
+## Plan
 
-Subscriptions run on [Lemon Squeezy](https://lemonsqueezy.com) as merchant of record. It handles all card data and PCI compliance; Nivaria stores none. Billing is workspace-scoped: every user owns one personal workspace that carries the subscription. Tiers: **Free** ($0) and **Pro** ($49/mo) are live; **Team** ($149/mo) and **Business** ($349/mo) are waitlist-only.
+There is no billing. Every account is on one fixed plan: up to 5 monitored pages (and up to 5 per competitor), daily checks, Slack and Discord alerts, calendar briefings, outreach playbooks, win/loss correlation and historical context. There is no trial, checkout or subscription. The limits live in `src/lib/tierLimits.js`; accounts in `ADMIN_EMAILS` and accounts with the developer flag have no page cap.
 
-Subscription state is driven **solely** by signed webhooks: the app never writes tier/status from a route, so local state can't drift from Lemon Squeezy.
+### Legacy billing tables
 
-### Lemon Squeezy setup (test mode)
+Lemon Squeezy billing was removed on 2026-10-29. Its tables and columns were left in place, unused, so no destructive migration was needed:
 
-Toggle **Test Mode ON** (top-right of the dashboard) and keep it on for the whole build. Then collect four values into `.env` (see `.env.example` for exactly where each lives):
+- `payment_events`: the Lemon Squeezy webhook log. Existing rows are kept for accounting records and anonymized (`workspace_id` set to NULL) when an account is deleted.
+- `waitlist_signups`: Team and Business waitlist signups and 14-day trial requests.
+- `workspaces` columns `subscription_id`, `subscription_status`, `subscription_tier`, `subscription_current_period_end`, `subscription_cancel_at_period_end`, `tier_granted_at`, `lemon_squeezy_customer_id`, `lemon_squeezy_subscription_variant_id`, `trial_ends_at` and `trial_notices`.
+- `users.tier`.
 
-1. **API key**: Settings → API → *Create API key* → `LEMONSQUEEZY_API_KEY` (server-side only; never sent to the client or logged).
-2. **Store ID**: Settings → Stores → `LEMONSQUEEZY_STORE_ID`.
-3. **Pro variant**: Products → *New Product* "Nivaria Pro", Subscription / $49 per month → copy the **variant** id → `LEMONSQUEEZY_PRO_VARIANT_ID`.
-4. **Webhook**: Settings → Webhooks → *New webhook*. Request URL `https://<your-host>/api/webhooks/lemonsqueezy` (use your ngrok URL while testing). Generate a strong signing secret, paste the same value into `LEMONSQUEEZY_WEBHOOK_SECRET`, and subscribe to all `subscription_*` events.
-
-Leave `LEMONSQUEEZY_TEST_MODE=true` until going live (Phase 13). Enable the **Customer Portal** under Settings → Customer Portal so the "Manage subscription" button works. The webhook contract (every event → state change) is documented in [`docs/webhook-event-mapping.md`](docs/webhook-event-mapping.md).
-
-Test card: `4242 4242 4242 4242`, any future expiry, any CVC.
+Nothing reads or writes them. Drop them in a later migration if you want the schema tidy.
 
 ### GDPR data rights
 
-`GET /api/account/export` (full JSON export, OAuth tokens masked) and `POST /api/account/delete` (30-day grace period, email cancellation link, payment records retained but anonymized) are built in. Both deletion endpoints require re-entering the password (fresh auth). Run `node scripts/verify-workspace-integrity.js` before any deploy (see [SECURITY.md](SECURITY.md)).
+`GET /api/account/export` (full JSON export, OAuth tokens masked) and `POST /api/account/delete` (30-day grace period, email cancellation link, legacy payment records retained but anonymized) are built in. Both deletion endpoints require re-entering the password (fresh auth). Run `node scripts/verify-workspace-integrity.js` before any deploy (see [SECURITY.md](SECURITY.md)).
 
 ### Slack deal logging setup
 
@@ -141,7 +137,6 @@ Command syntax: `/foresight <outcome> <deal name> [$value] [vs competitor]`, whe
 
 ### Next 7 days
 
-- Go live on Lemon Squeezy payments (flip `LEMONSQUEEZY_TEST_MODE=false`) after end-to-end test-mode validation
 - Production security hardening: nonce-based CSP, Redis-backed rate limiter, shared session store
 - Deploy to a production environment behind HTTPS
 

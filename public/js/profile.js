@@ -3,8 +3,8 @@
 //   details · voice · integrations · account
 // This is the per-user home: identity, how Nivaria writes on your behalf, the
 // per-user integrations (calendar, Slack, alert webhooks), and the account
-// danger zone. Workspace-level settings (business context, notifications,
-// billing) live on the separate Settings page (public/js/settings.js).
+// danger zone. Workspace-level settings (business context, notifications)
+// live on the separate Settings page (public/js/settings.js).
 //
 // Each section is a real hash sub-route (#/profile/<section>) so deep links,
 // browser back/forward, and OAuth return redirects all work. The fetched data
@@ -16,7 +16,7 @@
 // micro-interactions (both modules are global; calls happen at runtime).
 
 const Profile = {
-  _ctx: null,            // cached { user, voiceData, settings, calData, slackData, subData }
+  _ctx: null,            // cached { user, voiceData, settings, calData, slackData }
   _activeSection: 'details',
 
   SECTIONS: [
@@ -54,15 +54,14 @@ const Profile = {
 
     if (needFetch) {
       try {
-        const [user, voiceData, settings, calData, slackData, subData] = await Promise.all([
+        const [user, voiceData, settings, calData, slackData] = await Promise.all([
           API.getMe().catch(() => (window.App && App.user) || null),
           API.getVoiceProfile().catch(() => null),
           API.getSettings().then(r => r.settings || r || {}).catch(() => ({})),
           API.getCalendarConnections().catch(() => ({ encryption_configured: false, connections: [] })),
           API.getSlackConnection().catch(() => ({ oauth_configured: false, signing_configured: false, connected: false })),
-          API.getSubscription().catch(() => null),
         ]);
-        Profile._ctx = { user: user || (window.App && App.user) || {}, voiceData, settings: settings || {}, calData, slackData, subData };
+        Profile._ctx = { user: user || (window.App && App.user) || {}, voiceData, settings: settings || {}, calData, slackData };
       } catch (e) {
         el('page-root').innerHTML = `
           <div class="empty-state">
@@ -123,9 +122,7 @@ const Profile = {
   },
 
   panelHtml(section, ctx) {
-    const { user, voiceData, settings: s, calData, slackData, subData } = ctx;
-    const tier = (subData && subData.effectiveTier) || 'free';
-    const isProPlus = tier === 'pro' || tier === 'team' || tier === 'business';
+    const { user, voiceData, settings: s, calData, slackData } = ctx;
 
     switch (section) {
       case 'details':
@@ -133,7 +130,7 @@ const Profile = {
       case 'voice':
         return Profile.voiceProfileHtml(voiceData);
       case 'integrations':
-        return Profile.calendarHtml(s, calData) + Profile.slackHtml(slackData) + Profile.webhooksHtml(s, isProPlus);
+        return Profile.calendarHtml(s, calData) + Profile.slackHtml(slackData) + Profile.webhooksHtml(s);
       case 'security':
         return Profile.passwordHtml(user) + Profile.accountHtml(user) + Profile.gdprHtml();
       default:
@@ -535,7 +532,7 @@ const Profile = {
   // any column whose key is absent from the body, so this save never touches
   // briefings.
 
-  webhooksHtml(s, isProPlus) {
+  webhooksHtml(s) {
     const slackUrl   = s.slack_webhook || '';
     const discordUrl = s.discord_webhook || '';
 
@@ -546,16 +543,13 @@ const Profile = {
       ? `<span class="set-pill set-pill--active">Connected</span>`
       : `<span class="set-pill set-pill--off">Not connected</span>`;
 
-    const disabledAttr = !isProPlus ? 'disabled' : '';
-
     return `
-      <div class="set-card ${!isProPlus ? 'is-locked' : ''}">
+      <div class="set-card">
         <div class="set-card__head">
           <div class="set-card__title">
             Alert webhooks
-            ${!isProPlus ? `<span class="tier-badge">Pro+</span>` : ''}
           </div>
-          <div class="set-card__desc">Push change alerts and briefings to Slack or Discord via incoming webhook.${!isProPlus ? ' Upgrade to Pro to enable webhook notifications.' : ''}</div>
+          <div class="set-card__desc">Push change alerts and briefings to Slack or Discord via incoming webhook.</div>
         </div>
         <div class="set-card__body" data-dirty-group>
 
@@ -571,8 +565,8 @@ const Profile = {
             </div>
             <div class="webhook-row">
               <input class="form-input" id="slack-url" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://hooks.slack.com/services/…"
-                value="${esc(slackUrl)}" ${disabledAttr} />
-              <button class="btn btn-secondary btn-sm" onclick="Profile.testWebhook('slack')" ${disabledAttr}>Test</button>
+                value="${esc(slackUrl)}" />
+              <button class="btn btn-secondary btn-sm" onclick="Profile.testWebhook('slack')">Test</button>
             </div>
             <span class="form-hint">Create one at api.slack.com/messaging/webhooks</span>
           </div>
@@ -589,15 +583,15 @@ const Profile = {
             </div>
             <div class="webhook-row">
               <input class="form-input" id="discord-url" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://discord.com/api/webhooks/…"
-                value="${esc(discordUrl)}" ${disabledAttr} />
-              <button class="btn btn-secondary btn-sm" onclick="Profile.testWebhook('discord')" ${disabledAttr}>Test</button>
+                value="${esc(discordUrl)}" />
+              <button class="btn btn-secondary btn-sm" onclick="Profile.testWebhook('discord')">Test</button>
             </div>
             <span class="form-hint">Add a webhook in Discord: Channel Settings, then Integrations</span>
           </div>
 
           <div class="set-card__footer">
             <span id="webhook-save-feedback" class="set-feedback"></span>
-            <button class="btn btn-primary btn-sm" data-save-btn onclick="Profile.saveWebhooks(this)" ${disabledAttr}>Save changes</button>
+            <button class="btn btn-primary btn-sm" data-save-btn onclick="Profile.saveWebhooks(this)">Save changes</button>
           </div>
         </div>
       </div>
@@ -650,7 +644,6 @@ const Profile = {
       btn.textContent = original;
       setFeedback(e.message, true);
       toast(e.message, 'error');
-      if (e.upgrade_required) navigate('/pricing');
     }
   },
 
@@ -810,11 +803,11 @@ const Profile = {
           </p>
           <div class="set-plan-row">
             <span class="set-plan-meta">Download a full JSON export of your workspace data.</span>
-            <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="Billing.exportData(this)">Export my data</button>
+            <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="Account.exportData(this)">Export my data</button>
           </div>
           <div class="set-plan-row">
             <span class="set-plan-meta">Permanently delete your account and all data. This is immediate and cannot be undone.</span>
-            <button class="btn-delete-account" style="margin-left:auto" onclick="Billing.confirmDeleteAccount()">DELETE ACCOUNT</button>
+            <button class="btn-delete-account" style="margin-left:auto" onclick="Account.confirmDeleteAccount()">DELETE ACCOUNT</button>
           </div>
         </div>
       </div>`;

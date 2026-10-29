@@ -50,9 +50,9 @@ const account = require('../src/routes/account');
   const completed = scalar("SELECT COUNT(*) n FROM audit_log WHERE event_type='account_deletion_completed' AND user_id=?", tw.userId) >= 1;
   console.log(`  account_deletion_completed audit logged: ${completed ? '✅' : '❌'}`);
 
-  // demo (paid account) untouched?
-  const demoOk = scalar("SELECT COUNT(*) n FROM workspaces WHERE id=1 AND subscription_tier='pro'") === 1;
-  console.log(`  demo workspace untouched (still pro): ${demoOk ? '✅' : '❌'}`);
+  // demo account untouched?
+  const demoOk = scalar("SELECT COUNT(*) n FROM workspaces WHERE id=1") === 1;
+  console.log(`  demo workspace untouched: ${demoOk ? '✅' : '❌'}`);
 
   const pass = userGone && wsGone && memGone && compGone && retainedAnon && completed && demoOk;
   console.log(`\nTEST 11 (Part B): ${pass ? 'PASS ✅' : 'FAIL ❌'}`);

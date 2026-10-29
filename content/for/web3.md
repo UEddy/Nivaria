@@ -54,7 +54,7 @@ No dashboard to maintain, and no manual weekend spent reading a competitor's gov
 
 Nivaria monitors publicly available information only: website content, documentation, published pages, and other publicly accessible signals. It does not access private data or read on-chain state.
 
-[Start a 14-day free trial](https://nivaria.app/register). No credit card required.
+[Create a free account](https://nivaria.app/register). No credit card required.
 
 <!-- INTERNAL LINKS to activate: /for/startups, /blog/monitor-competitor-hiring -->
 <!-- VERIFY BEFORE PUBLISHING: this page deliberately does NOT claim on-chain, price, or TVL monitoring. If the product genuinely gains on-chain features later, revisit. Do not let anyone add token-price claims to this page unless the product actually does it. This honesty is the whole credibility of the page in a skeptical market. -->

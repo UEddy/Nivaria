@@ -118,13 +118,6 @@
           <span>Profile</span>
         </a>
 
-        <a href="#/pricing" class="nav-item" data-page="pricing">
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-          </svg>
-          <span>Plans & Pricing</span>
-        </a>
-
         <a href="#/settings" class="nav-item" data-page="settings">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/>
@@ -135,10 +128,6 @@
       </nav>
 
       <div class="sidebar-footer">
-        <div class="plan-chip" id="plan-chip">
-          <span class="plan-dot"></span>
-          <span id="plan-name">Pro Plan</span>
-        </div>
         <div class="sidebar-user" id="sidebar-user">
           <!-- Neutral loading state only: NEVER a demo/placeholder identity.
                These are blank skeleton bars until App.updateUserUI() fills in the
@@ -268,9 +257,7 @@
   <script src="/js/onboarding.js"></script>
   <script src="/js/settings.js"></script>
   <script src="/js/profile.js"></script>
-  <!-- Payment provider overlay checkout (loaded by billing.js startCheckout) -->
-  <script src="https://app.lemonsqueezy.com/js/lemon.js" defer></script>
-  <script src="/js/billing.js"></script>
+  <script src="/js/account.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

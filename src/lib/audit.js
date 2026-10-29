@@ -10,20 +10,15 @@
 const crypto = require('crypto');
 const { getDb } = require('../db');
 
-// Canonical event types (Phase 10 spec + the operational webhook/billing
-// events). Not strictly enforced at write time, but kept here as the reference.
+// Canonical event types. Not strictly enforced at write time, but kept here as
+// the reference. Older rows may also carry the event types of the billing
+// integration removed on 2026-10-29; nothing emits those now.
 const EVENT_TYPES = Object.freeze([
-  'subscription_created', 'subscription_cancelled', 'subscription_resumed',
-  'subscription_payment_failed', 'subscription_payment_succeeded',
   'gate_violation', 'login_success', 'login_failure', 'password_change',
   'account_deletion_requested', 'account_deletion_completed', 'data_export_requested',
-  // Operational extras emitted by the webhook + billing layer:
-  'subscription_updated', 'subscription_expired', 'subscription_paused',
-  'subscription_unpaused', 'subscription_payment_recovered',
-  'webhook_signature_invalid', 'account_deletion_cancelled', 'subscription_reconciled',
+  'account_deletion_cancelled',
   // Phase 12 admin actions:
-  'admin_view_waitlist', 'admin_view_users', 'admin_view_stats', 'set_developer_flag',
-  'admin_grant_tier',
+  'admin_view_users', 'admin_view_stats', 'admin_view_outbound', 'set_developer_flag',
 ]);
 
 function hashIp(ip) {

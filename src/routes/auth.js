@@ -8,7 +8,6 @@ const { sendOtpEmail} = require('../email');
 const { notifyNewSignup } = require('../telegram');
 const limits          = require('../middleware/rateLimits');
 const rateLimit       = require('express-rate-limit');
-const { csrfProtect } = require('../middleware/security');
 const { createPersonalWorkspace } = require('../lib/workspace');
 const googleLogin     = require('../googleLoginOAuth');
 
@@ -630,8 +629,8 @@ router.get('/google/callback', googleCallbackLimiter, async (req, res) => {
     const userId = r.lastInsertRowid;
     db.prepare('INSERT INTO settings (user_id) VALUES (?)').run(userId);
 
-    // Same workspace/tier bootstrap as an email signup, so trial/Dodo billing
-    // works identically and the account is never half-initialized.
+    // Same workspace bootstrap as an email signup, so the account is never
+    // half-initialized.
     createPersonalWorkspace(userId, firstName, profile.email);
 
     // Fire the founder Telegram heads-up ONLY for genuinely new signups (this
@@ -745,21 +744,6 @@ router.post('/forgot/reset', async (req, res) => {
   db.prepare('UPDATE otp_codes SET verified_token = NULL WHERE id = ?').run(otp.id);
 
   res.json({ success: true });
-});
-
-// ── Tier switch (demo) — CSRF-protected ───────────────────────────────────────
-// DEPRECATED (Phase 10): gating is now workspace-driven (workspaces.subscription_tier),
-// so writing users.tier here no longer affects feature access. This demo control
-// is superseded by the real billing UI (Phase 10 frontend) and is slated for
-// removal in a post-launch cleanup. Left in place for now = zero behavior change.
-
-router.put('/me/tier', csrfProtect, (req, res) => {
-  if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
-  const db   = getDb();
-  const tier = String(req.body.tier || '');
-  if (!['free', 'pro', 'team'].includes(tier)) return res.status(400).json({ error: 'Invalid tier' });
-  db.prepare('UPDATE users SET tier = ? WHERE id = ?').run(tier, req.session.userId);
-  res.json({ success: true, tier });
 });
 
 // Test seam — internal OTP helpers exposed for the security unit tests in

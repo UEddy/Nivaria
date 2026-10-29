@@ -134,8 +134,8 @@ function ctaHtml() {
   return `
     <aside class="content-cta">
       <h2 class="content-cta-title">See it on your own competitors</h2>
-      <p class="content-cta-sub">Start a 14-day free trial. No credit card required.</p>
-      <a class="content-cta-btn" href="/register">Start free trial</a>
+      <p class="content-cta-sub">Free to use. No credit card required.</p>
+      <a class="content-cta-btn" href="/register">Get started</a>
     </aside>`;
 }
 
@@ -242,7 +242,7 @@ function navHtml() {
         </span>
         <span class="c-logo-name">Nivaria</span>
       </a>
-      <a href="/register" class="c-nav-cta">Start free trial</a>
+      <a href="/register" class="c-nav-cta">Get started</a>
     </div>
   </nav>`;
 }

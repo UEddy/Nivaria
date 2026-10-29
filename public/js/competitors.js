@@ -62,7 +62,7 @@ const Competitors = {
     const used = stats.pages_used ?? stats.total_competitors ?? 0;
     const max  = stats.max_pages;
     const comps = stats.competitor_count ?? 0;
-    // max === null/undefined (TODO tier) or -1 means no enforced cap.
+    // max === null/undefined or -1 means no enforced cap.
     const unlimited = max === null || max === undefined || max === -1;
     const limitText = unlimited ? '∞' : max;
     const over = !unlimited && used > max;
@@ -81,7 +81,7 @@ const Competitors = {
         <div style="height:6px;border-radius:4px;background:var(--bg-3, rgba(148,163,184,.18));margin-top:10px;overflow:hidden">
           <div style="height:100%;width:${pct}%;border-radius:4px;background:${warn ? 'var(--red, #ef4444)' : 'var(--accent, #6366f1)'};transition:width .3s"></div>
         </div>
-        ${over ? `<div class="text-sm" style="margin-top:8px;color:var(--red, #ef4444);font-weight:500">You are over your plan limit. <a href="#/pricing" style="color:inherit;text-decoration:underline">Upgrade</a> to keep monitoring every page.</div>` : ''}
+        ${over ? `<div class="text-sm" style="margin-top:8px;color:var(--red, #ef4444);font-weight:500">You are over the plan limit. Remove a page before adding another.</div>` : ''}
       </div>`;
   },
 
@@ -117,16 +117,14 @@ const Competitors = {
     `;
   },
 
-  // Plan-aware footnote. Reads in PAGES to match the enforced limit.
+  // Plan footnote. Reads in PAGES to match the enforced limit, from the same
+  // stats payload the usage banner uses. -1 means the account has no cap.
   footnote(stats) {
-    const tier = (App.subscription?.effectiveTier || 'free');
-    if (tier === 'free') {
-      return `Free plan: 1 page. <a href="#/pricing" style="color:var(--accent-2)">Upgrade to Pro to monitor up to 15 pages</a>.`;
+    const max = stats && stats.max_pages;
+    if (max === -1 || max === null || max === undefined) {
+      return 'No page limit on this account. Up to 5 pages per competitor.';
     }
-    if (tier === 'pro') {
-      return `Pro plan: up to 15 pages, and up to 5 pages per competitor. <a href="#/pricing" style="color:var(--accent-2)">Higher volumes are coming with Team</a>.`;
-    }
-    return `Team plan: higher page volume. Up to 5 pages per competitor.`;
+    return `Up to ${max} pages, and up to 5 pages per competitor.`;
   },
 
   // One competitor (company) as an expandable section. Expanded by default so
@@ -241,10 +239,10 @@ const Competitors = {
   },
 
   statusPill(c) {
-    // Trial expiry archives pages above the Free limit: kept read-only, never
-    // deleted, restored automatically on upgrade.
+    // Archived pages (legacy trial expiry) are read-only and come back on their
+    // own once the workspace has room under the page cap.
     if (c.archived) {
-      return `<span class="status-pill status-pill--paused" title="Archived on the Free plan. Upgrade to restore."><span class="status-dot"></span>Archived</span>`;
+      return `<span class="status-pill status-pill--paused" title="Archived: over the plan's page limit. Remove another page to restore it."><span class="status-dot"></span>Archived</span>`;
     }
     if (!c.active) {
       return `<span class="status-pill status-pill--paused"><span class="status-dot"></span>Paused</span>`;
@@ -424,8 +422,8 @@ const Competitors = {
       App.stats = stats;
       App.updateBadges();
     } catch (e) {
-      // A 402 upgrade_required is surfaced centrally by api.js (tier-aware gate).
-      if (e.error === 'upgrade_required') return;
+      // A 403 plan_limit is shown centrally by api.js (plan-limit notice).
+      if (e.error === 'plan_limit') { btn.disabled = false; btn.textContent = 'Add Page'; return; }
       btn.disabled = false;
       btn.textContent = 'Add Page';
       toast(e.message, 'error');

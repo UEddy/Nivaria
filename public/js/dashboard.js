@@ -340,20 +340,12 @@ const Dashboard = {
       ? Math.min(100, Math.round((stats.total_changes / Math.max(1, stats.total_competitors)) * 12 + stats.active_competitors * 8))
       : 0;
 
-    // The billable unit is a PAGE. The page cap comes from the server
-    // (stats.max_pages), derived from the workspace's authoritative effective
-    // tier (getWorkspaceTier), NOT the deprecated App.user.tier. -1 means
-    // unlimited; null means a not-yet-configured (TODO) tier cap (team/business),
-    // also shown as no enforced cap. If the field is somehow absent (stale cached
-    // stats), fall back to the same app-wide effectiveTier the sidebar/Settings
-    // use rather than the most restrictive Free cap of 1. Mirrors server
-    // TIER_LIMITS page caps (team/business intentionally uncapped-for-now).
-    const CAP_BY_TIER = { free: 1, pro: 15, team: -1, business: -1 };
+    // The cost unit is a PAGE. The page cap comes from the server
+    // (stats.max_pages, from src/lib/tierLimits.js). -1 means unlimited; an
+    // absent value (stale cached stats) is shown as no enforced cap.
     const pagesUsed = stats.pages_used ?? stats.total_competitors ?? 0;
-    const rawCap = (stats.max_pages !== undefined && stats.max_pages !== null)
-      ? stats.max_pages
-      : (CAP_BY_TIER[App.subscription?.effectiveTier] ?? CAP_BY_TIER.free);
-    const slotMax = (rawCap === -1 || rawCap === null) ? null : rawCap;
+    const rawCap = stats.max_pages;
+    const slotMax = (rawCap === -1 || rawCap === null || rawCap === undefined) ? null : rawCap;
     const slotPct = slotMax ? Math.min(100, (pagesUsed / slotMax) * 100) : 20;
     const slotWarn = slotMax && pagesUsed / slotMax > 0.8;
 

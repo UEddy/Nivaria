@@ -1,6 +1,6 @@
 ---
 title: "Competitor Tracking for Agencies & Consultants | Nivaria"
-description: "Track competitors for every client account in one place. Automated monitoring plus AI briefs you can send straight to clients, from $49/month."
+description: "Track competitors for every client account in one place. Automated monitoring plus AI briefs you can send straight to clients, free to use."
 h1: "Competitor Tracking for Agencies and Consultants"
 slug: /for/agencies
 published: 2026-07-24
@@ -11,7 +11,7 @@ faqs:
   - q: "How do agencies track competitors for multiple clients?"
     a: "The workable approach is one tool holding separate competitor sets per client, so each account's monitoring stays isolated but runs from a single place. Tracking each client in a different tool, or by hand, stops scaling at around three or four accounts."
   - q: "Can I white-label competitor reports for clients?"
-    a: "Nivaria produces client-ready briefs you can forward or paste into your own reporting. Confirm current export and branding options on the pricing page or in a trial, since white-label support varies by plan across tools."
+    a: "Nivaria produces client-ready briefs you can forward or paste into your own reporting. Confirm current export and branding options in the app, since white-label support varies across tools."
   - q: "What should agencies monitor for clients?"
     a: "Start with each client's direct competitors: their pricing pages, homepages, product or feature pages, and announcements. These are the changes that affect a client's positioning and that clients notice when you flag them first."
   - q: "Is competitor monitoring worth it for a small agency?"
@@ -48,11 +48,11 @@ This is the part in-house teams do not have to care about, and it is where agenc
 
 A monthly competitive brief per client, sent proactively, is one of the cheapest ways to make a retainer feel worth it. It shows the client you are watching their market even in a quiet month, it creates a natural reason to check in, and it produces talking points for the next strategy call. The work is largely automated, so the cost to you is low and the perceived value is high.
 
-Nivaria monitors each client's competitors daily, writes a brief explaining what changed and what it means, and delivers it where you want it, so you can forward it or fold it into your own reporting. You add competitors per client, and each set stays separate. From $49 a month, 14-day trial, no card required.
+Nivaria monitors each client's competitors daily, writes a brief explaining what changed and what it means, and delivers it where you want it, so you can forward it or fold it into your own reporting. You add competitors per client, and each set stays separate. Free to use, no card required.
 
 Nivaria monitors publicly available information only: website content, pricing pages, product announcements and other publicly accessible business signals.
 
-[Start a 14-day free trial](https://nivaria.app/register). No credit card required.
+[Create a free account](https://nivaria.app/register). No credit card required.
 
 <!-- INTERNAL LINKS to activate: /for/sales-teams, /for/startups, /blog/monitor-competitor-hiring, /blog/track-competitor-pricing-changes -->
 <!-- VERIFY: confirm current export/branding options before implying white-label. The FAQ is hedged deliberately; tighten it only if the product genuinely supports white-label. -->

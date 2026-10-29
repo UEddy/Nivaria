@@ -123,9 +123,6 @@ RESEND_FROM=Nivaria <noreply@yourdomain.com>
 
 ANTHROPIC_API_KEY=sk-ant-...
 
-# Stripe (when payments are live)
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_WEBHOOK_SECRET=whsec_...
 ```
 
 Additionally:
@@ -165,11 +162,3 @@ deploy** until resolved. (`changes` is intentionally excluded: it is
 workspace-scoped only transitively via `competitor_id → competitors.workspace_id`,
 and all queries that read `changes` must join through that path — never return
 `changes` across workspaces.)
-
-### DEV-only Pro seed
-
-`src/db.js` contains a `seedDevProWorkspace()` helper that promotes the
-developer's own workspace to Pro for local testing. It is guarded by
-`NODE_ENV !== 'production'` and only ever promotes a workspace that is still
-`free` with no real subscription linked, so it can never overwrite a genuine
-Lemon Squeezy subscription. It must remain a no-op in production.

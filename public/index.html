@@ -66,9 +66,9 @@
         "publisher": { "@id": "https://nivaria.app/#organization" },
         "offers": {
           "@type": "Offer",
-          "price": "49",
+          "price": "0",
           "priceCurrency": "USD",
-          "description": "Pro plan, monitor up to 15 pages with daily AI briefs. 14-day free trial."
+          "description": "Free to use: monitor up to 5 pages with daily AI briefs."
         }
       }
     ]
@@ -95,7 +95,7 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         </button>
         <a href="/login" class="lp-btn lp-btn-ghost">Login</a>
-        <a href="/register" class="lp-btn lp-btn-primary">Start free trial</a>
+        <a href="/register" class="lp-btn lp-btn-primary">Get started</a>
         <button class="lp-mobile-menu-btn" id="lp-mobile-menu-btn" aria-label="Toggle mobile menu" aria-expanded="false">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
@@ -107,7 +107,7 @@
     <!-- Mobile dropdown -->
     <div id="lp-mobile-menu" style="display:none;flex-direction:column;padding:16px 24px 20px;gap:10px;background:var(--lp-bg-2);border-top:1px solid var(--lp-border);">
       <a href="/login" class="lp-btn lp-btn-ghost" style="width:100%;justify-content:center;">Login</a>
-      <a href="/register" class="lp-btn lp-btn-primary" style="width:100%;justify-content:center;">Start free trial</a>
+      <a href="/register" class="lp-btn lp-btn-primary" style="width:100%;justify-content:center;">Get started</a>
     </div>
   </nav>
   </header>
@@ -130,7 +130,7 @@
       </p>
       <div class="lp-hero-actions">
         <a href="/register" class="lp-btn lp-btn-primary lp-btn-lg">
-          Start free trial
+          Get started
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
           </svg>
@@ -139,7 +139,7 @@
           Watch the 1 minute tour
         </a>
       </div>
-      <p class="lp-hero-trust">14-day free trial. No credit card required.</p>
+      <p class="lp-hero-trust">Free to use. No credit card required.</p>
     </div>
   </section>
 
@@ -311,8 +311,7 @@
       <!-- Capability list. Keeps the full technical surface of the product on
            the page (competitor website monitoring, severity classification,
            briefs, Slack and CRM delivery) below the positioning copy.
-           Unshipped items carry the same "Planned" pill used in pricing, so the
-           list stays honest against the comparison table further down. -->
+           Unshipped items carry a "Planned" pill so the list stays honest. -->
       <div class="lp-spec lp-animate" data-delay="4">
         <h3 class="lp-spec-h">Competitor tracking and monitoring features</h3>
         <ul class="lp-spec-grid">
@@ -559,174 +558,6 @@
 
   <div class="lp-stripe" aria-hidden="true"></div>
 
-  <!-- ── Pricing ─────────────────────────────────────────────── -->
-  <section class="lp-pricing lp-section" id="pricing" aria-label="Pricing">
-    <div class="lp-container">
-      <div class="lp-pricing-header">
-        <div class="lp-section-label lp-animate">Simple pricing</div>
-        <h2 class="lp-section-title lp-animate" data-delay="1">Start free, scale when ready</h2>
-        <p class="lp-section-sub lp-animate" data-delay="2">Every plan starts with a 14-day free trial of Pro. No card required.</p>
-      </div>
-      <div class="lp-pricing-grid">
-
-        <!-- Pro (featured) -->
-        <div class="lp-plan-card lp-plan-card-full featured lp-animate" data-delay="2">
-          <div class="lp-plan-tag">Most Popular</div>
-          <div class="lp-plan-name">Pro</div>
-          <div class="lp-plan-price">
-            <span class="lp-plan-amount">$49</span>
-            <span class="lp-plan-period">/month</span>
-          </div>
-          <p class="lp-plan-desc">For founders and operators who need to know the moment a competitor moves.</p>
-          <div class="lp-plan-divider"></div>
-          <ul class="lp-plan-features">
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Monitor up to 15 pages, up to 5 pages per competitor</span></li>
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Get automatic daily monitoring on every page</span></li>
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Read AI briefs with talking points and recommended responses</span></li>
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Generate outreach playbook drafts in your own voice</span></li>
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Track win/loss in the Revenue Impact Dashboard</span></li>
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Alert your team in Slack and Discord</span></li>
-          </ul>
-          <a href="#lp-compare" class="lp-plan-seeall">See all features</a>
-          <a href="/register" class="lp-plan-cta">Start 14-day free trial</a>
-          <p class="lp-plan-waitnote">14 days free, then $49/month. No credit card required to start.</p>
-        </div>
-
-        <!-- Team (waitlist, no checkout) -->
-        <div class="lp-plan-card lp-plan-card-full lp-animate" data-delay="3">
-          <div class="lp-plan-name">Team</div>
-          <div class="lp-plan-price">
-            <span class="lp-plan-amount">$149</span>
-            <span class="lp-plan-period">/month</span>
-          </div>
-          <p class="lp-plan-seat">Includes 5 seats. Additional seats $25/month each.</p>
-          <p class="lp-plan-banner">Waitlist tier. Preview pricing, subject to change. Planned features ship before billing begins.</p>
-          <p class="lp-plan-desc">For sales teams that need to act on competitor changes together.</p>
-          <div class="lp-plan-divider"></div>
-          <ul class="lp-plan-features">
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Find leads automatically as AI surfaces companies most likely to need your product, based on competitor activity</span><span class="lp-plan-pill-planned">Planned</span></li>
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Share one competitor workspace across the whole team</span><span class="lp-plan-pill-planned">Planned</span></li>
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Annotate competitor changes together</span><span class="lp-plan-pill-planned">Planned</span></li>
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Assign competitors to specific teammates</span><span class="lp-plan-pill-planned">Planned</span></li>
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Alert the team in Slack and Microsoft Teams</span><span class="lp-plan-pill-planned">Planned</span></li>
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Sync competitor context to HubSpot, Salesforce, and Pipedrive</span><span class="lp-plan-pill-planned">Planned</span></li>
-          </ul>
-          <p class="lp-plan-inherit">Everything in Pro</p>
-          <a href="#lp-compare" class="lp-plan-seeall">See all features</a>
-          <button type="button" class="lp-plan-cta lp-plan-cta-outline" data-waitlist="team">Join Waitlist</button>
-          <p class="lp-plan-waitnote">Launching soon. Waitlist members get 10% off their first 2 months.</p>
-        </div>
-
-        <!-- Business (waitlist, no checkout) -->
-        <div class="lp-plan-card lp-plan-card-full lp-animate" data-delay="4">
-          <div class="lp-plan-name">Business</div>
-          <div class="lp-plan-price">
-            <span class="lp-plan-amount">$349</span>
-            <span class="lp-plan-period">/month</span>
-          </div>
-          <p class="lp-plan-seat">Includes 10 seats. Additional seats $49/month each.</p>
-          <p class="lp-plan-banner">Waitlist tier. Preview pricing, subject to change. Planned features ship before billing begins.</p>
-          <p class="lp-plan-desc">Company-wide competitive intelligence.</p>
-          <div class="lp-plan-divider"></div>
-          <ul class="lp-plan-features">
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Monitor up to 100 competitors across 1,000 pages</span><span class="lp-plan-pill-planned">Planned</span></li>
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Check 25 priority pages hourly and everything else daily</span><span class="lp-plan-pill-planned">Planned</span></li>
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Detect opportunities and risks automatically with AI</span></li>
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>See an executive competitive dashboard across the company</span><span class="lp-plan-pill-planned">Planned</span></li>
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Analyze competitor win/loss to protect revenue</span></li>
-            <li class="lp-plan-feat"><svg class="lp-plan-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Connect through API access and webhooks</span><span class="lp-plan-pill-planned">Planned</span></li>
-          </ul>
-          <p class="lp-plan-inherit">Everything in Team</p>
-          <a href="#lp-compare" class="lp-plan-seeall">See all features</a>
-          <button type="button" class="lp-plan-cta lp-plan-cta-outline" data-waitlist="business">Join Waitlist</button>
-          <p class="lp-plan-waitnote">Launching soon. Waitlist members get 10% off their first 2 months.</p>
-        </div>
-
-      </div>
-
-      <!-- ── Full comparison table ─────────────────────────────── -->
-      <div class="lp-compare lp-animate" id="lp-compare">
-        <div class="lp-compare-head">
-          <h3 class="lp-compare-title">Compare every feature</h3>
-          <button type="button" class="lp-compare-toggle" id="lp-compare-toggle" aria-expanded="false" aria-controls="lp-compare-body">Show full comparison</button>
-        </div>
-        <div class="lp-compare-scroll" id="lp-compare-body">
-          <table class="lp-compare-table">
-            <thead>
-              <tr>
-                <th scope="col" class="lp-ct-feature">Feature</th>
-                <th scope="col">Free (after trial)<span class="lp-ct-subline">What you keep if you do not upgrade: 1 competitor, manual checks, AI briefs in the app.</span></th>
-                <th scope="col">Pro</th>
-                <th scope="col">Team</th>
-                <th scope="col">Business</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr class="lp-ct-group"><th colspan="5" scope="colgroup">Monitoring</th></tr>
-              <tr><th scope="row">Competitor pages monitored</th><td>1</td><td>15</td><td><span class="lp-ct-planned">Planned</span></td><td>1,000 <span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Competitors tracked</th><td>1</td><td>Up to 15</td><td><span class="lp-ct-planned">Planned</span></td><td>100 <span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Monitoring cadence</th><td>On demand</td><td>Daily</td><td>Daily <span class="lp-ct-planned">Planned</span></td><td>Hourly and daily <span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Bot-protected site coverage</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-
-              <tr class="lp-ct-group"><th colspan="5" scope="colgroup">AI briefs and analysis</th></tr>
-              <tr><th scope="row">AI brief on every change</th><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td></tr>
-              <tr><th scope="row">Sales talking points and recommended responses</th><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td></tr>
-              <tr><th scope="row">AI outreach playbook drafts in your voice</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td></tr>
-              <tr><th scope="row">Revenue Impact Dashboard</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td></tr>
-              <tr><th scope="row">Historical pattern analysis</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td></tr>
-              <tr><th scope="row">Competitor change timeline</th><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td></tr>
-              <tr><th scope="row">AI opportunity and risk detection</th><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td></tr>
-              <tr><th scope="row">Change history window</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td>12 months</td><td>12 months</td><td>24 months <span class="lp-ct-planned">Planned</span></td></tr>
-
-              <tr class="lp-ct-group"><th colspan="5" scope="colgroup">Alerts and delivery</th></tr>
-              <tr><th scope="row">Email brief delivery</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td></tr>
-              <tr><th scope="row">Slack and Discord alerts</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td></tr>
-              <tr><th scope="row">Microsoft Teams alerts</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Google Calendar pre-meeting briefings</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td><td><span class="lp-ct-yes" aria-label="Included">&check;</span></td></tr>
-              <tr><th scope="row">Custom alert rules</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Weekly competitive digest</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-
-              <tr class="lp-ct-group"><th colspan="5" scope="colgroup">Team and collaboration</th></tr>
-              <tr><th scope="row">Seats included</th><td>1</td><td>1</td><td>5 <span class="lp-ct-planned">Planned</span></td><td>10 <span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Additional seats</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td>$25/mo each <span class="lp-ct-planned">Planned</span></td><td>$49/mo each <span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Shared competitor workspace</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Team annotations on changes</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Assign competitors to teammates</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Shared AI playbook library</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Centralized sales talking points</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Shared watchlists</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Team activity log</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Advanced role permissions</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-
-              <tr class="lp-ct-group"><th colspan="5" scope="colgroup">Lead generation</th></tr>
-              <tr><th scope="row">Lead Generation Workspace</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">AI-ranked prospect list</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-
-              <tr class="lp-ct-group"><th colspan="5" scope="colgroup">Integrations and platform</th></tr>
-              <tr><th scope="row">CRM sync (HubSpot, Salesforce, Pipedrive)</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">API access and webhooks</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Executive competitive dashboard</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Organization-wide intelligence hub</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Territory-specific monitoring</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Market trend analysis</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Custom AI reports</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">SSO</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Audit logs</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Custom data retention</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">White-label reports</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">PDF and CSV export</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-
-              <tr class="lp-ct-group"><th colspan="5" scope="colgroup">Support</th></tr>
-              <tr><th scope="row">Support</th><td>Email</td><td>Email</td><td>Priority email <span class="lp-ct-planned">Planned</span></td><td>Direct founder, next business day <span class="lp-ct-planned">Planned</span></td></tr>
-              <tr><th scope="row">Priority feature requests</th><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-no" aria-label="Not included">&times;</span></td><td><span class="lp-ct-planned">Planned</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="lp-compare-foot">Limits are generous and applied as fair use. We contact you before anything is throttled.</p>
-      </div>
-    </div>
-  </section>
-
   <!-- ── What makes Nivaria different ──────────────────────────── -->
   <section class="lp-section lp-alt" id="different" aria-label="What makes Nivaria different">
     <div class="lp-container">
@@ -773,12 +604,12 @@
       </h2>
       <p class="lp-cta-sub lp-animate" data-delay="1">Add the competitors you lose deals to and get your first brief this week.</p>
       <a href="/register" class="lp-btn lp-btn-primary lp-btn-lg lp-animate" data-delay="2">
-        Start free trial
+        Get started
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
         </svg>
       </a>
-      <p class="lp-cta-note lp-animate" data-delay="3">14 days free, then $49/month. No credit card required to start.</p>
+      <p class="lp-cta-note lp-animate" data-delay="3">Free to use. No credit card required.</p>
     </div>
   </section>
 
@@ -801,7 +632,6 @@
             <a href="#features">Features</a>
             <a href="#how">How it works</a>
             <a href="#demo">Demo</a>
-            <a href="#pricing">Pricing</a>
           </nav>
           <nav class="lp-footer-col" aria-label="Company">
             <h4 class="lp-footer-col-title">Company</h4>
@@ -821,27 +651,6 @@
       </div>
     </div>
   </footer>
-
-  <!-- ── Waitlist modal (Team / Business) ───────────────────────── -->
-  <div class="lp-modal-overlay" id="lp-wl-overlay" hidden>
-    <div class="lp-modal" id="lp-wl-modal" role="dialog" aria-modal="true"
-         aria-labelledby="lp-wl-title" aria-describedby="lp-wl-desc">
-      <button type="button" class="lp-modal-close" id="lp-wl-close" aria-label="Close dialog">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-      <h3 class="lp-modal-title" id="lp-wl-title">Get notified when Team is available</h3>
-      <p class="lp-modal-desc" id="lp-wl-desc">We&rsquo;ll email you when the Team tier launches. Waitlist members get 10% off their first 2 months.</p>
-      <form class="lp-modal-form" id="lp-wl-form">
-        <label class="lp-modal-label" for="lp-wl-email">Email address</label>
-        <input class="lp-modal-input" id="lp-wl-email" name="email" type="email" required
-               autocomplete="email" inputmode="email" placeholder="you@company.com" />
-        <p class="lp-modal-msg" id="lp-wl-msg" role="status" aria-live="polite"></p>
-        <button type="submit" class="lp-plan-cta lp-modal-submit" id="lp-wl-submit">Join Waitlist</button>
-      </form>
-    </div>
-  </div>
 
   <script src="/js/landing.js"></script>
 </body>

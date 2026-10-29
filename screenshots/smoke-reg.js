@@ -33,18 +33,18 @@ function readDb(sql) {
 
   // 5. workspace + membership rows created?
   const u = (await readDb(`SELECT id FROM users WHERE email='${EMAIL}'`))[0];
-  const ws = (await readDb(`SELECT id, owner_user_id, subscription_tier FROM workspaces WHERE owner_user_id=${u.id}`))[0];
+  const ws = (await readDb(`SELECT id, owner_user_id FROM workspaces WHERE owner_user_id=${u.id}`))[0];
   const mem = (await readDb(`SELECT role FROM workspace_members WHERE user_id=${u.id} AND workspace_id=${ws ? ws.id : 0}`))[0];
   console.log('user id:', u.id);
   console.log('workspace row:', JSON.stringify(ws) || 'NONE');
   console.log('membership row:', JSON.stringify(mem) || 'NONE');
 
   // 6. req.workspaceId populated on next authed request (no restart)?
-  const sub = await j(await fetch(`${BASE}/api/billing/subscription`, { headers: { Cookie: cookie } }));
-  console.log('GET /api/billing/subscription →', JSON.stringify(sub));
+  const stats = await j(await fetch(`${BASE}/api/changes/stats`, { headers: { Cookie: cookie } }));
+  console.log('GET /api/changes/stats →', JSON.stringify(stats));
 
-  const pass = ws && ws.subscription_tier === 'free' && mem && mem.role === 'owner' && sub && sub.effectiveTier === 'free' && sub.hasSubscription === false;
-  console.log(`\nSMOKE: ${pass ? 'PASS ✅ — new signup gets a Free workspace + owner membership immediately, billing endpoint works (no restart)' : 'FAIL ❌'}`);
+  const pass = ws && mem && mem.role === 'owner' && stats && stats.tier === 'standard' && stats.max_pages === 5;
+  console.log(`\nSMOKE: ${pass ? 'PASS ✅ (new signup gets a workspace on the fixed plan and an owner membership immediately, no restart)' : 'FAIL ❌'}`);
   // expose the throwaway creds for the rest of the matrix
   if (pass) console.log(`THROWAWAY_READY email=${EMAIL} password=${PASSWORD} userId=${u.id} workspaceId=${ws.id}`);
   process.exit(pass ? 0 : 1);

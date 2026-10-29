@@ -68,12 +68,13 @@ router.get('/stats', (req, res) => {
   const db = getDb();
   const uid = req.userId;
 
-  // Each competitors row is a monitored PAGE. pages_used is the billable count
-  // (what the plan page limit caps); competitor_count is the number of distinct
-  // companies (groups) those pages are organized under.
+  // Each competitors row is a monitored PAGE. pages_used is the count the plan
+  // page limit caps, so it skips archived pages exactly as the add-page gate
+  // does (workspacePageCount in routes/competitors.js); competitor_count is the
+  // number of distinct companies (groups) those pages are organized under.
   const total_competitors = db.prepare('SELECT COUNT(*) AS n FROM competitors WHERE user_id = ?').get(uid).n;
   const active_competitors = db.prepare('SELECT COUNT(*) AS n FROM competitors WHERE user_id = ? AND active = 1').get(uid).n;
-  const pages_used = total_competitors;
+  const pages_used = db.prepare('SELECT COUNT(*) AS n FROM competitors WHERE user_id = ? AND COALESCE(archived, 0) = 0').get(uid).n;
   const competitor_count = db.prepare(
     'SELECT COUNT(DISTINCT COALESCE(group_id, -id)) AS n FROM competitors WHERE user_id = ?'
   ).get(uid).n;
@@ -114,24 +115,20 @@ router.get('/stats', (req, res) => {
     WHERE c.user_id = ? AND ch.is_meaningful = 0
   `).get(uid).n;
 
-  // Tier and competitor cap come from the SAME authoritative source the rest of
-  // the app uses (getWorkspaceTier → workspace subscription state), not the
-  // deprecated users.tier column. This keeps the dashboard slot counter in sync
-  // with the sidebar/Settings/Profile plan labels and survives the Dodo
-  // migration (Dodo writes subscription_tier via webhook → getWorkspaceTier).
-  // The billable unit is a PAGE. max_pages of -1 means unlimited; null means a
-  // not-yet-configured (TODO) tier cap (team/business), also treated as no cap.
+  // Plan and page cap come from src/lib/tierLimits.js, the same source the
+  // add-page gate uses, so the dashboard counter always agrees with it. Every
+  // workspace is on one fixed plan. max_pages of -1 means unlimited.
   const tier = getWorkspaceTier(req.workspaceId);
   // A privileged workspace (admin / developer override) has no enforced page cap
-  // in canAddPage, so it can legitimately exceed the nominal tier limit. Report
-  // -1 (unlimited) here so the usage banner shows the uncapped state instead of a
-  // false over-limit reading like "17 of 15". Normal accounts get the tier cap.
+  // in canAddPage, so it can legitimately exceed the plan limit. Report -1
+  // (unlimited) here so the usage banner shows the uncapped state instead of a
+  // false over-limit reading like "17 of 5". Normal accounts get the plan cap.
   const max_pages = workspaceOwnerIsPrivileged(req.workspaceId) ? -1 : maxPages(req.workspaceId);
 
   res.json({
     total_competitors, active_competitors, total_changes, changes_this_week,
     high_threats, medium_threats, trivial_changes, baselined_pages, tier,
-    // Page-based fields (billable unit) plus the company count for display.
+    // Page-based fields (the cost unit) plus the company count for display.
     pages_used, max_pages, competitor_count,
     // Deprecated alias kept for any older consumer; equals max_pages now.
     max_competitors: max_pages,

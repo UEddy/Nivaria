@@ -2,7 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const axios   = require('axios');
 const { getDb }         = require('../db');
-const { canWorkspaceAccess, upgradeRequired } = require('../lib/tierLimits');
+const { canWorkspaceAccess, planLimitReached } = require('../lib/tierLimits');
 const { logAudit }      = require('../lib/audit');
 
 // ── Validation helpers ─────────────────────────────────────────────────────────
@@ -74,10 +74,10 @@ router.put('/', (req, res) => {
   if (discord_webhook  && discord_webhook.length  > 500) return res.status(400).json({ error: 'Discord webhook URL too long' });
   if (notification_email && notification_email.length > 254) return res.status(400).json({ error: 'Email address too long' });
 
-  // Phase 10: webhook notifications are gated by the workspace's effective tier.
+  // Webhook notifications are gated by the plan flag (on for every workspace).
   if ((slack_webhook || discord_webhook) && !canWorkspaceAccess(req.workspaceId, 'webhooks')) {
     logAudit({ workspaceId: req.workspaceId, userId: req.userId, eventType: 'gate_violation', eventData: { feature: 'webhooks' }, req });
-    return upgradeRequired(res, 'webhooks');
+    return planLimitReached(res, 'webhooks');
   }
 
   // Resolve every column against the existing row so a PARTIAL update never

@@ -2,7 +2,7 @@
 
 Nivaria is a competitive-intelligence app for SaaS sales teams (Node/Express
 backend, vanilla-JS SPA under `public/`, sql.js database, Anthropic API for
-analysis/outreach, Lemon Squeezy billing).
+analysis/outreach; no billing, every account is on one fixed plan).
 
 ## Punctuation: no em-dashes, en-dashes, or connector-plus in user-facing output
 

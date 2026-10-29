@@ -1,6 +1,6 @@
 ---
 title: "Competitor Monitoring for Startups & Small Teams | Nivaria"
-description: "Enterprise CI platforms start at $20,000 a year. Nivaria monitors 15 competitor pages with daily AI briefs from $49/month. No demo gate, no annual contract."
+description: "Enterprise CI platforms start at $20,000 a year. Nivaria monitors up to 5 competitor pages with daily AI briefs, free. No demo gate, no contract."
 h1: "Competitor Monitoring for Startups & Small Teams"
 slug: /for/startups
 published: 2026-07-23
@@ -70,15 +70,15 @@ Three bands:
 
 **$20,000+/year:** enterprise platforms with briefs, CRM integration and services. Worth it with a dedicated product marketing hire and twenty or more sales representatives.
 
-Nivaria sits in the middle of that band at $49 a month and does the interpretation the rest of the band leaves to you: 15 pages monitored daily, AI briefs explaining what changed and what to do, delivered to Slack, Discord or email. Fourteen-day trial, no credit card, no demo call.
+Nivaria is free to use and does the interpretation the rest of the band leaves to you: up to 5 pages monitored daily, AI briefs explaining what changed and what to do, delivered to Slack, Discord or email. No credit card, no demo call.
 
-[Start a free trial](https://nivaria.app/register)
+[Create a free account](https://nivaria.app/register)
 
 <!-- INTERNAL LINKS: add once these pages exist (stripped from rendered output):
      /for/sales-teams, /blog/track-competitor-pricing-changes,
      /blog/monitor-competitor-hiring, /blog/affordable-competitive-intelligence-tools -->
 
 <!-- VERIFY BEFORE PUBLISHING:
-     Confirm the Pro tier price and page limit ($49/month, 15 pages) before this
-     goes live; the band placement above depends on both. The $20,000 to $40,000
+     Confirm the free plan's page limit (5 pages, src/lib/tierLimits.js) before
+     this goes live; the comparison above depends on it. The $20,000 to $40,000
      figure is secondary reporting, not vendor-published. Keep it as reported. -->

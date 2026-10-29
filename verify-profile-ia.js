@@ -2,7 +2,7 @@
 //   · timezone UI removed (silent capture + login/dashboard backfill)
 //   · name editing kept on Profile → Your details
 //   · Integrations + Account moved from Settings into Profile
-//   · Settings trimmed to Workspace / Notifications / Billing
+//   · Settings trimmed to Workspace / Notifications
 // Assumes the server is running on PORT (default 3100) with demo data.
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -70,9 +70,6 @@ async function gotoSettled(page, hash, sel) {
   const me = await (await context.request.get(`${BASE}/api/auth/me`)).json();
   const csrf = me.csrfToken;
   const hdr = { 'X-CSRF-Token': csrf, 'Content-Type': 'application/json' };
-  const sub = await (await context.request.get(`${BASE}/api/billing/subscription`)).json().catch(() => ({}));
-  const tier = sub.effectiveTier || 'free';
-  console.log(`   (demo account tier: ${tier})`);
 
   const page = await context.newPage();
 
@@ -129,15 +126,13 @@ async function gotoSettled(page, hash, sel) {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
 
-  // Settings now only Workspace / Notifications / Billing
+  // Settings now only Workspace / Notifications
   await gotoSettled(page, '#/settings', '#settings-shell');
   const setLabels = await page.$$eval('#settings-shell .settings-nav__item .settings-nav__label', els => els.map(e => e.textContent.trim()));
-  check('settings has 3 sidebar sections', JSON.stringify(setLabels) === JSON.stringify(['Workspace', 'Notifications', 'Billing']), setLabels.join(' / '));
+  check('settings has 2 sidebar sections', JSON.stringify(setLabels) === JSON.stringify(['Workspace', 'Notifications']), setLabels.join(' / '));
   check('settings: no Integrations/Account nav', !setLabels.includes('Integrations') && !setLabels.includes('Account'));
 
   // Old deep links resolve to new locations
-  await gotoSettled(page, '#/settings?upgraded=1', '#settings-shell');
-  check('deep link: #/settings?upgraded=1 → Billing active', await page.$eval('#settings-shell .settings-nav__item.is-active .settings-nav__label', e => e.textContent.trim()) === 'Billing');
   await gotoSettled(page, '#/profile?calendar_connected=google', '#profile-shell');
   check('deep link: #/profile?calendar_connected=google → Integrations active', await page.$eval('#profile-shell .settings-nav__item.is-active .settings-nav__label', e => e.textContent.trim()) === 'Integrations');
 
@@ -158,7 +153,7 @@ async function gotoSettled(page, hash, sel) {
     await shot(`#/profile/${sec}`, '#profile-panel .set-card', `profile-${sec}-desktop.png`);
     await shot(`#/profile/${sec}`, '#profile-panel .set-card', `profile-${sec}-375.png`, true);
   }
-  for (const sec of ['workspace', 'notifications', 'billing']) {
+  for (const sec of ['workspace', 'notifications']) {
     await shot(`#/settings/${sec}`, '#settings-panel .set-card', `settings-${sec}-desktop.png`);
   }
 

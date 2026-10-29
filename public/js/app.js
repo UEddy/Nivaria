@@ -266,10 +266,9 @@ const App = {
     Theme.init();
 
     try {
-      [App.user, App.stats, App.subscription] = await Promise.all([
+      [App.user, App.stats] = await Promise.all([
         API.getMe(),
         API.getStats(),
-        API.getSubscription().catch(() => null), // Phase 10: workspace tier for the sidebar chip
       ]);
     } catch (e) {
       console.warn('Init fetch failed:', e.message);
@@ -291,44 +290,9 @@ const App = {
 
     App.backfillTimezone();
     App.updateUserUI();
-    App.renderTrialBanner();
     App.updateBadges();
     window.addEventListener('hashchange', App.route);
     App.route();
-  },
-
-  // Trial banner: "X days left in your trial" with an upgrade button, shown for
-  // the whole trial. From day 10 onward the copy also names the fallback so the
-  // downgrade is never a surprise. Data comes from /api/billing/subscription
-  // (trial overlay computed server-side; trialDays mirrors config TRIAL_DAYS).
-  renderTrialBanner() {
-    const t = App.subscription?.trial;
-    if (!t || !t.onTrial || App.subscription?.hasSubscription) return;
-    const wrap = document.querySelector('.main-wrapper');
-    const topbar = document.querySelector('.main-wrapper .topbar');
-    if (!wrap || !topbar || el('trial-banner')) return;
-
-    const n = t.daysLeft;
-    const dayWord = n === 1 ? 'day' : 'days';
-    const nearEnd = typeof t.trialDays === 'number' && n <= (t.trialDays - 10);
-    const msg = nearEnd
-      ? `${n} ${dayWord} left. After that you stay on Free with 1 competitor.`
-      : `${n} ${dayWord} left in your trial`;
-
-    const banner = document.createElement('div');
-    banner.className = 'trial-banner' + (nearEnd ? ' trial-banner--urgent' : '');
-    banner.id = 'trial-banner';
-    const span = document.createElement('span');
-    span.className = 'trial-banner-text';
-    span.textContent = msg;
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn btn-primary btn-sm';
-    btn.textContent = 'Upgrade to Pro';
-    btn.addEventListener('click', () => Billing.subscribe(btn));
-    banner.appendChild(span);
-    banner.appendChild(btn);
-    topbar.insertAdjacentElement('afterend', banner);
   },
 
   // Silent timezone backfill. Timezone is captured at signup and never shown in
@@ -368,15 +332,6 @@ const App = {
     nameEl.removeAttribute('aria-hidden');
     emailEl.removeAttribute('aria-hidden');
     avatarEl.removeAttribute('aria-hidden');
-    // Phase 10: tier is workspace-driven (App.subscription.effectiveTier), not the
-    // deprecated user.tier.
-    const tier = App.subscription?.effectiveTier || 'free';
-    el('plan-name').textContent = { free: 'Free Plan', pro: 'Pro Plan', team: 'Team Plan', business: 'Business Plan' }[tier] || tier;
-
-    const chip = el('plan-chip');
-    if (chip) {
-      chip.className = 'plan-chip plan-chip--' + tier;
-    }
   },
 
   async logout() {
@@ -426,13 +381,6 @@ const App = {
       el('page-sub').textContent = 'Your competitive intelligence overview';
       root.innerHTML = Skeleton.dashboard();
       Dashboard.render().then(transition).then(() => window.Tour?.maybeAutoStart());
-      // One-time welcome after a successful Pro checkout (set by billing.js).
-      try {
-        if (sessionStorage.getItem('cs-welcome-pro')) {
-          sessionStorage.removeItem('cs-welcome-pro');
-          setTimeout(() => toast('You\'re on Pro: all features unlocked. 🎉', 'success'), 600);
-        }
-      } catch (_) {}
     } else if (page === 'competitors') {
       if (id) {
         el('page-title').textContent = 'Competitor Timeline';
@@ -478,7 +426,7 @@ const App = {
       Deals.render(routeQuery).then(transition);
     } else if (page === 'settings') {
       el('page-title').textContent = 'Settings';
-      el('page-sub').textContent = 'Workspace, notifications, and billing';
+      el('page-sub').textContent = 'Workspace and notifications';
       // rest[0] is the section (#/settings/notifications). Only show the skeleton
       // on a fresh entry — when the settings shell is already mounted we're just
       // switching sections, and Settings.render() re-paints from cache without a
@@ -494,11 +442,6 @@ const App = {
       // flash.
       if (!document.getElementById('profile-shell')) root.innerHTML = Skeleton.cards(3);
       Profile.render(routeQuery, id).then(transition);
-    } else if (page === 'pricing' || page === 'plans') {
-      el('page-title').textContent = 'Plans & Pricing';
-      el('page-sub').textContent = 'Choose the plan that fits your team';
-      root.innerHTML = Skeleton.cards(3);
-      Pricing.render().then(transition);
     } else if (page === 'onboarding') {
       el('page-title').textContent = 'Welcome to Nivaria';
       el('page-sub').textContent = 'One quick step to personalize your analyses';
@@ -760,120 +703,5 @@ function toast(msg, type = 'info') {
 function navigate(path) {
   window.location.hash = path;
 }
-
-// ─── Plans & Pricing page (Phase 10) ───────────────────────────────────────────
-const Pricing = {
-  async render() {
-    // Authoritative tier comes from the billing subscription (workspace-driven),
-    // not App.user.tier (deprecated). Degrade gracefully if the call fails.
-    let sub = { effectiveTier: 'free', status: null, cancelAtPeriodEnd: false };
-    try { sub = await API.getSubscription(); } catch (_) {}
-    const current = sub.effectiveTier || 'free';
-
-    // Tier content is kept identical to the landing page cards (public/index.html):
-    // same descriptions, same bullets in the same order, same Planned pills, same
-    // seat lines, waitlist banners, "Everything in ..." lines and waitlist notes.
-    // Only the CTAs differ, because these users are already logged in. When a
-    // landing card changes, change it here too. Free is no longer a public
-    // offering, so it is not shown as a selectable card. Existing free accounts
-    // are still handled gracefully by the banner below.
-    const feat = (text, planned) => ({ text, planned: !!planned });
-    const WAITLIST_BANNER = 'Waitlist tier. Preview pricing, subject to change. Planned features ship before billing begins.';
-    const WAITLIST_NOTE   = 'Launching soon. Waitlist members get 10% off their first 2 months.';
-    const plans = [
-      {
-        id: 'pro', name: 'Pro', price: 49, popular: true,
-        desc: 'For founders and operators who need to know the moment a competitor moves.',
-        features: [
-          feat('Monitor up to 15 pages, up to 5 pages per competitor'),
-          feat('Get automatic daily monitoring on every page'),
-          feat('Read AI briefs with talking points and recommended responses'),
-          feat('Generate outreach playbook drafts in your own voice'),
-          feat('Track win/loss in the Revenue Impact Dashboard'),
-          feat('Alert your team in Slack and Discord'),
-        ],
-      },
-      {
-        id: 'team', name: 'Team', price: 149, badge: 'Launching soon',
-        seat: 'Includes 5 seats. Additional seats $25/month each.',
-        banner: WAITLIST_BANNER,
-        desc: 'For sales teams that need to act on competitor changes together.',
-        features: [
-          feat('Find leads automatically as AI surfaces companies most likely to need your product, based on competitor activity', true),
-          feat('Share one competitor workspace across the whole team', true),
-          feat('Annotate competitor changes together', true),
-          feat('Assign competitors to specific teammates', true),
-          feat('Alert the team in Slack and Microsoft Teams', true),
-          feat('Sync competitor context to HubSpot, Salesforce, and Pipedrive', true),
-        ],
-        inherit: 'Everything in Pro',
-        note: WAITLIST_NOTE,
-      },
-      {
-        id: 'business', name: 'Business', price: 349, badge: 'Launching soon',
-        seat: 'Includes 10 seats. Additional seats $49/month each.',
-        banner: WAITLIST_BANNER,
-        desc: 'Company-wide competitive intelligence.',
-        features: [
-          feat('Monitor up to 100 competitors across 1,000 pages', true),
-          feat('Check 25 priority pages hourly and everything else daily', true),
-          feat('Detect opportunities and risks automatically with AI'),
-          feat('See an executive competitive dashboard across the company', true),
-          feat('Analyze competitor win/loss to protect revenue'),
-          feat('Connect through API access and webhooks', true),
-        ],
-        inherit: 'Everything in Team',
-        note: WAITLIST_NOTE,
-      },
-    ];
-
-    const cta = (p) => {
-      if (current === p.id) {
-        return `<button class="btn btn-secondary w-full" disabled>Current plan</button>`;
-      }
-      if (p.id === 'pro') {
-        // Logged-in users have already started, so this is a direct subscribe
-        // action. We never surface the landing page's "start trial" framing here.
-        return `<button class="btn btn-primary w-full" onclick="Billing.subscribe(this)">Subscribe to Pro</button>`;
-      }
-      // team / business are waitlist-only until launch
-      return `<button class="btn btn-secondary w-full" onclick="Billing.openWaitlist('${p.id}')">Join waitlist</button>`;
-    };
-
-    const tierLabel = { free: 'Free', pro: 'Pro', team: 'Team', business: 'Business' }[current] || current;
-    const banner = current === 'free'
-      ? `You're on the <strong style="color:var(--txt)">Free</strong> plan. Subscribe to Pro to unlock automatic monitoring and AI briefs.`
-      : `You're on <strong style="color:var(--txt)">${tierLabel}</strong>${sub.cancelAtPeriodEnd ? ' (cancels at period end)' : ''}.`;
-
-    el('page-root').innerHTML = `
-      <div class="pricing-wrap">
-        <div class="pricing-intro"><p class="text-muted">${banner}</p></div>
-        <div class="pricing-grid">
-          ${plans.map(p => `
-            <div class="pricing-card ${p.popular ? 'featured' : ''} ${current === p.id ? 'is-current' : ''}">
-              ${p.popular ? '<div class="pricing-popular">Most Popular</div>' : ''}
-              ${p.badge ? `<div class="pricing-soon">${p.badge}</div>` : ''}
-              <div class="pricing-header">
-                <div class="pricing-plan">${p.name}</div>
-                <div class="pricing-price"><span class="price-amount">$${p.price}</span><span class="price-period">/mo</span></div>
-                ${p.seat ? `<p class="pricing-seat">${esc(p.seat)}</p>` : ''}
-                ${p.banner ? `<p class="pricing-banner">${esc(p.banner)}</p>` : ''}
-                <div class="pricing-desc">${esc(p.desc)}</div>
-              </div>
-              <ul class="pricing-features">
-                ${p.features.map(f => `<li class="pricing-feature"><span class="pricing-feature-text">${esc(f.text)}</span>${f.planned ? '<span class="pricing-planned">Planned</span>' : ''}</li>`).join('')}
-              </ul>
-              ${p.inherit ? `<p class="pricing-inherit">${esc(p.inherit)}</p>` : ''}
-              ${cta(p)}
-              ${p.note ? `<p class="pricing-note">${esc(p.note)}</p>` : ''}
-            </div>`).join('')}
-        </div>
-        <p class="text-muted text-sm" style="text-align:center;margin-top:22px">
-          Healthcare or government compliance needs? Contact us at <a href="mailto:support@nivaria.app" class="link-accent">support@nivaria.app</a> for details.
-        </p>
-      </div>`;
-  },
-};
-window.Pricing = Pricing;
 
 document.addEventListener('DOMContentLoaded', () => { Drawer.init(); App.init(); });

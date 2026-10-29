@@ -2,8 +2,7 @@
 // (comma-separated). A deliberately minimal stand-in for a real role system.
 //
 // Pages:
-//   GET  /admin                 → redirect to /admin/waitlist
-//   GET  /admin/waitlist        → Team/Business waitlist table
+//   GET  /admin                 → redirect to /admin/stats
 //   GET  /admin/users           → user list with is_developer status
 //   GET  /admin/set-developer   → form to toggle a user's is_developer flag
 //   POST /admin/set-developer   → apply the toggle (CSRF-protected, audited)
@@ -15,10 +14,6 @@ const crypto  = require('crypto');
 const express = require('express');
 const { getDb } = require('../db');
 const { logAudit } = require('../lib/audit');
-// Authoritative effective-tier source (same one the dashboard/sidebar/Settings
-// read). Tallied per workspace for the stats breakdown so every surface agrees.
-const { getWorkspaceTier } = require('../lib/tierLimits');
-const { getTrialInfo } = require('../lib/trial');
 // Admin identification (ADMIN_EMAILS) now lives in lib/ so the tier-limit layer
 // can share the exact same gate. Re-exported below to keep this module's API.
 const { getAdminEmails, isAdminEmail } = require('../lib/adminEmails');
@@ -66,9 +61,7 @@ function navHtml(active) {
   const links = [
     ['/admin/stats', 'Stats'],
     ['/admin/outbound', 'Outbound'],
-    ['/admin/waitlist', 'Waitlist'],
     ['/admin/users', 'Users'],
-    ['/admin/set-tier', 'Grant Pro'],
     ['/admin/set-developer', 'Set developer'],
   ];
   return `<nav class="admin-nav">${links
@@ -117,7 +110,6 @@ function renderShell(title, bodyHtml) {
     .pill { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
     .pill-team { background: rgba(129,140,248,0.16); color: #A5B4FC; }
     .pill-business { background: rgba(16,185,129,0.16); color: #34D399; }
-    .pill-trial { background: rgba(236,72,153,0.16); color: #F472B6; }
     .pill-dev { background: rgba(245,158,11,0.18); color: #FBBF24; }
     .pill-off { background: rgba(255,255,255,0.06); color: var(--txt-3); }
     .muted { color: var(--txt-3); }
@@ -200,78 +192,16 @@ function renderStats(s) {
       ${statCard(s.totalUsers, 'Total users')}
       ${statCard(s.newUsers7d, 'New users (7 days)')}
       ${statCard(s.activeCompetitors, 'Pages monitored')}
+      ${statCard(s.workspaceCount, 'Workspaces')}
     </div>
 
-    <p class="stat-section-title">Workspaces by tier</p>
-    <p class="admin-sub">Effective tier from getWorkspaceTier, the same source the in-app plan display uses. Tallied across all ${num(s.workspaceCount)} workspaces.</p>
-    <div class="stat-grid">
-      ${statCard(s.tierCounts.free, 'Free')}
-      ${statCard(s.tierCounts.pro, 'Pro')}
-      ${statCard(s.tierCounts.team, 'Team')}
-      ${statCard(s.tierCounts.business, 'Business')}
-    </div>
-
-    <p class="stat-section-title">Waitlist by interest</p>
-    <p class="admin-sub">Team and Business tier interest plus 14-day Pro trial requests (tier_interest='trial').</p>
-    <div class="stat-grid">
-      ${statCard(s.waitlistCounts.team, 'Team')}
-      ${statCard(s.waitlistCounts.business, 'Business')}
-      ${statCard(s.waitlistCounts.trial, 'Trial')}
-    </div>
+    <p class="admin-sub">Every workspace is on the same fixed plan (src/lib/tierLimits.js).</p>
 
     <a class="back" href="/app">&larr; Back to app</a>`);
-}
-
-function renderWaitlist(rows) {
-  const body = rows.length
-    ? rows.map(r => `
-        <tr>
-          <td class="muted">${esc(r.id)}</td>
-          <td>${esc(r.email)}</td>
-          <td><span class="pill pill-${esc(r.tier_interest)}">${esc(r.tier_interest)}</span></td>
-          <td>${esc(r.created_at)}</td>
-          <td>${r.notified_at ? esc(r.notified_at) : '<span class="muted">-</span>'}</td>
-        </tr>`).join('')
-    : `<tr><td class="empty" colspan="5">No waitlist signups yet.</td></tr>`;
-
-  return renderShell('Waitlist', `
-    ${navHtml('/admin/waitlist')}
-    <div class="admin-head">
-      <h1>Waitlist signups</h1>
-      <span class="admin-sub"><span class="admin-count">${rows.length}</span> total</span>
-    </div>
-    <p class="admin-sub">Team and Business tier interest plus 14-day Pro trial requests (tier_interest='trial'), captured from the marketing site and in-app upgrade gate. Trial requests are granted manually until a payment processor is live.</p>
-    <table>
-      <thead><tr><th>id</th><th>email</th><th>tier_interest</th><th>created_at</th><th>notified_at</th></tr></thead>
-      <tbody>${body}</tbody>
-    </table>
-    <a class="back" href="/app">&larr; Back to app</a>`);
-}
-
-// Trial cell: "on trial" while active (with days remaining and the downgrade
-// date, which is simply trial_ends_at), "expired" after, blank for paid or
-// pre-trial accounts. Paid subscriptions supersede trial state entirely.
-function trialCells(r) {
-  if (r.subscription_id || (r.subscription_tier && r.subscription_tier !== 'free')) {
-    return `<td><span class="pill pill-done">${esc(r.subscription_tier || 'paid')}</span></td><td class="muted">-</td><td class="muted">-</td>`;
-  }
-  const info = getTrialInfo({
-    subscription_tier: r.subscription_tier, subscription_id: r.subscription_id, trial_ends_at: r.trial_ends_at,
-  });
-  if (info.onTrial) {
-    return `<td><span class="pill pill-trial">on trial</span></td><td>${esc(info.daysLeft)}</td><td class="muted">${esc(String(r.trial_ends_at).slice(0, 10))}</td>`;
-  }
-  if (info.expired) {
-    return `<td><span class="pill pill-pending">expired</span></td><td class="muted">0</td><td class="muted">${esc(String(r.trial_ends_at).slice(0, 10))}</td>`;
-  }
-  return `<td class="muted">-</td><td class="muted">-</td><td class="muted">-</td>`;
 }
 
 function renderUsers(rows) {
   const devCount = rows.filter(r => r.is_developer).length;
-  const onTrialCount = rows.filter(r => getTrialInfo({
-    subscription_tier: r.subscription_tier, subscription_id: r.subscription_id, trial_ends_at: r.trial_ends_at,
-  }).onTrial).length;
   const body = rows.length
     ? rows.map(r => `
         <tr>
@@ -279,20 +209,19 @@ function renderUsers(rows) {
           <td>${esc(r.email)}</td>
           <td>${esc(r.name)}</td>
           <td>${devPill(!!r.is_developer)}</td>
-          ${trialCells(r)}
           <td>${esc(r.created_at)}</td>
         </tr>`).join('')
-    : `<tr><td class="empty" colspan="8">No users.</td></tr>`;
+    : `<tr><td class="empty" colspan="5">No users.</td></tr>`;
 
   return renderShell('Users', `
     ${navHtml('/admin/users')}
     <div class="admin-head">
       <h1>Users</h1>
-      <span class="admin-sub"><span class="admin-count">${onTrialCount}</span> on trial, <span class="admin-count">${devCount}</span> with developer access</span>
+      <span class="admin-sub"><span class="admin-count">${devCount}</span> with developer access</span>
     </div>
-    <p class="admin-sub">Developer accounts have an emergency override granting full Pro features regardless of subscription. Manage via <a href="/admin/set-developer">Set developer</a>. Downgrade date is the trial end; expired accounts fall back to Free automatically.</p>
+    <p class="admin-sub">Developer accounts have an emergency override that lifts the page caps. Manage via <a href="/admin/set-developer">Set developer</a>.</p>
     <table>
-      <thead><tr><th>id</th><th>email</th><th>name</th><th>developer</th><th>trial</th><th>days left</th><th>downgrade date</th><th>created_at</th></tr></thead>
+      <thead><tr><th>id</th><th>email</th><th>name</th><th>developer</th><th>created_at</th></tr></thead>
       <tbody>${body}</tbody>
     </table>
     <a class="back" href="/app">&larr; Back to app</a>`);
@@ -306,7 +235,7 @@ function renderSetDeveloperForm(csrfToken, note, prefillEmail) {
   return renderShell('Set developer', `
     ${navHtml('/admin/set-developer')}
     <div class="admin-head"><h1>Set developer flag</h1></div>
-    <p class="admin-sub">Grant or revoke the emergency Pro override for a specific user by email.</p>
+    <p class="admin-sub">Grant or revoke the emergency override for a specific user by email.</p>
     ${noteHtml}
     <form class="admin-form" method="POST" action="/admin/set-developer">
       <input type="hidden" name="_csrf" value="${esc(csrfToken)}">
@@ -317,77 +246,14 @@ function renderSetDeveloperForm(csrfToken, note, prefillEmail) {
       <div class="field">
         <label for="is_developer">Developer access</label>
         <select id="is_developer" name="is_developer">
-          <option value="true">Enable (grant unlimited Pro)</option>
-          <option value="false">Disable (normal tier behaviour)</option>
+          <option value="true">Enable (no page caps)</option>
+          <option value="false">Disable (normal plan limits)</option>
         </select>
       </div>
       <button class="submit" type="submit">Apply</button>
-      <p class="warn">This override grants full Pro features regardless of subscription state. It does not change billing or the user's actual paid tier.</p>
+      <p class="warn">This override lifts the page caps for the user's workspace. Every other feature is already on for all accounts.</p>
     </form>
     <a class="back" href="/admin/users">&larr; Back to users</a>`);
-}
-
-// Pre-launch manual Pro grant form. note: { type, text } | null. prefillEmail
-// pre-populates the field. grantedRows: workspaces currently carrying a manual
-// grant (tier_granted_at set), shown so the admin can track who was comped and
-// when, ahead of the payment-processor transition.
-function renderSetTierForm(csrfToken, note, prefillEmail, grantedRows) {
-  const noteHtml = note
-    ? `<div class="note note-${note.type === 'ok' ? 'ok' : 'err'}">${esc(note.text)}</div>`
-    : '';
-
-  const rows = grantedRows || [];
-  const grantedBody = rows.length
-    ? rows.map(r => `
-        <tr>
-          <td class="muted">${esc(r.workspace_id)}</td>
-          <td>${esc(r.email)}</td>
-          <td><span class="pill pill-team">${esc(r.subscription_tier)}</span></td>
-          <td>${esc(r.tier_granted_at)}</td>
-        </tr>`).join('')
-    : `<tr><td class="empty" colspan="4">No manual grants yet.</td></tr>`;
-
-  return renderShell('Grant Pro', `
-    ${navHtml('/admin/set-tier')}
-    <div class="admin-head"><h1>Grant Pro access</h1></div>
-    <p class="admin-sub">Manually set a user's workspace tier during the pre-launch window. Look up a user by email and grant Pro (or revert to Free). New signups always default to Free.</p>
-    ${noteHtml}
-    <form class="admin-form" method="POST" action="/admin/set-tier">
-      <input type="hidden" name="_csrf" value="${esc(csrfToken)}">
-      <div class="field">
-        <label for="tier-email">User email</label>
-        <input type="email" id="tier-email" name="email" required placeholder="user@example.com" value="${esc(prefillEmail || '')}">
-      </div>
-      <div class="field">
-        <label for="tier">Tier</label>
-        <select id="tier" name="tier">
-          <option value="pro">Grant Pro (15 pages, daily monitoring, full features)</option>
-          <option value="free">Revert to Free</option>
-        </select>
-      </div>
-      <button class="submit" type="submit">Apply</button>
-      <p class="warn">This sets the workspace's authoritative subscription tier, the same field a payment webhook will later drive. Grant time is recorded so comped accounts can be transitioned to paid once billing is live. It does not charge the user or create a real subscription.</p>
-    </form>
-
-    <p class="stat-section-title" style="margin-top:32px">Currently granted</p>
-    <p class="admin-sub">Workspaces carrying a manual Pro grant, with the time it was granted.</p>
-    <table>
-      <thead><tr><th>workspace</th><th>email</th><th>tier</th><th>granted_at</th></tr></thead>
-      <tbody>${grantedBody}</tbody>
-    </table>
-    <a class="back" href="/admin/users">&larr; Back to users</a>`);
-}
-
-// Workspaces currently carrying a manual grant (tier_granted_at set), joined to
-// the owner's email for display. Admin-only surface, so email is acceptable
-// here (consistent with the Users and Waitlist tables).
-function getGrantedWorkspaces(db) {
-  return db.prepare(`
-    SELECT w.id AS workspace_id, w.subscription_tier, w.tier_granted_at, u.email
-    FROM workspaces w JOIN users u ON u.id = w.owner_user_id
-    WHERE w.tier_granted_at IS NOT NULL
-    ORDER BY w.tier_granted_at DESC, w.id DESC
-  `).all();
 }
 
 function registerAdminRoutes(app) {
@@ -408,22 +274,7 @@ function registerAdminRoutes(app) {
       'SELECT COUNT(*) AS n FROM competitors WHERE active = 1'
     ).get().n;
 
-    // Tier breakdown from the authoritative effective-tier source. Resolve each
-    // workspace through getWorkspaceTier (honours cancellation grace periods),
-    // so this matches what the app shows the user, not the deprecated
-    // users.tier column.
     const wsIds = db.prepare('SELECT id FROM workspaces').all();
-    const tierCounts = { free: 0, pro: 0, team: 0, business: 0 };
-    for (const { id } of wsIds) {
-      const t = getWorkspaceTier(id);
-      tierCounts[t] = (tierCounts[t] || 0) + 1;
-    }
-
-    // Waitlist counts by tier_interest, reusing the existing waitlist data.
-    const waitlistCounts = { team: 0, business: 0, trial: 0 };
-    for (const r of db.prepare('SELECT tier, COUNT(*) AS n FROM waitlist_signups GROUP BY tier').all()) {
-      waitlistCounts[r.tier] = r.n;
-    }
 
     // Audit the view with aggregate counts only — no emails or per-user data.
     logAudit({ userId: req.adminUser.id, workspaceId: req.workspaceId || null,
@@ -432,7 +283,7 @@ function registerAdminRoutes(app) {
 
     res.type('html').send(renderStats({
       totalUsers, newUsers7d, activeCompetitors,
-      tierCounts, waitlistCounts, workspaceCount: wsIds.length,
+      workspaceCount: wsIds.length,
     }));
   });
 
@@ -448,25 +299,10 @@ function registerAdminRoutes(app) {
     );
   });
 
-  app.get('/admin/waitlist', requireAdmin, (req, res) => {
-    // Column aliases map storage names (tier, signed_up_at) onto the display
-    // contract (tier_interest, created_at).
-    const rows = getDb().prepare(`
-      SELECT id, email, tier AS tier_interest, signed_up_at AS created_at, notified_at
-      FROM waitlist_signups
-      ORDER BY signed_up_at DESC, id DESC
-    `).all();
-    logAudit({ userId: req.adminUser.id, workspaceId: req.workspaceId || null,
-      eventType: 'admin_view_waitlist', eventData: { count: rows.length }, req });
-    res.type('html').send(renderWaitlist(rows));
-  });
-
   app.get('/admin/users', requireAdmin, (req, res) => {
     const rows = getDb().prepare(`
-      SELECT u.id, u.email, u.name, u.is_developer, u.created_at,
-             w.subscription_tier, w.subscription_id, w.trial_ends_at
+      SELECT u.id, u.email, u.name, u.is_developer, u.created_at
       FROM users u
-      LEFT JOIN workspaces w ON w.owner_user_id = u.id
       ORDER BY u.id ASC
     `).all();
     logAudit({ userId: req.adminUser.id, workspaceId: req.workspaceId || null,
@@ -521,126 +357,9 @@ function registerAdminRoutes(app) {
     });
 
     const text = value
-      ? `Developer access ENABLED for ${user.email}. They now have unlimited Pro features.`
-      : `Developer access DISABLED for ${user.email}. Normal tier behaviour applies.`;
+      ? `Developer access ENABLED for ${user.email}. Their workspace has no page caps.`
+      : `Developer access DISABLED for ${user.email}. Normal plan limits apply.`;
     res.type('html').send(renderSetDeveloperForm(req.session.csrfToken, { type: 'ok', text }, email));
-  });
-
-  app.get('/admin/set-tier', requireAdmin, (req, res) => {
-    res.type('html').send(
-      renderSetTierForm(req.session.csrfToken, null, req.query.email, getGrantedWorkspaces(getDb()))
-    );
-  });
-
-  // Manually set a user's workspace tier during the pre-launch window. Writes
-  // the AUTHORITATIVE source (workspaces.subscription_tier and the related
-  // subscription_* fields read by getWorkspaceTier), so the grant reflects
-  // everywhere consistently (hamburger, Settings, slot counter) and a future
-  // payment webhook overwrites the exact same field with no parallel system to
-  // reconcile. No automated trial/expiry is created. This is purely an admin
-  // set, the same shape as the existing set-developer handler.
-  app.post('/admin/set-tier', urlencoded, requireAdmin, (req, res) => {
-    const db = getDb();
-    const reform = (note, prefill) =>
-      renderSetTierForm(req.session.csrfToken, note, prefill, getGrantedWorkspaces(db));
-
-    const token = req.body?._csrf;
-    if (!safeEqual(token, req.session.csrfToken)) {
-      return res.status(403).type('html').send(
-        reform({ type: 'err', text: 'Invalid request token. Please reload and try again.' })
-      );
-    }
-
-    const email = String(req.body?.email || '').trim().toLowerCase();
-    const tier = String(req.body?.tier || '').trim().toLowerCase();
-
-    if (!email) {
-      return res.status(400).type('html').send(
-        reform({ type: 'err', text: 'An email address is required.' }, email)
-      );
-    }
-    if (tier !== 'pro' && tier !== 'free') {
-      return res.status(400).type('html').send(
-        reform({ type: 'err', text: 'Tier must be either Pro or Free.' }, email)
-      );
-    }
-
-    const user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(email);
-    if (!user) {
-      return res.status(404).type('html').send(
-        reform({ type: 'err', text: `No user found with email ${email}.` }, email)
-      );
-    }
-
-    const ws = db.prepare(
-      'SELECT id, subscription_tier, subscription_id FROM workspaces WHERE owner_user_id = ?'
-    ).get(user.id);
-    if (!ws) {
-      return res.status(404).type('html').send(
-        reform({ type: 'err', text: `No workspace found for ${user.email}.` }, email)
-      );
-    }
-
-    // Safety: never clobber a workspace already linked to a real payment-processor
-    // subscription. Once billing is live, real subscriptions own the tier and must
-    // be changed through the billing portal, not this manual override, so the two
-    // tier sources can never fight. (During the pre-launch window no workspace has
-    // a subscription_id, so this never blocks a legitimate grant.)
-    if (ws.subscription_id) {
-      return res.status(409).type('html').send(
-        reform({ type: 'err', text: `${user.email} has a live subscription. Manage their tier through the billing portal, not a manual grant.` }, email)
-      );
-    }
-
-    const previousTier = getWorkspaceTier(ws.id);
-
-    if (tier === 'pro') {
-      // Grant a real Pro experience via the authoritative fields: active status,
-      // no end date, no pending cancellation. tier_granted_at records WHEN, for
-      // the future paid transition. getWorkspaceTier now returns 'pro' for this
-      // workspace, so every surface shows Pro / 15 pages.
-      db.prepare(`
-        UPDATE workspaces SET
-          subscription_tier = 'pro',
-          subscription_status = 'active',
-          subscription_current_period_end = NULL,
-          subscription_cancel_at_period_end = 0,
-          tier_granted_at = CURRENT_TIMESTAMP,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?`).run(ws.id);
-    } else {
-      // Revert to Free: clear the manual grant and its subscription_* fields.
-      db.prepare(`
-        UPDATE workspaces SET
-          subscription_tier = 'free',
-          subscription_status = NULL,
-          subscription_current_period_end = NULL,
-          subscription_cancel_at_period_end = 0,
-          tier_granted_at = NULL,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?`).run(ws.id);
-    }
-
-    // Audit every grant/revert: which admin set which tier on which workspace.
-    // Consistent with set_developer_flag (admin-only surface, target email kept).
-    logAudit({
-      userId: req.adminUser.id,
-      workspaceId: ws.id,
-      eventType: 'admin_grant_tier',
-      eventData: {
-        target_user_id: user.id,
-        target_email: user.email,
-        tier,
-        previous_tier: previousTier,
-        set_by: req.adminUser.email,
-      },
-      req,
-    });
-
-    const text = tier === 'pro'
-      ? `Pro access GRANTED to ${user.email}. Their workspace now has full Pro: 15 pages, daily monitoring, and all features.`
-      : `Reverted ${user.email} to Free. Pro features no longer apply.`;
-    res.type('html').send(reform({ type: 'ok', text }, email));
   });
 }
 

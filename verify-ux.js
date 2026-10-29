@@ -69,7 +69,7 @@ async function settle(page, hash, sel) {
   // Settings descriptor
   await settle(page, '#/settings/workspace', '#settings-panel .set-card');
   const setSub = await page.textContent('.settings-page .settings-page-subtitle');
-  check('Settings descriptor text', setSub.trim() === 'Workspace configuration, billing, and company context', setSub.trim());
+  check('Settings descriptor text', setSub.trim() === 'Workspace configuration and company context', setSub.trim());
 
   // Business context placeholders carry the realistic examples
   const phWhat = await page.getAttribute('#ctx-what-we-sell', 'placeholder');

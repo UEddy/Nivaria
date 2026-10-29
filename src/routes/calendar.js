@@ -27,7 +27,7 @@ const { providerFor }    = require('../calendarOAuth');
 const { csrfProtect }    = require('../middleware/security');
 const { syncOneConnection } = require('../calendarSync');
 const { getUserCurrentWorkspace } = require('../lib/workspace');
-const { canWorkspaceAccess, upgradeRequired } = require('../lib/tierLimits');
+const { canWorkspaceAccess, planLimitReached } = require('../lib/tierLimits');
 const { logAudit }       = require('../lib/audit');
 const rateLimit = require('express-rate-limit');
 
@@ -74,11 +74,11 @@ router.get('/connections', requireAuthSession, (req, res) => {
 // because this is a navigational GET.
 
 router.get('/google/connect', requireAuthSession, (req, res) => {
-  // Phase 10: calendar briefings are a Pro feature, gated by workspace tier.
+  // Calendar briefings are gated by the plan flag (on for every workspace).
   const ws = getUserCurrentWorkspace(req.userId);
   if (!ws || !canWorkspaceAccess(ws.id, 'calendar')) {
     logAudit({ workspaceId: ws ? ws.id : null, userId: req.userId, eventType: 'gate_violation', eventData: { feature: 'calendar' }, req });
-    return upgradeRequired(res, 'calendar');
+    return planLimitReached(res, 'calendar');
   }
   if (!tokensConfigured()) {
     return res.status(500).json({

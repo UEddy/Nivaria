@@ -1,34 +1,32 @@
-// Settings — Pattern 2 sidebar layout. A left vertical nav switches between three
+// Settings: Pattern 2 sidebar layout. A left vertical nav switches between two
 // independent section panels (no long-scroll single page). Sections:
-//   workspace · notifications · billing
+//   workspace · notifications
 // Per-user identity (name, password, voice profile), the integrations (calendar,
 // Slack, alert webhooks), and the account danger zone all live on the separate
 // Profile page (public/js/profile.js), NOT here.
 //
 // Each section is a real hash sub-route (#/settings/<section>) so deep links,
-// browser back/forward, and the upgrade return redirect all work. The fetched
-// data bundle is cached on Settings._ctx; tab switches re-render the active
-// panel from cache (no skeleton flash), while a bare Settings.render() call
-// (e.g. after a billing mutation) refetches fresh data and stays on the
-// current section.
+// browser back/forward all work. The fetched data bundle is cached on
+// Settings._ctx; tab switches re-render the active panel from cache (no
+// skeleton flash), while a bare Settings.render() call (e.g. after a save)
+// refetches fresh data and stays on the current section.
 
 const Settings = {
-  _ctx: null,            // cached { settings, user, ctxData, subData }
+  _ctx: null,            // cached { settings, user, ctxData }
   _activeSection: 'workspace',
 
   SECTIONS: [
     { id: 'workspace',     label: 'Workspace',     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg>` },
     { id: 'notifications', label: 'Notifications',  icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>` },
-    { id: 'billing',       label: 'Billing',        icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>` },
   ],
 
-  // Resolve which section to show from an explicit id, then from the upgrade
-  // return param (so an old #/settings?upgraded=1 link lands on Billing), then
-  // the last active section, then the workspace default.
-  _resolveSection(section, routeQuery) {
-    if (section) return section;
-    if (routeQuery instanceof URLSearchParams && routeQuery.has('upgraded')) return 'billing';
-    return Settings._activeSection || 'workspace';
+  // Resolve which section to show from an explicit id, then the last active
+  // section, then the workspace default. An unknown id (from an old link) is
+  // treated as no id, so the nav and the panel always agree.
+  _resolveSection(section, _routeQuery) {
+    const known = id => Settings.SECTIONS.some(x => x.id === id);
+    if (known(section)) return section;
+    return known(Settings._activeSection) ? Settings._activeSection : 'workspace';
   },
 
   async render(routeQuery, section) {
@@ -43,12 +41,11 @@ const Settings = {
 
     if (needFetch) {
       try {
-        const [{ settings, user }, ctxData, subData] = await Promise.all([
+        const [{ settings, user }, ctxData] = await Promise.all([
           API.getSettings(),
           API.getUserContext().catch(() => null),
-          API.getSubscription().catch(() => null),
         ]);
-        Settings._ctx = { settings: settings || {}, user, ctxData, subData };
+        Settings._ctx = { settings: settings || {}, user, ctxData };
       } catch (e) {
         el('page-root').innerHTML = `
           <div class="empty-state">
@@ -71,9 +68,7 @@ const Settings = {
   // ── Shell: identity header + left nav + active panel ────────────────────────
 
   shellHtml(ctx, active) {
-    const { user, subData } = ctx;
-    const tier = (subData && subData.effectiveTier) || 'free';
-    const tierLabel = { free: 'Free', pro: 'Pro', team: 'Team', business: 'Business' }[tier] || tier;
+    const { user } = ctx;
     const section = Settings.SECTIONS.find(x => x.id === active) || Settings.SECTIONS[0];
 
     const nav = Settings.SECTIONS.map(sx => {
@@ -91,12 +86,10 @@ const Settings = {
         <div class="settings-page-header">
           <div>
             <div class="settings-page-title">Settings</div>
-            <div class="settings-page-subtitle">Workspace configuration, billing, and company context</div>
+            <div class="settings-page-subtitle">Workspace configuration and company context</div>
           </div>
           <div class="settings-identity">
             <span>${esc(user?.email || '')}</span>
-            <span class="dot-sep">·</span>
-            <span class="plan-badge plan-badge--${tier}">${tierLabel} Plan</span>
           </div>
         </div>
         <div class="settings-page-divider"></div>
@@ -104,14 +97,14 @@ const Settings = {
         <div class="settings-shell" id="settings-shell">
           <nav class="settings-nav" aria-label="Settings sections">${nav}</nav>
           <div class="settings-panel" id="settings-panel" role="region" aria-label="${esc(section.label)} settings">
-            <div class="settings-stack">${Settings.panelHtml(active, ctx)}</div>
+            <div class="settings-stack">${Settings.panelHtml(section.id, ctx)}</div>
           </div>
         </div>
       </div>`;
   },
 
   panelHtml(section, ctx) {
-    const { settings: s, user, ctxData, subData } = ctx;
+    const { settings: s, user, ctxData } = ctx;
     const c = ctxData?.context || {};
 
     switch (section) {
@@ -119,80 +112,9 @@ const Settings = {
         return Settings.businessContextHtml(c);
       case 'notifications':
         return Settings.notificationsHtml(s, user?.email);
-      case 'billing':
-        return Settings.billingHtml(subData);
       default:
         return Settings.businessContextHtml(c);
     }
-  },
-
-  // ── Plan & billing (Phase 10) ───────────────────────────────────────────────
-
-  billingHtml(sub) {
-    const tier   = (sub && sub.effectiveTier) || 'free';
-    const status = sub && sub.status;
-    const cancel = sub && sub.cancelAtPeriodEnd;
-    const periodEnd = sub && sub.currentPeriodEnd;
-    const fmt = (d) => (d ? formatShortDate(d) : '-');
-    const badgeTier = tier === 'business' ? 'team' : tier; // reuse team gradient
-    const badge = `<span class="plan-badge plan-badge--${badgeTier}">${tier.charAt(0).toUpperCase() + tier.slice(1)}</span>`;
-
-    let body;
-    if (tier === 'free') {
-      body = `
-        <div class="set-plan-row">
-          ${badge}
-          <span class="set-plan-meta">1 page · manual checks</span>
-          <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="Billing.subscribe(this)">Upgrade to Pro ($49/mo)</button>
-        </div>
-        <span class="form-hint">Unlock 15 monitored pages, daily monitoring, alerts, calendar briefings, outreach playbooks, and win/loss correlation.</span>`;
-    } else if (status === 'past_due') {
-      body = `
-        <div class="set-plan-row">
-          ${badge}
-          <span class="set-plan-meta" style="color:var(--red)">Payment failed. Update your card to keep Pro.</span>
-          <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="Billing.openPortal(this)">Update payment</button>
-        </div>`;
-    } else if (cancel) {
-      body = `
-        <div class="set-plan-row">
-          ${badge}
-          <span class="set-plan-meta">Your Pro access ends ${fmt(periodEnd)}.</span>
-          <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="Billing.resume(this)">Resume subscription</button>
-        </div>
-        <span class="form-hint">You keep Pro until then. Resume any time to stay subscribed.</span>`;
-    } else if (status === 'paused') {
-      body = `
-        <div class="set-plan-row">
-          ${badge}
-          <span class="set-plan-meta">Subscription paused.</span>
-          <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="Billing.openPortal(this)">Manage</button>
-        </div>`;
-    } else {
-      body = `
-        <div class="set-plan-row">
-          ${badge}
-          <span class="set-plan-meta">Next billing ${fmt(periodEnd)}.</span>
-          <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="Billing.openPortal(this)">Manage subscription</button>
-        </div>
-        <div style="display:flex">
-          <button class="set-linkbtn set-linkbtn--danger" onclick="Billing.confirmCancel()">Cancel subscription</button>
-        </div>`;
-    }
-
-    return `
-      <div class="set-card">
-        <div class="set-card__head">
-          <div class="set-card__title">Plan &amp; billing</div>
-          <div class="set-card__desc">Your current plan and subscription. Billing and card details are handled securely by our payment processor.</div>
-        </div>
-        <div class="set-card__body">
-          ${body}
-          <div>
-            <button class="set-linkbtn" style="padding-left:0" onclick="Billing.reconcile(this)">Subscription not showing correctly?</button>
-          </div>
-        </div>
-      </div>`;
   },
 
   // ── Business context (Phase 6) — Workspace section ──────────────────────────
@@ -304,7 +226,7 @@ const Settings = {
           <label class="set-switch-row" for="brief-email-enabled">
             <span class="set-switch-text">
               <span class="set-switch-label">Email me when a brief is generated</span>
-              <span class="set-switch-help">Each time we detect a meaningful change for a tracked competitor, send the full brief to your notification address. Available on Pro.</span>
+              <span class="set-switch-help">Each time we detect a meaningful change for a tracked competitor, send the full brief to your notification address.</span>
             </span>
             <input type="checkbox" role="switch" id="brief-email-enabled" class="set-switch"
               ${briefEmailOn ? 'checked' : ''} aria-label="Email me when a brief is generated" />
@@ -435,9 +357,8 @@ const Settings = {
     document.querySelectorAll('[data-dirty-group]').forEach(group => {
       const btn = group.querySelector('[data-save-btn]');
       if (!btn) return;
-      // Start clean (disabled). A locked, free-tier webhook card has disabled
-      // fields, so the :not([disabled]) selector below attaches no listeners and
-      // its Save stays disabled — exactly the prior behavior.
+      // Start clean (disabled). A card with disabled fields gets no listeners
+      // from the :not([disabled]) selector below, so its Save stays disabled.
       btn.disabled = true;
       const arm = () => { if (btn.disabled && !btn.classList.contains('is-saved')) btn.disabled = false; };
       group.querySelectorAll('input:not([disabled]), textarea:not([disabled]), select:not([disabled])').forEach(field => {

@@ -19,7 +19,6 @@ const bcrypt = require('bcryptjs');
 const router = express.Router();
 
 const { getDb } = require('../db');
-const ls = require('../lemonSqueezy');
 const { logAudit } = require('../lib/audit');
 const limits = require('../middleware/rateLimits');
 
@@ -157,9 +156,8 @@ router.get('/export', (req, res) => {
 // IMMEDIATE, irreversible hard delete — no soft delete, no recovery. Requires
 // BOTH fresh-auth (the account password) and a typed-email confirmation that
 // matches the account email, so neither a hijacked session nor a stray click can
-// destroy the account on its own. Any active Lemon Squeezy subscription is
-// cancelled (at period end) BEFORE the data is removed. The session is destroyed
-// so the user is logged out, and the client is told to land on the landing page.
+// destroy the account on its own. The session is destroyed so the user is
+// logged out, and the client is told to land on the landing page.
 router.post('/delete', limits.accountDelete, async (req, res) => {
   if (!passwordOk(req)) return res.status(401).json({ error: 'Password is incorrect.' });
 
@@ -174,14 +172,7 @@ router.post('/delete', limits.accountDelete, async (req, res) => {
     return res.status(400).json({ error: 'The email you typed does not match your account email.' });
   }
 
-  // 1. Cancel any active Lemon Squeezy subscription FIRST (best-effort). Cancel
-  //    at period end so the user keeps the Pro access they already paid for.
-  try {
-    const subs = db.prepare('SELECT subscription_id FROM workspaces WHERE owner_user_id = ? AND subscription_id IS NOT NULL').all(userId);
-    for (const s of subs) { try { await ls.cancelAtPeriodEnd(s.subscription_id); } catch (_) {} }
-  } catch (_) {}
-
-  // 2. Hard-delete every trace. Capture a privacy-preserving email hash for the
+  // 1. Hard-delete every trace. Capture a privacy-preserving email hash for the
   //    retained audit record BEFORE the row is gone (raw email is never logged).
   const emailHash = hashEmail(accountEmail);
   let workspaces = 0;
@@ -192,11 +183,11 @@ router.post('/delete', limits.accountDelete, async (req, res) => {
     return res.status(500).json({ error: 'Could not delete your account. Please try again or contact support.' });
   }
 
-  // 3. Append-only "Account deleted" audit entry (retained; user_id kept as an
+  // 2. Append-only "Account deleted" audit entry (retained; user_id kept as an
   //    integer ref, email stored only as a salted hash).
   logAudit({ workspaceId: req.workspaceId, userId, eventType: 'account_deletion_completed', eventData: { emailHash, workspaces, immediate: true }, req });
 
-  // 4. Log the user out and point the client at the landing page.
+  // 3. Log the user out and point the client at the landing page.
   req.session.destroy(() => {
     res.clearCookie('cs.sid');
     res.json({ ok: true, deleted: true, redirect: '/', message: 'Your account and all associated data have been permanently deleted.' });

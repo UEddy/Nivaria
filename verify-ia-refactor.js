@@ -53,7 +53,7 @@ async function gotoSettled(page, hash, sel) {
   await page.screenshot({ path: `${OUT}/profile-desktop.png`, fullPage: true });
 
   // ── 2. Each Settings section (desktop) ───────────────────────────────────
-  const sections = ['workspace', 'integrations', 'notifications', 'billing', 'account'];
+  const sections = ['workspace', 'integrations', 'notifications', 'account'];
   for (const s of sections) {
     await gotoSettled(page, `#/settings/${s}`, '#settings-shell');
     const active = await page.$eval(`.settings-nav__item[data-section="${s}"]`, el => el.classList.contains('is-active'));
@@ -119,9 +119,8 @@ async function gotoSettled(page, hash, sel) {
   });
 
   // ── 5. Functional: webhook/briefing DECOUPLING (the server fix) ───────────
-  const sub = await (await context.request.get(`${BASE}/api/billing/subscription`)).json();
-  const isPro = ['pro', 'team', 'business'].includes(sub.effectiveTier);
-  check('demo tier is Pro+ (for webhook test)', isPro, `tier=${sub.effectiveTier}`);
+  // Webhooks are on the one fixed plan for every account (no billing).
+  const isPro = true;
 
   const before = await (await context.request.get(`${BASE}/api/settings`)).json();
   // Save notifications only (briefings), webhooks omitted.

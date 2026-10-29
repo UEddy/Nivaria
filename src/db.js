@@ -121,10 +121,8 @@ const SCHEMA = `
     -- First-visit flag: 0 until the user opens the dashboard for the first time,
     -- which switches the greeting from a "welcome" variant to "welcome back".
     has_visited_dashboard INTEGER DEFAULT 0,
-    -- DEPRECATED (Phase 10): tier is now workspace-driven. The source of truth
-    -- for all gating is workspaces.subscription_tier (see src/lib/tierLimits.js).
-    -- Retained for backward-compatible reads only; no Phase 10+ code path writes
-    -- it. Scheduled for removal in a post-launch cleanup (Phase 13).
+    -- LEGACY: no longer read or written. Every workspace is on one fixed plan
+    -- (src/lib/tierLimits.js). Kept so the schema stays as it was.
     tier TEXT DEFAULT 'free' CHECK(tier IN ('free', 'pro', 'team')),
     api_key TEXT UNIQUE NOT NULL,
     password_hash TEXT,
@@ -473,13 +471,15 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_slack_install_lookup ON slack_installations(slack_team_id, slack_user_id);
   CREATE INDEX IF NOT EXISTS idx_slack_install_user   ON slack_installations(user_id);
 
-  -- ── Phase 10: workspace-based billing model ─────────────────────────────────
-  -- A workspace is the unit that owns data and carries a subscription. For
-  -- Phase 10 every user owns exactly one personal workspace (user_id ↔
-  -- workspace_id is 1:1). Phase 10.5 turns this into real multi-member teams;
-  -- this schema is forward-compatible so that work is purely additive.
-  -- subscription_* fields are driven SOLELY by Lemon Squeezy webhooks — the
-  -- app never writes tier/status directly except via the verified webhook.
+  -- ── Phase 10: workspace model ───────────────────────────────────────────────
+  -- A workspace is the unit that owns data. Every user owns exactly one
+  -- personal workspace (user_id ↔ workspace_id is 1:1). Phase 10.5 turns this
+  -- into real multi-member teams; this schema is forward-compatible so that
+  -- work is purely additive.
+  -- LEGACY: the subscription_*, tier_granted_at and lemon_squeezy_* columns
+  -- belonged to the billing integration removed on 2026-10-29. Nothing reads
+  -- or writes them now; they stay so no destructive migration is needed (see
+  -- README, "Legacy billing tables").
   CREATE TABLE IF NOT EXISTS workspaces (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -489,12 +489,7 @@ const SCHEMA = `
     subscription_tier TEXT NOT NULL DEFAULT 'free' CHECK(subscription_tier IN ('free','pro','team','business')),
     subscription_current_period_end DATETIME,
     subscription_cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
-    -- Pre-launch manual Pro grant bookkeeping (admin /admin/set-tier). Records
-    -- WHEN an admin manually granted the current tier, so that once a real
-    -- payment processor is live we can see who was comped and when, to manage
-    -- their transition to paid. NULL for tiers set by a real subscription or
-    -- never granted. This is bookkeeping only: the authoritative tier remains
-    -- subscription_tier, which a future payment webhook overwrites directly.
+    -- LEGACY: when an admin manually granted Pro (the removed /admin/set-tier).
     tier_granted_at DATETIME,
     lemon_squeezy_customer_id TEXT,
     lemon_squeezy_subscription_variant_id TEXT,
@@ -522,12 +517,9 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(user_id);
   CREATE INDEX IF NOT EXISTS idx_workspace_members_ws   ON workspace_members(workspace_id);
 
-  -- Waitlist captures for the not-yet-active Team and Business tiers, plus
-  -- manual-access requests for the 14-day Pro trial (tier='trial'), which reuses
-  -- this table until a payment processor and automated trial are live.
-  -- notified_at is reserved for a future "your tier is now live" mailout (NULL
-  -- until that email is sent). A user may request multiple tiers but not the same
-  -- tier twice, enforced by UNIQUE(email, tier).
+  -- LEGACY: waitlist captures for the Team and Business tiers and 14-day Pro
+  -- trial requests. The pricing page and waitlist endpoint that wrote here were
+  -- removed with billing on 2026-10-29; the table and its rows are kept.
   CREATE TABLE IF NOT EXISTS waitlist_signups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL,
@@ -540,10 +532,9 @@ const SCHEMA = `
   );
   CREATE INDEX IF NOT EXISTS idx_waitlist_email ON waitlist_signups(email);
 
-  -- Webhook audit + idempotency. lemon_squeezy_event_id UNIQUE is the DB-level
-  -- guarantee a replayed webhook can never be processed twice. Rows are RETAINED
-  -- (anonymized: workspace_id set NULL) even after account deletion, for
-  -- accounting/tax record-keeping.
+  -- LEGACY: Lemon Squeezy webhook log from the billing integration removed on
+  -- 2026-10-29. Nothing writes here now. Existing rows are RETAINED (anonymized:
+  -- workspace_id set NULL on account deletion) for accounting/tax records.
   CREATE TABLE IF NOT EXISTS payment_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     workspace_id INTEGER,
@@ -669,8 +660,8 @@ async function initDb() {
   if (!userCols.includes('email_verified'))  sqlDb.run('ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0');
   if (!userCols.includes('last_login'))      sqlDb.run('ALTER TABLE users ADD COLUMN last_login DATETIME');
   if (!userCols.includes('session_version')) sqlDb.run('ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 1');
-  // Phase 12: emergency per-user override granting unlimited Pro feature access
-  // regardless of subscription state (see src/lib/tierLimits.js). Admin-set only.
+  // Phase 12: emergency per-user override that lifts the page caps (see
+  // src/lib/tierLimits.js). Admin-set only.
   if (!userCols.includes('is_developer'))    sqlDb.run('ALTER TABLE users ADD COLUMN is_developer INTEGER DEFAULT 0');
   // Friendly name + timezone + first-visit flag (signup personalization). Added
   // nullable/defaulted so existing rows migrate cleanly; first_name is enforced
@@ -891,11 +882,9 @@ async function initDb() {
     sqlDb.run('ALTER TABLE outbound_runs ADD COLUMN funnel TEXT');
   }
 
-  // 14-day Pro trial (see src/config.js TRIAL_DAYS). trial_ends_at is set at
-  // workspace creation for NEW signups; NULL on pre-trial workspaces means "no
-  // trial" (existing users keep their current tier, nothing changes for them).
-  // trial_notices is a JSON array of reminder markers already sent ("day10",
-  // "day13", "expiry") so the daily sweep never double-sends.
+  // LEGACY: the 14-day Pro trial removed with billing on 2026-10-29.
+  // trial_ends_at and trial_notices are no longer read or written; the
+  // columns are still added so older databases keep the same shape.
   const wsTrialCols = (sqlDb.exec('PRAGMA table_info(workspaces)')[0]?.values || []).map(v => v[1]);
   if (wsTrialCols.length && !wsTrialCols.includes('trial_ends_at')) {
     sqlDb.run('ALTER TABLE workspaces ADD COLUMN trial_ends_at DATETIME');
@@ -904,9 +893,9 @@ async function initDb() {
     sqlDb.run("ALTER TABLE workspaces ADD COLUMN trial_notices TEXT DEFAULT '[]'");
   }
 
-  // Trial expiry keeps data: competitors above the Free limit are ARCHIVED
-  // (read-only, excluded from page counts and monitoring), never deleted, and
-  // restored on upgrade. 0 = live, 1 = archived.
+  // Archived pages are read-only and excluded from page counts and monitoring.
+  // Legacy trial expiry set this; GET /api/competitors restores them once the
+  // workspace has room under the page cap. 0 = live, 1 = archived.
   const compArchCols = (sqlDb.exec('PRAGMA table_info(competitors)')[0]?.values || []).map(v => v[1]);
   if (compArchCols.length && !compArchCols.includes('archived')) {
     sqlDb.run('ALTER TABLE competitors ADD COLUMN archived INTEGER DEFAULT 0');
@@ -958,9 +947,6 @@ async function initDb() {
 
   // Phase 10: migrate to the workspace-based model (idempotent, transactional).
   runPhase10WorkspaceMigration();
-  // DEV-ONLY: promote the developer's own workspace to Pro for build/testing.
-  // No-op when NODE_ENV==='production'.
-  seedDevProWorkspace();
 
   // One-time PRODUCTION cleanup of the Phase 9 demo-data leak (see the migration
   // for the safety model). No-op in dev/test and idempotent in production — once
@@ -1016,39 +1002,6 @@ function backfillCompetitorGroups(db) {
     console.log(`✅ Grouped-competitor migration: ${created} competitor(s) each migrated into a one-page group (no data removed)`);
   }
   return created;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DEV-ONLY SEED — never runs in production (guarded by NODE_ENV).
-// Gives the developer's personal workspace a Pro subscription so the full app
-// is usable during the Phase 10 build without running a live Lemon Squeezy
-// checkout. The demo workspace is intentionally LEFT on 'free' so both tier
-// states exist for testing. Idempotent and safe: only promotes a workspace that
-// is still 'free' with NO real subscription linked, so a genuine Lemon Squeezy
-// subscription (set only via verified webhook) can never be clobbered by this.
-// ─────────────────────────────────────────────────────────────────────────────
-function seedDevProWorkspace() {
-  if (process.env.NODE_ENV === 'production') return;
-  const DEV_PRO_EMAIL = 'eddyhamezz@gmail.com';
-  const ws = db.prepare(`
-    SELECT w.id, w.subscription_tier, w.subscription_id
-    FROM workspaces w JOIN users u ON u.id = w.owner_user_id
-    WHERE u.email = ?`).get(DEV_PRO_EMAIL);
-  if (!ws) return;
-  // Don't overwrite a real Lemon Squeezy subscription or an already-seeded Pro.
-  if (ws.subscription_tier !== 'free' || ws.subscription_id) return;
-
-  const periodEnd = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
-    .toISOString().replace('T', ' ').slice(0, 19); // ~1 year out
-  db.prepare(`
-    UPDATE workspaces
-    SET subscription_tier = 'pro',
-        subscription_status = 'active',
-        subscription_current_period_end = ?,
-        updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?`).run(periodEnd, ws.id);
-  saveDb();
-  console.log(`🧪 [DEV-ONLY] Seeded Pro on ${DEV_PRO_EMAIL}'s workspace #${ws.id} (period end ${periodEnd}). Never runs in production.`);
 }
 
 // ─── Phase 10: workspace migration ───────────────────────────────────────────

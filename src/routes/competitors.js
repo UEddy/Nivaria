@@ -2,7 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const { getDb, extractDomainFromUrl } = require('../db');
 const { checkCompetitor }  = require('../scheduler');
-const { canAddPage, canAddPageToCompetitor, MAX_PAGES_PER_COMPETITOR, upgradeRequired, getWorkspaceTier } = require('../lib/tierLimits');
+const { canAddPage, canAddPageToCompetitor, MAX_PAGES_PER_COMPETITOR, planLimitReached, maxPages, workspaceOwnerIsPrivileged } = require('../lib/tierLimits');
 const { logAudit } = require('../lib/audit');
 const { getCompetitorHistory, generatePatternCallouts } = require('../historicalContext');
 const { normalizeCompetitorUrl, canonicalUrlKey } = require('../lib/urlNormalize');
@@ -29,16 +29,19 @@ function findDuplicateUrl(db, userId, url, excludeId = null) {
 // competitors row linked by group_id. Pages, not groups, count toward the plan
 // page limit (see src/lib/tierLimits.js).
 
+// Shown for any write to an archived page. Archived pages return on their own
+// once the workspace has room under the page cap (see GET /).
+const ARCHIVED_MESSAGE = 'This page is archived because the plan’s page limit is reached. Remove another page and it will be restored.';
+
 // Number of monitored pages currently under one competitor (group).
 function pagesInGroup(db, groupId) {
   if (!groupId) return 0;
   return db.prepare('SELECT COUNT(*) AS n FROM competitors WHERE group_id = ?').get(groupId).n;
 }
 
-// Total monitored pages in the workspace — the value compared against the plan
-// page limit. Archived pages (trial expiry keeps them read-only above the Free
-// cap) do not count: they are not monitored and must not block the one slot
-// the Free plan grants.
+// Total monitored pages in the workspace, the value compared against the plan
+// page limit. Archived pages (legacy: archived when an old trial expired) do
+// not count, because they are not monitored.
 function workspacePageCount(db, workspaceId) {
   return db.prepare('SELECT COUNT(*) AS n FROM competitors WHERE workspace_id = ? AND COALESCE(archived, 0) = 0').get(workspaceId).n;
 }
@@ -94,11 +97,17 @@ function validateCssSelector(raw) {
 router.get('/', (req, res) => {
   const db   = getDb();
 
-  // Restore on upgrade: the moment the workspace is entitled beyond Free
-  // (paid subscription or admin/developer override), any competitors archived
-  // at trial expiry come back automatically, timeline intact.
-  if (getWorkspaceTier(req.workspaceId) !== 'free') {
-    db.prepare('UPDATE competitors SET archived = 0 WHERE workspace_id = ? AND COALESCE(archived, 0) = 1').run(req.workspaceId);
+  // Pages archived when an old trial expired come back automatically, oldest
+  // first, as long as the workspace has room under the plan's page cap
+  // (privileged workspaces have no cap). Timelines are intact.
+  const archivedIds = db.prepare('SELECT id FROM competitors WHERE workspace_id = ? AND COALESCE(archived, 0) = 1 ORDER BY id ASC').all(req.workspaceId);
+  if (archivedIds.length) {
+    const room = workspaceOwnerIsPrivileged(req.workspaceId)
+      ? archivedIds.length
+      : Math.max(0, maxPages(req.workspaceId) - workspacePageCount(db, req.workspaceId));
+    for (const { id } of archivedIds.slice(0, room)) {
+      db.prepare('UPDATE competitors SET archived = 0 WHERE id = ?').run(id);
+    }
   }
 
   // change_count and the "last change" fields feed customer-facing counts and
@@ -180,7 +189,7 @@ router.post('/', (req, res) => {
   const rm = validateRenderMode(req.body.render_mode);
   if (rm.error) return res.status(400).json({ error: rm.error });
 
-  // Re-adding a domain that was archived at trial expiry RESTORES the original
+  // Re-adding a domain that was archived (legacy trial expiry) RESTORES the original
   // row instead of creating a fresh one, so the full change timeline for that
   // domain comes back with it (the "prior snapshots exist" backfill path).
   // Must run before duplicate detection, which would otherwise 409 on the
@@ -190,7 +199,7 @@ router.post('/', (req, res) => {
     const livePages = workspacePageCount(db, req.workspaceId);
     if (!canAddPage(req.workspaceId, livePages)) {
       logAudit({ workspaceId: req.workspaceId, userId: req.userId, eventType: 'gate_violation', eventData: { feature: 'add_competitor', pages: livePages, restore: true }, req });
-      return upgradeRequired(res, 'add_competitor');
+      return planLimitReached(res, 'add_competitor');
     }
     db.prepare('UPDATE competitors SET archived = 0, active = 1 WHERE id = ?').run(archivedMatch.id);
     const restoredRow = db.prepare('SELECT * FROM competitors WHERE id = ?').get(archivedMatch.id);
@@ -207,16 +216,15 @@ router.post('/', (req, res) => {
   }
 
   // Cost-safe cap 1: total PAGES against the plan page limit. Pages are the
-  // billable unit, so grouping never grants extra monitoring.
+  // cost unit, so grouping never grants extra monitoring.
   const pageCount = workspacePageCount(db, req.workspaceId);
   if (!canAddPage(req.workspaceId, pageCount)) {
     logAudit({ workspaceId: req.workspaceId, userId: req.userId, eventType: 'gate_violation', eventData: { feature: 'add_competitor', pages: pageCount }, req });
-    return upgradeRequired(res, 'add_competitor');
+    return planLimitReached(res, 'add_competitor');
   }
 
   // Cost-safe cap 2: at most MAX_PAGES_PER_COMPETITOR pages under one competitor.
-  // Upgrading does not lift this structural cap, so it is a plain 400 (not a 402
-  // upgrade gate) with a clear, actionable message.
+  // A structural cap, so it is a plain 400 with a clear, actionable message.
   const groupPages = group ? pagesInGroup(db, group.id) : 0;
   if (!canAddPageToCompetitor(req.workspaceId, groupPages)) {
     return res.status(400).json({
@@ -264,9 +272,9 @@ router.put('/:id', (req, res) => {
   const db  = getDb();
   const row = db.prepare('SELECT * FROM competitors WHERE id = ? AND user_id = ?').get(req.params.id, req.userId);
   if (!row) return res.status(404).json({ error: 'Not found' });
-  // Archived (trial expiry) rows are read-only: visible, never editable.
+  // Archived rows are read-only: visible, never editable.
   if (row.archived) {
-    return res.status(403).json({ error: 'This competitor is archived on the Free plan. Upgrade to Pro to restore and edit it.' });
+    return res.status(403).json({ error: ARCHIVED_MESSAGE });
   }
 
   let name        = row.name;
@@ -431,7 +439,7 @@ router.put('/:id/toggle', (req, res) => {
   const row = db.prepare('SELECT * FROM competitors WHERE id = ? AND user_id = ?').get(req.params.id, req.userId);
   if (!row) return res.status(404).json({ error: 'Not found' });
   if (row.archived) {
-    return res.status(403).json({ error: 'This competitor is archived on the Free plan. Upgrade to Pro to restore it.' });
+    return res.status(403).json({ error: ARCHIVED_MESSAGE });
   }
   const newActive = row.active ? 0 : 1;
   db.prepare('UPDATE competitors SET active = ? WHERE id = ?').run(newActive, row.id);
@@ -443,7 +451,7 @@ router.post('/:id/check', async (req, res) => {
   const row = db.prepare('SELECT * FROM competitors WHERE id = ? AND user_id = ?').get(req.params.id, req.userId);
   if (!row) return res.status(404).json({ error: 'Not found' });
   if (row.archived) {
-    return res.status(403).json({ error: 'This competitor is archived on the Free plan. Upgrade to Pro to restore and check it.' });
+    return res.status(403).json({ error: ARCHIVED_MESSAGE });
   }
 
   // Respond immediately; run check in background. If this page has never been

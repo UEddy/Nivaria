@@ -22,11 +22,8 @@ const calendarRouter    = require('./routes/calendar');
 const dealsRouter        = require('./routes/deals');
 const roiRouter          = require('./routes/roi');
 const slackRouter        = require('./routes/slack');
-// Phase 10 — billing, waitlist, GDPR account routes + webhook handler.
-const billingRouter      = require('./routes/billing');
-const waitlistRouter     = require('./routes/waitlist');
+// Phase 10: GDPR account routes (export, delete).
 const accountRouter      = require('./routes/account');
-const { handleLemonSqueezyWebhook } = require('./lemonSqueezyWebhook');
 const { getUserCurrentWorkspace } = require('./lib/workspace');
 // Phase 11C — public legal pages (Privacy / Terms / Cookies).
 const { registerLegalRoutes } = require('./routes/legal');
@@ -83,7 +80,7 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 // ── Production env validation — fail fast on missing critical secrets ──────────
 // A predictable SESSION_SECRET lets anyone forge session cookies, so there is no
 // safe fallback in production: we refuse to boot without a real one. Other
-// integrations (Anthropic, Lemon Squeezy, Resend) either degrade gracefully or
+// integrations (Anthropic, Resend) either degrade gracefully or
 // are wired up in later Phase 12 sub-steps, so they are not hard requirements here.
 const DEV_SESSION_SECRET = 'cs-dev-secret-CHANGE-THIS-IN-PRODUCTION';
 if (IS_PRODUCTION) {
@@ -120,8 +117,7 @@ app.use(helmet({
       defaultSrc:     ["'self'"],
       // 'unsafe-inline' required for the anti-flash theme snippet in static HTML files.
       // A nonce-based CSP would remove this; tracked as a known limitation.
-      // Phase 10: Lemon Squeezy overlay (lemon.js) is loaded from app.lemonsqueezy.com.
-      scriptSrc:      ["'self'", "'unsafe-inline'", 'https://app.lemonsqueezy.com', 'https://assets.lemonsqueezy.com'],
+      scriptSrc:      ["'self'", "'unsafe-inline'"],
       // Helmet's default for script-src-attr is 'none', which blocks all inline
       // event handlers (onclick, oninput, etc.). The SPA uses inline handlers
       // throughout for view switching, OTP submit, password eye toggles, etc.
@@ -130,10 +126,9 @@ app.use(helmet({
       styleSrc:       ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc:        ["'self'", 'https://fonts.gstatic.com'],
       imgSrc:         ["'self'", 'data:', 'https:'],
-      // Lemon Squeezy overlay posts to / loads assets from *.lemonsqueezy.com.
-      connectSrc:     ["'self'", 'https://*.lemonsqueezy.com'],
+      connectSrc:     ["'self'"],
       // player.vimeo.com hosts the lazy-loaded landing-page demo embed.
-      frameSrc:       ["'self'", 'https://*.lemonsqueezy.com', 'https://player.vimeo.com'],
+      frameSrc:       ["'self'", 'https://player.vimeo.com'],
       objectSrc:      ["'none'"],
       baseUri:        ["'self'"],
       formAction:     ["'self'"],
@@ -152,15 +147,6 @@ app.use(helmet({
 // ── Core middleware ────────────────────────────────────────────────────────────
 
 app.use(cors({ origin: false }));
-
-// ── Lemon Squeezy webhook (RAW body — MUST precede express.json) ────────────────
-// The HMAC-SHA256 signature is verified against the exact raw bytes; parsing the
-// JSON first would alter the body and break verification. No CSRF/session auth —
-// authenticity is established solely by the signature.
-app.post('/api/webhooks/lemonsqueezy', express.raw({ type: '*/*', limit: '1mb' }), (req, res) => {
-  const { statusCode, body } = handleLemonSqueezyWebhook(req.body, req.headers['x-signature'], req);
-  res.status(statusCode).json(body);
-});
 
 app.use(express.json({ limit: '1mb' }));
 app.use(requestLogger);
@@ -282,16 +268,12 @@ app.use('/api/roi',   limits.api, requireAuth, csrfProtect, roiRouter);
 // get a JSON 403. See src/outbound/access.js to open this to the public later.
 app.use('/api/admin/outbound', limits.api, requireAuth, csrfProtect, requireOutboundAccess, outboundRouter);
 
-// Phase 10 — billing + GDPR account routes (protected). Per-endpoint rate
-// limits live inside the routers. The public email-link restore is registered
-// BEFORE the protected /api/account mount so the unauthenticated GET resolves
-// first (the in-app POST /delete/cancel still routes to the protected router).
+// Phase 10: GDPR account routes (protected). Per-endpoint rate limits live
+// inside the router. The public email-link restore is registered BEFORE the
+// protected /api/account mount so the unauthenticated GET resolves first (the
+// in-app POST /delete/cancel still routes to the protected router).
 app.get('/api/account/delete/cancel', accountRouter.restoreByToken);
-app.use('/api/billing', limits.api, requireAuth, csrfProtect, billingRouter);
 app.use('/api/account', limits.api, requireAuth, csrfProtect, accountRouter);
-
-// Phase 10 — Team/Business waitlist (PUBLIC, IP rate-limited).
-app.use('/api/waitlist', limits.waitlist, waitlistRouter);
 
 // Phase 9 — Slack. The router does its own auth internally: the slash command
 // + interactions endpoints are authenticated by Slack's request signature (not
