@@ -57,7 +57,7 @@ Questions to answer:
 3. Which segments should we win first? A ranked list with campaign hooks built from the actual tastes.
 
 How to work:
-- First resolve every brand with search_brands, and the city with find_city when one is given. Pick the candidate that matches what the user meant; for a city, pick the city itself, not a state or county with the same name. Pass the chosen refs (b1, l1) to the other tools.
+- First resolve every brand with search_brands, and the city with find_city when one is given. Pick the brand candidate that matches what the user meant. find_city returns the one city to use. Pass the chosen refs (b1, l1) to the other tools.
 - Call independent tools in the same turn so they run in parallel. For each rival, run audience_gap for artist, movie, tv_show and brand, plus place when there is a city, and run demographic_gap and brand_positioning. With a city, also run geo_gap.
 - Follow up only where it sharpens the answer, for example audience_gap scoped to the city for a domain where the rival leads strongly. The whole run has about three minutes, so batch your calls.
 - Then call submit_brief exactly once, as a tool call.

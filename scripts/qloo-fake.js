@@ -64,8 +64,15 @@ function fakeImage(query) {
 }
 
 async function search(query, { types } = {}) {
+  // Like the real search for "New York": a state with the same name ranks
+  // above the city, so find_city has to pick the city from properties.place.
   if (types === 'urn:entity:locality') {
-    return { results: [{ entity_id: 'locality-' + slug(query), name: title(query), disambiguation: title(query) + ', city' }] };
+    return {
+      results: [
+        { entity_id: 'locality-state-' + slug(query), name: title(query), disambiguation: title(query) + ', Fakeland', properties: { place: 'state', admin_level: 4 } },
+        { entity_id: 'locality-' + slug(query), name: title(query), disambiguation: title(query) + ', ' + title(query) + ', Fakeland', properties: { place: 'city', admin_level: 5, population: 1000000 } },
+      ],
+    };
   }
   return {
     results: [{

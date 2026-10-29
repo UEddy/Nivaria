@@ -30,6 +30,10 @@ const qloo = require('./client');
 // (several reality fashion shows, not one) at two Qloo calls per domain.
 const GAP_TAKE = 15;
 
+// Extra places requested for a city, to refill the list after venues outside
+// the city's outline are dropped (1 in 17 for New York).
+const PLACE_SPARES = 8;
+
 // Heatmap cells handed to the model, and how many of them get a neighbourhood
 // label (one Qloo call each). Cells below GEO_MIN_POPULARITY are thin on
 // signal, so they are skipped when enough busier cells exist.
@@ -181,20 +185,75 @@ async function searchBrands(ctx, { query }) {
 
 // ── find_city ─────────────────────────────────────────────────────────────────
 
+// Qloo's locality search can rank a region above the city that shares its
+// name: "New York" returns the state first and the city second, "Los Angeles"
+// the county, "Washington" the state. A heatmap or place query scoped to the
+// state lands upstate (Horseheads, Oswego County). So the city is picked here
+// from properties.place on each result, not left to the model: when the top
+// result is a region and a city of the same name is among the results, the
+// city wins. Otherwise Qloo's top result stands, which is right for Brooklyn
+// (the borough), Tokyo (the prefecture) and London, Chicago or Lagos (the city).
+const REGION_PLACES = new Set(['country', 'state', 'province', 'region', 'county']);
+const CITY_PLACES = new Set(['city', 'town', 'village', 'municipality']);
+
+const nameKey = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+
+function pickCity(results) {
+  const top = results[0];
+  if (!top) return { city: null, passedOver: null };
+  const topPlace = top.properties?.place;
+  if (!REGION_PLACES.has(topPlace)) return { city: top, passedOver: null };
+  const city = results.find(e => CITY_PLACES.has(e.properties?.place) && nameKey(e.name) === nameKey(top.name));
+  return city ? { city, passedOver: topPlace } : { city: top, passedOver: null };
+}
+
+// The city's outline from the same /search result (properties.boundaries,
+// WKT POLYGON or MULTIPOLYGON) as rings of [lng, lat]. Null when it has none.
+function parseBoundary(wkt) {
+  if (typeof wkt !== 'string' || !/^\s*(MULTI)?POLYGON/i.test(wkt)) return null;
+  const rings = [...wkt.matchAll(/\(([^()]+)\)/g)]
+    .map(m => m[1].split(',').map(pt => pt.trim().split(/\s+/).map(Number)))
+    .filter(r => r.length >= 3);
+  return rings.length ? rings : null;
+}
+
+// Even-odd test over every ring, so holes and a multipolygon's separate
+// islands (Staten Island, Manhattan) both come out right.
+function insideBoundary(rings, lat, lng) {
+  let inside = false;
+  for (const r of rings) {
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      const [xi, yi] = r[i];
+      const [xj, yj] = r[j];
+      if ((yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+  }
+  return inside;
+}
+
 async function findCity(ctx, { query }) {
   if (!query || typeof query !== 'string') throw toolError('query is required.');
   const d = await qloo.search(query.trim(), { types: 'urn:entity:locality', take: 5 });
-  const results = (d?.results || []).map(e => {
-    ctx.localities.set(e.entity_id, { name: e.name, disambiguation: e.disambiguation || e.name });
-    return {
-      ref: makeRef(ctx, 'locality', e.entity_id, { id: e.entity_id }),
-      name: e.name,
-      disambiguation: e.disambiguation || null,
-    };
-  });
+  const { city, passedOver } = pickCity(d?.results || []);
+  if (!city) return { result: { query, city: null, note: 'Qloo found no city by that name.' }, summary: 'No cities matched' };
+
+  const p = city.properties || {};
+  const disambiguation = city.disambiguation || city.name;
+  ctx.localities.set(city.entity_id, { name: city.name, disambiguation, place: p.place || null, boundary: parseBoundary(p.boundaries) });
+  const result = {
+    query,
+    city: {
+      ref: makeRef(ctx, 'locality', city.entity_id, { id: city.entity_id }),
+      name: city.name,
+      disambiguation,
+      type: p.place || null,
+      population: typeof p.population === 'number' && p.population > 0 ? p.population : null,
+    },
+  };
+  if (passedOver) result.note = 'Using the city, not the ' + passedOver + ' with the same name.';
   return {
-    result: { query, results },
-    summary: results.length ? 'Found ' + results.slice(0, 2).map(r => r.disambiguation || r.name).join('; ') : 'No cities matched',
+    result,
+    summary: 'Using ' + disambiguation + (passedOver ? ' (the city, not the ' + passedOver + ')' : ''),
   };
 }
 
@@ -209,13 +268,18 @@ async function audienceGap(ctx, input) {
   const locality = input.locality_id ? requireLocality(ctx, input.locality_id) : null;
   const loc = locality ? { 'filter.location': locality } : {};
 
-  // Ask for two extra so the brand and rival themselves can be dropped from
-  // the brand domain without coming up short.
+  // filter.location scopes places to the city loosely: for New York it still
+  // returns venues across the Hudson in Hoboken. Places outside the city's
+  // outline from find_city are dropped, so the place domain asks for spares.
+  // Two extra cover the brand and rival themselves in the brand domain.
+  const boundary = domain === 'place' ? ctx.localities.get(locality)?.boundary : null;
   const rivalTop = await qloo.insights(cfg.type, {
-    'signal.interests.entities': rival, take: GAP_TAKE + 2, ...loc,
+    'signal.interests.entities': rival, take: GAP_TAKE + (boundary ? PLACE_SPARES : 2), ...loc,
   });
   const exclude = new Set([brand, rival]);
-  const top = entitiesOf(rivalTop).filter(e => !exclude.has(e.entity_id)).slice(0, GAP_TAKE);
+  const inCity = e => !boundary || e.location?.lat == null || e.location?.lon == null
+    || insideBoundary(boundary, e.location.lat, e.location.lon);
+  const top = entitiesOf(rivalTop).filter(e => !exclude.has(e.entity_id) && inCity(e)).slice(0, GAP_TAKE);
   if (!top.length) {
     return { result: { domain, rows: [], note: 'Qloo returned no ' + cfg.label + ' for this rival.' }, summary: 'No results' };
   }
@@ -467,7 +531,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'find_city',
-    description: 'Resolve a city name to Qloo localities. Returns up to 5 candidates with a ref (like l1), name and disambiguation. Names repeat across places (New York the state and New York the city), so read the disambiguation and pick the city itself.',
+    description: 'Resolve a city name to the Qloo city to use. Returns one city with a ref (like l1), name, disambiguation and type. Where a state or county shares the name (New York, Los Angeles), the city itself is already chosen. Pass its ref as locality_id to audience_gap and geo_gap.',
     input_schema: {
       type: 'object',
       properties: { query: { type: 'string', description: 'The city as the user wrote it.' } },

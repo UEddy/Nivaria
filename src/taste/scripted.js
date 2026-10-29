@@ -82,9 +82,8 @@ function resolvePicks(opening, done) {
   const brand = pick(opening.brand);
   const rivals = opening.rivals.map(pick).filter(r => r.ref !== brand.ref);
   if (!rivals.length) throw scriptError('the rival resolved to the same Qloo brand as ours');
-  const cityHit = done.find(c => c.name === 'find_city');
-  const top = cityHit?.result?.results?.[0];
-  return { brand, rivals, city: top ? { ref: top.ref, name: top.name } : null };
+  const city = done.find(c => c.name === 'find_city')?.result?.city;
+  return { brand, rivals, city: city ? { ref: city.ref, name: city.name } : null };
 }
 
 function comparisons(picks) {

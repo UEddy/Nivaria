@@ -140,6 +140,12 @@ async function main() {
     && run.brief.rival_owned_segments.every(s => s.evidence.every(e => typeof e.gap === 'number')));
   check('chart data has map cells and demographics', Object.values(run.data.geo)[0]?.cells.length > 0
     && Object.values(run.data.demographics)[0]?.age.length === 6);
+  // The fake search ranks a same-named state above the city, as Qloo does for New York.
+  const scoped = run.steps.filter(s => s.input?.locality_id).map(s => s.input.locality_id);
+  check('find_city picks the city over the state of the same name',
+    Object.values(run.data.geo)[0]?.locality.locality_id === 'locality-new-york'
+    && /not the state/.test(run.steps.find(s => s.tool === 'find_city')?.summary || '')
+    && scoped.length >= 2 && new Set(scoped).size === 1, JSON.stringify(Object.values(run.data.geo)[0]?.locality));
   check('stored trace matches the streamed one', run.steps.length === new Set(steps.map(s => s.n)).size);
   check('model is the scripted stand-in', /^scripted:/.test(run.model || ''), run.model);
   check('no em or en dash in the brief', !/[\u2013\u2014]/.test(JSON.stringify(run.brief)));
