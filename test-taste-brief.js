@@ -11,7 +11,7 @@
 
 require('./scripts/qloo-fake');
 const tools = require('./src/qloo/tools');
-const { assembleBrief } = require('./src/taste/agent');
+const { assembleBrief, nameRefs } = require('./src/taste/agent');
 
 let passed = 0;
 let failed = 0;
@@ -177,6 +177,29 @@ function rawBrief({ brand, rival, artist }, extra = {}) {
     && invented.win_first[0].evidence.length === 1, JSON.stringify(invented.provenance));
   check('each Qloo endpoint the run called is counted', run.ctx.calls.search === 3 && run.ctx.calls.insights >= 1
     && run.ctx.calls.cross_scoring === 1 && run.ctx.calls.heatmap === 2, JSON.stringify(run.ctx.calls));
+
+  {
+  console.log('refs in the narration');
+  const ctx = run.ctx;
+  const cellRef = [...ctx.refs.entries()].find(([, v]) => v.kind === 'cell')[0];
+  const cellName = (() => { const c = ctx.refs.get(cellRef); const g = ctx.geo[c.rival_id]; const hit = [...g.hotspots, ...g.our_strongest].find(x => x.geohash === c.geohash); return hit.label || hit.neighborhood || hit.area; })();
+  const cityRef = [...ctx.refs.entries()].find(([, v]) => v.kind === 'locality' && ctx.localities.get(v.id)?.name)[0];
+  const n = t => nameRefs(ctx, t);
+  const cases = [
+    ['Starbucks is b1 and Dunkin is b2.', 'Starbucks and Dunkin.'],
+    ['Starbucks (b1) against Dunkin (b2).', 'Starbucks against Dunkin.'],
+    ['Comparing b1 and b2 in music.', "Comparing Starbucks and Dunkin' in music."],
+    ['Starbucks has ref b1.', 'Starbucks.'],
+    ['The closest rival is b2.', "The closest rival is Dunkin'."],
+    [run.artist[0] + ' leads the music gap.', run.artist[1] + ' leads the music gap.'],
+    ['The widest cells are ' + cellRef + ' and c999.', 'The widest cells are ' + cellName + '.'],
+    ['Using ref ' + cityRef + ' for the city.', 'Using ' + ctx.localities.get(ctx.refs.get(cityRef).id).name + ' for the city.'],
+    ['Top picks (e31, c2, b1) look strong.', 'Top picks look strong.'],
+    ['No refs here, e.g. a b-side or c-suite.', 'No refs here, e.g. a b-side or c-suite.'],
+  ];
+  for (const [input, want] of cases) check('narration: ' + JSON.stringify(input), n(input) === want, JSON.stringify(n(input)));
+  check('no ref token is left in any case', cases.every(([input]) => !/\b[becl]\d{1,3}\b/.test(n(input))));
+  }
 
   console.log('\n' + passed + ' passed, ' + failed + ' failed');
   process.exit(failed ? 1 : 0);

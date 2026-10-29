@@ -216,6 +216,59 @@ function resolveCitation(ctx, ref, rivalId) {
 //   is nothing but such an instruction.
 // - A raw data key, e.g. "35_to_44" or "tv_show": written out in words.
 const REF_IN_PROSE = /\s*\((?:\s*[becl]\d{1,3}\s*,?)+\)|\b[becl]\d{1,3}\b/g;
+
+// ── Refs in the model's narration ─────────────────────────────────────────────
+// The trace shows what the model says between tool calls, and it thinks in
+// refs ("Patagonia is b1", "e31 leads", "c2 (Bushwick)"). Each ref becomes the
+// name it stands for in this run: a brand, a city, a scored entity or a map
+// cell's place. A ref that only labels a name already written ("Patagonia is
+// b1", "Patagonia (b1)", "ref b1") is dropped, as is any ref the run does not
+// know.
+const NOTE_REF = /\b[becl]\d{1,3}\b/;
+const NOTE_REF_LIST = /\s*\((?:\s*(?:refs?\s+)?[becl]\d{1,3}\s*,?)+\)/gi;
+const NOTE_REF_LABEL = /\s+(?:is|=|as)\s+([becl]\d{1,3})\b/gi;
+const NOTE_HAS_REF = /\s+(?:has|with)\s+(?:the\s+)?refs?\s+[becl]\d{1,3}\b/gi;
+
+function refName(ctx, ref) {
+  const hit = ctx.refs.get(ref);
+  if (!hit) return null;
+  if (hit.kind === 'brand') return tools.entityName(ctx, hit.id);
+  if (hit.kind === 'locality') return ctx.localities.get(hit.id)?.name || null;
+  if (hit.kind === 'entity') return ctx.gapIndex.get(hit.rival_id + ':' + hit.id)?.name || ctx.entities.get(hit.id)?.name || null;
+  if (hit.kind === 'cell') {
+    const cell = findCell(ctx, hit.rival_id, hit.geohash);
+    return cell ? (cell.label || cell.neighborhood || cell.area || null) : null;
+  }
+  return null;
+}
+
+function nameRefs(ctx, text) {
+  if (typeof text !== 'string' || !NOTE_REF.test(text)) return text;
+  // Letters and digits only, so "Dunkin" matches the name "Dunkin'".
+  const bare = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return text
+    // "Patagonia (b1)", "(b1, b2)" and "Patagonia has ref b1": labels for
+    // what is already written.
+    .replace(NOTE_REF_LIST, '')
+    .replace(NOTE_HAS_REF, '')
+    // "Patagonia is b1": drop the label when the name just before it is the
+    // ref's own; otherwise ("the closest is b4") keep the sentence, named.
+    .replace(NOTE_REF_LABEL, (m, ref, offset, all) => {
+      const name = refName(ctx, ref);
+      const before = bare(all.slice(Math.max(0, offset - 80), offset));
+      if (!name || before.endsWith(bare(name))) return '';
+      return m.slice(0, m.length - ref.length) + name;
+    })
+    .replace(/\brefs?\s+(?=[becl]\d{1,3}\b)/gi, '')
+    .replace(/\b[becl]\d{1,3}\b/g, ref => refName(ctx, ref) || '')
+    // Tidy what a removal leaves behind.
+    .replace(/\(\s*\)/g, '')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/,?\s+(?:and|or)(?=[.;:!?]|$)/gi, '')
+    .replace(/([,;:])(?=[,.;:])/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
 const RULE_START = /^\s*(no|not|never|avoid\w*|without|excluding|non)\b/i;
 const RULE_TOPIC = /\b(alcohol\w*|hangovers?|drinking|angle|rules?|instructions?|guidelines?|prompt|compliant)\b/i;
 const ASIDE = /\s*[([]([^()[\]]*)[)\]]/g;
@@ -685,7 +738,7 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
 
       // Narration between tool calls goes to the trace as a note.
       if (res.text) {
-        const note = openStep({ kind: 'note', label: sanitizeCopy(res.text) });
+        const note = openStep({ kind: 'note', label: sanitizeCopy(nameRefs(ctx, res.text)) });
         closeStep(note, { status: 'done' });
       }
 
@@ -777,4 +830,4 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
   };
 }
 
-module.exports = { runTasteAgent, cleanInput, userPrompt, assembleBrief, SYSTEM_PROMPT };
+module.exports = { runTasteAgent, cleanInput, userPrompt, assembleBrief, nameRefs, SYSTEM_PROMPT };
