@@ -361,6 +361,11 @@ function scriptedProvider(entry, cfg) {
           text = 'Comparing the audiences for ' + listNames(picks.rivals.map(r => r.name)) + ' in parallel.';
           // The city named in the request does not exist in Qloo: say so in a
           // revised plan, and carry on without places and the map.
+          // SCRIPTED_RESTATE_PLAN=1 restates the plan for a reason about the
+          // instructions, as Flash-Lite did, for the test that it is not a change.
+          if (process.env.SCRIPTED_RESTATE_PLAN && opening.city && picks.city) {
+            calls.unshift(call('plan', { steps: planSteps(opening, opening.city), reason: 'Revised plan to ensure first turn includes plan and first lookups together.' }));
+          }
           if (opening.city && !picks.city) {
             calls.unshift(call('plan', {
               steps: planSteps(opening, ''),

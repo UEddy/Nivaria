@@ -280,6 +280,17 @@ async function main() {
   check('the revised plan drops the map, and every step of it is done', lPlan.items.every(i => !/Atlantis/.test(i.text) && !i.tools.includes('geo_gap') && i.status === 'done')
     && !lRun.steps.some(s => s.tool === 'geo_gap'), JSON.stringify(lPlan.items));
 
+  process.env.SCRIPTED_RESTATE_PLAN = '1';
+  const restated = await request(port, 'POST', '/api/taste/runs', { body: { brand: 'Adidas', rivals: ['Puma'], city: 'New York' } });
+  const rRun = await waitFor(async () => {
+    const r = await request(port, 'GET', '/api/taste/runs/' + restated.json.run.id);
+    return r.json.run.status !== 'running' && r.json.run;
+  });
+  delete process.env.SCRIPTED_RESTATE_PLAN;
+  check('a plan restated for a reason about the instructions is not a changed plan', rRun.status === 'done'
+    && rRun.steps.find(s => s.kind === 'plan')?.revisions === 0 && !rRun.steps.some(s => s.kind === 'replan')
+    && rRun.steps.find(s => s.kind === 'plan').items.every(i => i.status === 'done'), JSON.stringify(rRun.steps.filter(s => s.kind === 'plan' || s.kind === 'replan')));
+
   console.log('featured briefs');
   const runsMod = require('./src/tasteRuns');
   const featuredMod = require('./src/tasteFeatured');

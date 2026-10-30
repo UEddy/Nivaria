@@ -167,7 +167,7 @@ const PLAN_STEPS = { min: 3, max: 4 };
 
 const PLAN_TOOL = {
   name: 'plan',
-  description: 'State your plan for this brief: ' + PLAN_STEPS.min + ' to ' + PLAN_STEPS.max + ' steps in the order you will run them, each with the tools it calls. Call it in your first turn alongside your first lookups, never alone. Call it again only if the plan changes, with the revised steps and why.',
+  description: 'State your plan for this brief: ' + PLAN_STEPS.min + ' to ' + PLAN_STEPS.max + ' steps in the order you will run them, each with the tools it calls. Call it in your first turn, together with your first lookups. Call it again only when the data forces a change (a brand, rival or city cannot be found), with the revised steps and why.',
   input_schema: {
     type: 'object',
     properties: {
@@ -194,6 +194,12 @@ const ALL_TOOLS = [PLAN_TOOL, ...tools.TOOL_DEFS, SUBMIT_TOOL];
 const DISCOVERY_TOOLS = [PLAN_TOOL, ...tools.DISCOVERY_DEFS, ...tools.TOOL_DEFS, SUBMIT_TOOL];
 
 const PLAN_NUDGE = 'You have not stated your plan yet. In this turn, call plan (3 to 4 steps, each with the tools it calls) together with your next tool calls.';
+
+// A "revision" whose reason is about the instructions or how the tools are
+// called, not about what the data allowed. Flash-Lite, made to plan alone in
+// its first turn, restated its plan twice "to ensure first turn includes plan
+// and first lookups together" (2026-10-30).
+const RESTATED = /\b(instructions?|first turn|guidelines?|rules?|formatt?(?:ed|ing)?|properly|per the|as required|combine (?:the )?(?:search|steps)|together)\b/i;
 
 function userPrompt(brand, rivals, city) {
   return [
@@ -751,12 +757,24 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
       if (!reason) return { error: 'A revised plan needs a reason: say in one sentence why the plan changed.' };
       const done = new Set(plan.step.items.filter(x => x.status === 'done').map(x => x.text.toLowerCase()));
       for (const it of items) if (done.has(it.text.toLowerCase())) it.status = 'done';
+      if (RESTATED.test(reason)) {
+        // A restatement about how to call the tools, not a change in what the
+        // data allows ("to ensure first turn includes plan and first lookups
+        // together"): keep the new wording, but it is not a changed plan.
+        plan.step.items = items;
+        emit(plan.step);
+        tickPlan();
+        return { content: 'Plan noted. It has not changed, so carry on with it.' };
+      }
       Object.assign(plan.step, { items, revisions: plan.step.revisions + 1, reason });
       closeStep(openStep({ kind: 'replan', label: 'Plan changed: ' + reason }), { status: 'done' });
       emit(plan.step);
     }
     tickPlan();
-    return { content: plan.step.revisions ? 'Revised plan noted. Carry it out.' : 'Plan noted. Carry it out, and call plan again only if it changes.' };
+    return {
+      content: plan.step.revisions ? 'Revised plan noted. Carry it out.'
+        : 'Plan noted. Now run its first step, and call plan again only if a brand, rival or city cannot be found.',
+    };
   };
 
   // One model turn on the current chain entry. A transient failure (429, 5xx,
