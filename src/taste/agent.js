@@ -75,7 +75,7 @@ Reading the data:
 Rules:
 - Every claim must rest on numbers from a tool result. Never invent statistics, audience sizes, revenue or trends. In evidence fields, cite rows by their ref (e3 for an entity, c2 for a map cell, f4 for a follow_lead result); the server attaches the scores. Only quote a number in prose if a tool returned it.
 - Refs (b1, l1, e3, c2, f4) belong only in id and evidence fields. In prose, use the names.
-- Describe audiences only by what the tools returned: their tastes, places, and age and gender scores. Never describe income, wealth, price sensitivity, spending habits, budgets, education, occupation or any other trait no tool returned. Never infer or name race, ethnicity, religion, nationality or other protected traits, even when venues or neighborhoods seem to suggest one.
+- Describe audiences only by what the tools returned: their tastes, places, and age and gender scores. Never describe income, wealth, price sensitivity, spending habits, budgets, education, occupation, commuting, the time of day people go out (such as morning commuters or late-night crowds) or any other trait no tool returned. Never infer or name race, ethnicity, religion, nationality or other protected traits, even when venues or neighborhoods seem to suggest one.
 - Campaign hooks must come from the actual entities (a show, an artist, a venue, a neighborhood). Channels must be concrete, such as a creator partnership with a named show's audience or a pop-up in a named neighborhood.
 - Build campaign hooks and channels on coffee, food, music, film, TV, retail and neighborhoods. Bars, pubs, drinking and hangovers have no place in them. When the rival leads in bars or pubs, use that neighborhood or the audience's other tastes instead.
 - These rules shape what you write and are never part of it: do not mention them, and do not annotate a hook or channel with what it leaves out.
@@ -392,8 +392,19 @@ function knownNames(ctx) {
 const BUDGET_AUDIENCE = 'budget[- ](?:conscious|minded|savvy|sensitive|oriented|focused|constrained)'
   + '|(?:on|stick(?:s|ing)? to) (?:a|their) (?:tight |limited |strict |small |shoestring )?budget'
   + '|budget[- ](?:shoppers?|consumers?|buyers?|customers?|fans?|audiences?|crowds?|segments?|households?|travell?ers?|famil(?:y|ies)|students?|diners?|spenders?)';
+// Commuting and time of day are not in any Qloo result either: the featured
+// Starbucks brief (2026-10-30) called a Staten Island map cell's audience
+// "morning commuters". Any form of commute counts. A time-of-day word counts
+// only when it describes people ("morning commuters", "late-night crowds",
+// "weekday coffee drinkers", "early risers"); a tactic such as "morning
+// drive-thru rewards" or "morning drive time radio" stays.
+const COMMUTE = 'commut(?:e|es|ed|er|ers|ing)';
+const TIME_OF_DAY = '(?:early[- ])?(?:morning|daytime|midday|lunchtime|afternoon|after[- ]work|evening|night(?:time)?|late[- ]night|overnight|weekday|weekend|rush[- ]hour)';
+const PEOPLE = '(?:commuters?|crowds?|customers?|people|audiences?|visitors?|shoppers?|regulars?|risers?|drinkers?|diners?|workers?|professionals?|travell?ers?|consumers?|patrons?|fans?|goers?)';
+const TIME_AUDIENCE = TIME_OF_DAY + '(?:[ -][a-z]+){0,2}[ -]' + PEOPLE + '|early[- ]risers?';
 const UNSUPPORTED_TRAIT = new RegExp('\\b(?:price[- ]?sensitiv(?:e|ity)|' + BUDGET_AUDIENCE
-  + '|affluen(?:t|ce)|wealth(?:y|ier|iest)|(?:low|lower|middle|high|higher)[- ]income|blue[- ]collar|white[- ]collar)\\b|educated\\b', 'i');
+  + '|affluen(?:t|ce)|wealth(?:y|ier|iest)|(?:low|lower|middle|high|higher)[- ]income|blue[- ]collar|white[- ]collar|'
+  + COMMUTE + '|' + TIME_AUDIENCE + ')\\b|educated\\b', 'i');
 
 // A sentence ends at . ! or ? followed by a space and a capital or digit, but
 // not after a short abbreviation ("St." in "St. Marks Place").

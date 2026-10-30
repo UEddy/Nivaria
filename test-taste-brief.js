@@ -139,6 +139,26 @@ function rawBrief({ brand, rival, artist }, extra = {}) {
   }), run.ctx, []);
   check('marketing sentences about budget stay', marketing.summary === 'Shift media budget toward Bushwick. Set aside budget for a creator partnership. A budget-friendly pop-up works. Budgets for TV can shrink.', marketing.summary);
 
+  // Commuting and time of day: what the featured Starbucks brief said on
+  // 2026-10-30, and the tactics that must survive.
+  const commuteWarnings = [];
+  const commute = assembleBrief(rawBrief(run, {
+    headline: 'Win Dunkin country pop listeners and Staten Island morning commuters',
+    summary: 'Fans aged 35_to_44 lean Dunkin. They are commuters. Late-night crowds pick Dunkin. Weekday coffee drinkers lean in. Early risers stop by. People commute through Bushwick. The TV gap is small.',
+    win_first: [
+      { rank: 1, segment: 'Staten Island Suburban Commuters', why: 'A wide map gap.', campaign_hook: 'Pop-ups.', channels: [], evidence: [run.artist[0]] },
+      { rank: 2, segment: 'Indie pop listeners', why: 'Morning drive-thru rewards work here.', campaign_hook: 'Indie pop playlists at the counter.',
+        channels: ['Out of home billboards along Staten Island commute corridors', 'Morning drive time radio placements'], evidence: [run.artist[0]] },
+    ],
+  }), run.ctx, commuteWarnings);
+  check('commuting and time-of-day audience descriptors drop their sentences', commute.summary === 'Fans aged 35 to 44 lean Dunkin. The TV gap is small.', commute.summary);
+  check('a headline naming morning commuters is rebuilt', !/commut|morning/i.test(commute.headline) && commute.headline.length > 0, commute.headline);
+  check('a pick named after commuters is removed, the next one kept', commute.win_first.length === 1 && commute.win_first[0].segment === 'Indie pop listeners', JSON.stringify(commute.win_first.map(w => w.segment)));
+  check('time-of-day tactics stay, a commute-corridor channel goes', commute.win_first[0].why === 'Morning drive-thru rewards work here.'
+    && commute.win_first[0].channels.join('|') === 'Morning drive time radio placements', JSON.stringify(commute.win_first[0]));
+  check('each removal is a warning naming the descriptor', commuteWarnings.some(x => /"morning commuters"/i.test(x)) && commuteWarnings.some(x => /"late-night crowds"/i.test(x))
+    && commuteWarnings.some(x => /"early risers"/i.test(x)), JSON.stringify(commuteWarnings));
+
   const abbrev = assembleBrief(rawBrief(run, {
     summary: 'Pop-ups near St. Marks Place suit them. They are wealthy.',
   }), run.ctx, []);
