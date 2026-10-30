@@ -93,6 +93,7 @@ function purgeUser(db, userId, email) {
     db.prepare('DELETE FROM user_context WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM user_voice_profile WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM settings WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM taste_shares WHERE created_by = ?').run(userId);
     db.prepare('DELETE FROM taste_runs WHERE created_by = ?').run(userId);
     db.prepare('DELETE FROM otp_codes WHERE email = ?').run(email);
     db.prepare('DELETE FROM login_attempts WHERE email = ?').run(email);
@@ -145,6 +146,9 @@ router.get('/export', (req, res) => {
     user_context: db.prepare('SELECT * FROM user_context WHERE user_id = ?').get(userId) || null,
     user_voice_profile: db.prepare('SELECT * FROM user_voice_profile WHERE user_id = ?').get(userId) || null,
     settings: db.prepare('SELECT * FROM settings WHERE user_id = ?').get(userId) || null,
+    // Taste briefs this user started, and the share links they made.
+    taste_runs: db.prepare('SELECT id, created_at, finished_at, status, brand, rivals, city, rerun_of, headline, brief, model, turns, duration_ms, error_message FROM taste_runs WHERE created_by = ? ORDER BY id').all(userId),
+    taste_shares: db.prepare('SELECT id, token, run_id, created_at, revoked_at FROM taste_shares WHERE created_by = ? ORDER BY id').all(userId),
     audit_log: db.prepare('SELECT id, workspace_id, event_type, event_data, occurred_at FROM audit_log WHERE user_id = ? ORDER BY occurred_at').all(userId),
   };
 

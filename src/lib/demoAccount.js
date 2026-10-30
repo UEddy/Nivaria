@@ -19,7 +19,7 @@ const MIN_PASSWORD = 12;
 const DISPLAY_NAME = 'Judge';
 // Matches routes/auth.js consentPolicyVersions(): the operator sets the
 // account up, and signing in shows the same policies as any signup.
-const CONSENT_VERSIONS = JSON.stringify({ policies: ['terms', 'privacy', 'cookies'], version: '2026-07-01' });
+const CONSENT_VERSIONS = JSON.stringify({ policies: ['terms', 'privacy', 'cookies'], version: '2026-10-30' });
 
 function demoEmail() {
   return String(process.env.DEMO_LOGIN_EMAIL || '').toLowerCase().trim();

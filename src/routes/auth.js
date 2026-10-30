@@ -61,7 +61,7 @@ const COMMON_PASSWORDS = new Set([
 // to. The three routes /terms, /privacy, /cookies (src/routes/legal.js) are the
 // live policy pages the checkbox links to.
 const CONSENT_POLICIES = ['terms', 'privacy', 'cookies'];
-const CONSENT_VERSION  = '2026-07-01';
+const CONSENT_VERSION  = '2026-10-30';
 
 // The identifier string stored alongside each consent timestamp. JSON keeps it
 // queryable/parseable if an auditor ever needs to see exactly what was accepted.

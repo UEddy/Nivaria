@@ -261,7 +261,7 @@ The B2B competitor monitoring product that Nivaria started as still ships in thi
 
 ## Security and data rights
 
-See [SECURITY.md](SECURITY.md). Account data can be exported (`GET /api/account/export`) and deleted (`POST /api/account/delete`, with a 30-day grace period and a password check).
+See [SECURITY.md](SECURITY.md). Account data, briefs and share links included, can be exported (`GET /api/account/export`) and deleted (`POST /api/account/delete`, immediately, after the password and the typed account email are checked). The [Terms of Service](https://nivaria.app/terms), [Privacy Policy](https://nivaria.app/privacy) and [Cookie Policy](https://nivaria.app/cookies) describe the app as it runs today (sources in `docs/legal/`).
 
 ## License
 

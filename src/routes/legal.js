@@ -1,6 +1,7 @@
 // ── Legal pages (Phase 11C) ──────────────────────────────────────────────────
-// Public, no-auth routes that render the Termly/generated legal documents inside
-// a Nivaria-branded shell. The source HTML lives in docs/legal/*.html; each file
+// Public, no-auth routes that render the Terms of Service, Privacy Policy and
+// Cookie Policy (written for Nivaria as it runs today) inside a Nivaria-branded
+// shell. The source HTML lives in docs/legal/*.html; each file
 // marks the body to embed with an <article class="legal-document"> region between
 // EMBEDDABLE REGION START/END comments. We extract that region verbatim (never
 // modify the legal text) and wrap it in the app's design tokens + a shared footer.
@@ -36,9 +37,9 @@ for (const [key, { file }] of Object.entries(DOCS)) {
   try {
     const raw = fs.readFileSync(path.join(LEGAL_DIR, file), 'utf8');
     // Enforce the no-dash convention (CLAUDE.md) on the rendered legal copy.
-    // The source docs are third-party generated boilerplate we extract verbatim;
-    // stripDashes converts any em/en dashes in the prose to commas at render
-    // time, so users never see them and future doc updates stay compliant too.
+    // The source docs are extracted verbatim; stripDashes converts any em/en
+    // dashes in the prose to commas at render time, so users never see them
+    // and future doc updates stay compliant too.
     cache[key] = stripDashes(extractArticle(raw));
   } catch (err) {
     console.warn(`⚠️  legal: could not load ${file} — /${key} will 404 (${err.message})`);
@@ -91,7 +92,7 @@ function renderPage(title, articleHtml) {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+  <link rel="icon" href="/assets/monogram-solid.svg">
   <style>
     :root {
       --lg-bg:      #000000;
@@ -143,12 +144,7 @@ function renderPage(title, articleHtml) {
       display: flex; align-items: center; gap: 10px;
       text-decoration: none; color: var(--lg-txt);
     }
-    .legal-logo-icon {
-      width: 32px; height: 32px; border-radius: 9px;
-      background: var(--lg-accent);
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-    }
+    .legal-logo-icon { width: 32px; height: 32px; flex-shrink: 0; }
     .legal-logo-name { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
     .legal-nav-back {
       font-size: 13.5px; font-weight: 600;
@@ -228,11 +224,7 @@ function renderPage(title, articleHtml) {
   <nav class="legal-nav">
     <div class="legal-nav-inner">
       <a href="/" class="legal-logo" aria-label="Nivaria home">
-        <span class="legal-logo-icon" aria-hidden="true">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-          </svg>
-        </span>
+        <img class="legal-logo-icon" src="/assets/monogram-solid.svg" alt="" width="32" height="32">
         <span class="legal-logo-name">Nivaria</span>
       </a>
       <a href="/app" class="legal-nav-back">Back to app &rarr;</a>
