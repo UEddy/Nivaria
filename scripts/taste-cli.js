@@ -2,6 +2,8 @@
 //
 //   node scripts/taste-cli.js --brand Glossier --rival "Fenty Beauty" [--rival "Rare Beauty"] [--city "New York"]
 //
+// Leave out --rival and the agent finds the rivals itself (discover_rivals).
+//
 // The model chain comes from LLM_CHAIN (see src/taste/llm.js); set it to one
 // entry, e.g. LLM_CHAIN=zai, to run a single model. Streams each agent step as it
 // happens, then prints the brief. The full run (brief, chart data, steps,
@@ -29,11 +31,25 @@ function parseArgs(argv) {
 const secs = ms => (ms / 1000).toFixed(1) + 's';
 const pct = x => (x == null ? 'n/a' : Math.round(x * 100));
 
+// The plan step is re-sent as its steps tick off: print it once, then each
+// change of a step's status.
+const planSeen = [];
+
 function printStep(step) {
-  if (step.kind === 'switch') {
+  if (step.kind === 'plan') {
+    step.items.forEach((it, i) => {
+      if (planSeen[i] && planSeen[i].text === it.text && planSeen[i].status === it.status) return;
+      const fresh = !planSeen[i] || planSeen[i].text !== it.text;
+      console.log(fresh ? '[' + secs(step.at_ms) + '] PLAN ' + (i + 1) + ': ' + it.text + (it.status === 'pending' ? '' : ' (' + it.status + ')') : '          plan step ' + (i + 1) + ' ' + it.status);
+      planSeen[i] = { text: it.text, status: it.status };
+    });
+    planSeen.length = step.items.length;
+  } else if (step.kind === 'replan') {
+    if (step.status === 'done') console.log('[' + secs(step.at_ms) + '] !! ' + step.label);
+  } else if (step.kind === 'switch') {
     if (step.status === 'done') console.log('[' + secs(step.at_ms) + '] !! ' + step.label + ' (' + step.summary + ')');
   } else if (step.kind === 'note') {
-    console.log('[' + secs(step.at_ms) + ']   (agent) ' + step.label);
+    if (step.status === 'done') console.log('[' + secs(step.at_ms) + ']   (agent) ' + step.label);
   } else if (step.status === 'running') {
     console.log('[' + secs(step.at_ms) + '] > ' + step.label);
   } else {
@@ -49,6 +65,13 @@ function printBrief(run) {
   console.log(b.headline);
   console.log('='.repeat(78));
   console.log(b.summary);
+  if (b.rival_choice) {
+    console.log('\nRIVALS CHOSEN BY THE AGENT' + (b.rival_choice.category ? ' (category pass: ' + b.rival_choice.category + ')' : ''));
+    for (const c of b.rival_choice.candidates) {
+      console.log('  ' + (c.picked ? '* ' : '  ') + c.name + ': affinity ' + c.affinity + ', ' + c.found_by + ', shared ' + (c.shared_tags.join(', ') || 'none') + (c.flags.length ? ', skipped: ' + c.flags.join(', ') : ''));
+    }
+    console.log('  Why: ' + b.rival_choice.reason);
+  }
 
   console.log('\nRIVAL-OWNED SEGMENTS');
   for (const s of b.rival_owned_segments) {
@@ -66,7 +89,13 @@ function printBrief(run) {
     console.log('     Why: ' + w.why);
     console.log('     Hook: ' + w.campaign_hook);
     console.log('     Channels: ' + (w.channels || []).join('; '));
-    console.log('     Evidence: ' + w.evidence.map(e => e.kind === 'entity' ? e.name + ' (gap ' + pct(e.gap) + ')' : (e.label || e.neighborhood || e.area || e.geohash) + ' (gap ' + pct(e.gap) + ')').join(', '));
+    console.log('     Evidence: ' + w.evidence.map(e => e.kind === 'entity' ? e.name + ' (gap ' + pct(e.gap) + ')'
+      : e.kind === 'lead' ? e.name + ' (' + e.lead + ' fans, affinity ' + pct(e.affinity) + ')'
+        : (e.label || e.neighborhood || e.area || e.geohash) + ' (gap ' + pct(e.gap) + ')').join(', '));
+    if (w.lead) {
+      console.log('     Lead followed: ' + w.lead.name + ' (rival ' + pct(w.lead.rival_affinity) + ', us ' + pct(w.lead.our_affinity) + '); its fans also over-index on '
+        + w.lead.found.map(f => f.name + ' ' + pct(f.affinity)).join(', '));
+    }
   }
 
   if (b.geo_hotspots.length) {
@@ -81,8 +110,8 @@ function printBrief(run) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (!args.brand || !args.rivals.length) {
-    console.error('Usage: node scripts/taste-cli.js --brand <name> --rival <name> [--rival <name>] [--city <name>]');
+  if (!args.brand) {
+    console.error('Usage: node scripts/taste-cli.js --brand <name> [--rival <name>] [--rival <name>] [--city <name>]');
     process.exit(1);
   }
   let chain;
@@ -92,7 +121,7 @@ async function main() {
     console.error(err.message);
     process.exit(1);
   }
-  console.log('Nivaria brief: ' + args.brand + ' vs ' + args.rivals.join(', ') + (args.city ? ' in ' + args.city : '')
+  console.log('Nivaria brief: ' + args.brand + ' vs ' + (args.rivals.join(', ') || 'rivals the agent finds') + (args.city ? ' in ' + args.city : '')
     + '\nModel chain: ' + chain.map(e => e.key).join(' > ') + '\n');
 
   let run;

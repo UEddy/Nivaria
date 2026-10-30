@@ -85,6 +85,8 @@ function createContext() {
     geo: {},                 // rival_id -> { locality, cells, hotspots, our_strongest, stats }
     demographics: {},        // rival_id -> { age, gender }
     positioning: {},         // rival_id -> { shared, brand_only, rival_only }
+    lead: null,              // follow_lead: { seed, locality, found: domain -> [items], index: entity_id -> item }
+    pairBrands: new Set(),   // every brand compared so far, ours and the rivals
     refs: new Map(),         // ref -> { kind, id, rival_id?, geohash? }
     refKeys: new Map(),      // kind + ':' + key -> ref, so one thing keeps one ref
     refCounts: {},
@@ -113,7 +115,7 @@ function endpointsUsed(ctx) {
   return ENDPOINTS.filter(e => ctx.calls[e.key]).map(e => ({ ...e, calls: ctx.calls[e.key] }));
 }
 
-const REF_PREFIX = { brand: 'b', locality: 'l', entity: 'e', cell: 'c' };
+const REF_PREFIX = { brand: 'b', locality: 'l', entity: 'e', cell: 'c', lead: 'f' };
 
 function makeRef(ctx, kind, key, value) {
   const k = kind + ':' + key;
@@ -164,6 +166,7 @@ function requirePair(ctx, input) {
   const b = requireBrand(ctx, input.brand_id, 'brand_id');
   const r = requireBrand(ctx, input.rival_id, 'rival_id');
   if (b === r) throw toolError('brand_id and rival_id must be different brands.');
+  ctx.pairBrands.add(b).add(r);
   return [b, r];
 }
 
@@ -183,16 +186,6 @@ function descriptors(e) {
   return out;
 }
 
-// Every tag name on an entity, once each.
-function tagNames(e) {
-  const out = [];
-  for (const t of e.tags || []) {
-    const name = String(t.name || '').trim();
-    if (name && !out.some(x => x.toLowerCase() === name.toLowerCase())) out.push(name);
-  }
-  return out;
-}
-
 // ── search_brands ─────────────────────────────────────────────────────────────
 
 async function searchBrands(ctx, { query }) {
@@ -202,7 +195,7 @@ async function searchBrands(ctx, { query }) {
   const results = (d?.results || []).map(e => {
     const p = e.properties || {};
     ctx.entities.set(e.entity_id, {
-      name: e.name, image: p.image?.url || null, type: 'brand', tags: tagNames(e), parent: p.parent_organization || null,
+      name: e.name, image: p.image?.url || null, type: 'brand', tags: e.tags || [], parent: p.parent_organization || null,
     });
     const desc = p.short_description || '';
     return {
@@ -267,6 +260,12 @@ function insideBoundary(rings, lat, lng) {
   return inside;
 }
 
+// A place with no coordinates is kept: only a known location outside the
+// outline drops it.
+function inBoundary(rings, e) {
+  return !rings || e.location?.lat == null || e.location?.lon == null || insideBoundary(rings, e.location.lat, e.location.lon);
+}
+
 async function findCity(ctx, { query }) {
   if (!query || typeof query !== 'string') throw toolError('query is required.');
   counted(ctx, 'search');
@@ -315,9 +314,7 @@ async function audienceGap(ctx, input) {
     'signal.interests.entities': rival, take: GAP_TAKE + (boundary ? PLACE_SPARES : 2), ...loc,
   });
   const exclude = new Set([brand, rival]);
-  const inCity = e => !boundary || e.location?.lat == null || e.location?.lon == null
-    || insideBoundary(boundary, e.location.lat, e.location.lon);
-  const top = entitiesOf(rivalTop).filter(e => !exclude.has(e.entity_id) && inCity(e)).slice(0, GAP_TAKE);
+  const top = entitiesOf(rivalTop).filter(e => !exclude.has(e.entity_id) && inBoundary(boundary, e)).slice(0, GAP_TAKE);
   if (!top.length) {
     return { result: { domain, rows: [], note: 'Qloo returned no ' + cfg.label + ' for this rival.' }, summary: 'No results' };
   }
@@ -577,6 +574,106 @@ async function brandPositioning(ctx, input) {
   };
 }
 
+// ── follow_lead ───────────────────────────────────────────────────────────────
+// One entity from an audience gap (a country act the rival's fans love, say)
+// becomes the signal itself: what that entity's own fans also over-index on
+// in music, places, brands and TV, one Insights call per domain, in parallel.
+// Places are scoped to the run's city and its outline, and skipped without
+// one. It runs once per brief, so the top win-first hook rests on a chain of
+// tastes rather than one title. Rows get f refs, which the brief cites like
+// any other evidence; the server attaches these numbers.
+
+const LEAD_DOMAINS = ['artist', 'place', 'brand', 'tv_show'];
+const LEAD_TAKE = 5;
+const LEAD_WORDS = { artist: 'music', place: 'places', brand: 'brands', tv_show: 'TV' };
+
+// The audience_gap item an e ref names, with the rival it was scored for.
+function gapItem(ctx, ref) {
+  const hit = ctx.refs.get(ref);
+  if (!hit || hit.kind !== 'entity') return null;
+  const item = ctx.gapIndex.get(hit.rival_id + ':' + hit.id);
+  return item ? { ...item, rival_id: hit.rival_id } : null;
+}
+
+// The city for places: the one given, else the run's only city.
+function leadLocality(ctx, input) {
+  if (input.locality_id) return requireLocality(ctx, input.locality_id);
+  return ctx.localities.size === 1 ? [...ctx.localities.keys()][0] : null;
+}
+
+const leadDomains = locality => LEAD_DOMAINS.filter(d => d !== 'place' || locality);
+
+const listWords = words => (words.length < 3 ? words.join(' and ') : words.slice(0, -1).join(', ') + ' and ' + words[words.length - 1]);
+
+async function followLead(ctx, input) {
+  if (ctx.lead) throw toolError('follow_lead runs once per brief and already ran on ' + ctx.lead.seed.name + '. Use what it returned.');
+  const seed = gapItem(ctx, input.entity_ref);
+  if (!seed) throw toolError('entity_ref must be an entity ref (like e3) from an audience_gap row.');
+  const locality = leadLocality(ctx, input);
+  const boundary = locality ? ctx.localities.get(locality)?.boundary : null;
+  const domains = leadDomains(locality);
+  const skip = new Set([seed.entity_id, ...ctx.pairBrands]);
+
+  counted(ctx, 'insights', domains.length);
+  const lists = await Promise.all(domains.map(domain => qloo.insights(DOMAINS[domain].type, {
+    'signal.interests.entities': seed.entity_id,
+    take: LEAD_TAKE + 2 + (domain === 'place' && boundary ? PLACE_SPARES : 0),
+    ...(domain === 'place' ? { 'filter.location': locality } : {}),
+  }).then(entitiesOf, () => null)));
+
+  const found = {};
+  const index = new Map();
+  domains.forEach((domain, i) => {
+    if (!lists[i]) return;
+    found[domain] = lists[i]
+      .filter(e => !skip.has(e.entity_id) && (domain !== 'place' || inBoundary(boundary, e)))
+      .slice(0, LEAD_TAKE)
+      .map(e => {
+        const item = {
+          ref: makeRef(ctx, 'lead', e.entity_id, { id: e.entity_id }),
+          entity_id: e.entity_id,
+          name: e.name,
+          domain,
+          affinity: r3(e.query?.affinity),
+          popularity: r3(e.popularity),
+          descriptors: descriptors(e),
+          image: e.properties?.image?.url || null,
+        };
+        if (domain === 'place') item.neighborhood = e.properties?.geocode?.name || null;
+        index.set(e.entity_id, item);
+        return item;
+      });
+  });
+  if (!index.size) throw toolError('Qloo returned nothing for fans of ' + seed.name + '.');
+
+  ctx.lead = {
+    seed: {
+      ref: input.entity_ref, entity_id: seed.entity_id, name: seed.name, domain: seed.domain, rival_id: seed.rival_id,
+      rival_affinity: seed.rival_affinity, our_affinity: seed.our_affinity, gap: seed.gap,
+    },
+    locality: locality ? { locality_id: locality, name: localityName(ctx, locality) } : null,
+    found,
+    index,
+  };
+
+  const rows = {};
+  for (const [domain, items] of Object.entries(found)) {
+    rows[LEAD_WORDS[domain]] = items.map(it => [it.ref, it.name, pts(it.affinity), domain === 'place' ? it.neighborhood : it.descriptors.join(', ')]);
+  }
+  const tops = Object.values(found).map(items => items[0]?.name).filter(Boolean);
+  return {
+    result: {
+      lead: seed.name,
+      lead_gap: pts(seed.gap),
+      city: locality ? localityName(ctx, locality) : null,
+      note: 'Affinity 0 to 100: how strongly fans of ' + seed.name + ' over-index on each. Build the rank 1 win_first hook on these, and cite their refs (like f2) in its evidence.',
+      columns: ['ref', 'name', 'affinity', 'tags'],
+      ...rows,
+    },
+    summary: 'Fans of ' + seed.name + ' also over-index on ' + listWords(tops),
+  };
+}
+
 // ── Definitions ───────────────────────────────────────────────────────────────
 
 const BRAND_PAIR = {
@@ -585,84 +682,221 @@ const BRAND_PAIR = {
 };
 
 // ── discover_rivals ───────────────────────────────────────────────────────────
-// Rival discovery, for a run where the user named no rival. The same Insights
-// call audience_gap makes for the brand domain (filter.type urn:entity:brand,
-// a brand as signal.interests.entities), with our brand as the signal: the
-// brands its audience over-indexes on, strongest first. Each candidate gets a
-// brand ref the model can pass on as a rival, the Qloo tags it shares with our
-// brand (same category), and flags for what is not a competitor: another brand
-// of the same family, the parent company, a brand with the same owner, or a
-// retailer that sells it. The model chooses; choose_rivals checks the choice.
+// Rival discovery, for a run where the user named no rival. Two Insights calls
+// with our brand as signal.interests.entities and filter.type
+// urn:entity:brand: the brands our audience over-indexes on most (audience
+// overlap), and the same list filtered by our brand's most specific category
+// tag, which brings in same-category rivals the overlap list misses (Peet's
+// Coffee for Starbucks). Affinity means the same in both, so the lists merge.
+//
+// Candidates are ranked by the category tags they share with our brand, then
+// by affinity. Only tags that say what a brand is count (Qloo genre, industry
+// and product category tags, and Wikipedia categories), and of those only
+// specific ones: "Coffee & Tea", "Skincare" or "Coffee houses of the United
+// States" count, while "Retail", "Food & Beverage", top-level genres, app
+// store genres and company facts ("Companies listed on the Nasdaq") do not.
+//
+// Flags mark what is not a competitor: another brand of the same family, the
+// parent company, a brand with the same owner or one we own, or a retailer.
+// "Retailer" means a store chain or marketplace that sells other brands, read
+// from store-format tags (Supermarket Chain, Grocery, Pharmacy, Department
+// stores, Marketplace) or the name (Sephora, Ulta, Target, Walmart, Amazon,
+// and a few more).
+// It never comes from a generic tag such as Retail, or from Qloo's
+// distribution_channel tags, which say where a product is sold (Oreo's
+// "Supermarkets"), not what the brand is. The model chooses; choose_rivals
+// checks the choice.
 
 const DISCOVER_TAKE = 20;
+const CATEGORY_TAKE = 12;
 const DISCOVER_SHOWN = 12;
-const RETAIL_TAG = /\b(?:retail(?:er|ers)?|supermarkets?|grocer(?:y|ies)|department stores?|marketplaces?|e-?commerce|shopping|malls?|convenience stores?|pharmac(?:y|ies)|drugstores?|wholesale)\b/i;
+
 const normName = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+// "Body Care" and "Bodycare" are one tag.
+const tagKey = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+const GENRE = 'urn:tag:genre:brand';
+const CATEGORY_TYPES = new Set([GENRE, 'urn:tag:industry:qloo', 'urn:tag:product_category:qloo', 'urn:tag:wikipedia_category']);
+const GENERIC_TAGS = new Set([
+  'retail', 'other', 'b2c', 'b2b', 'everyday', 'global travel', 'lifestyle', 'dining', 'mobile app', 'website', 'software',
+  'food & beverage', 'health & beauty', 'beauty & personal care', 'health & wellness', 'fashion', 'fashion & apparel',
+  'consumer packaged goods', 'cpg', 'media & entertainment', 'technology', 'general merchandise', 'personal goods',
+].map(tagKey));
+// App store genres describe the app, not the category (McDonald's and
+// Starbucks are both "Food & Dining App").
+const APP_GENRES = new Set(['mobile_app', 'website', 'software']);
+// Wikipedia categories about the company rather than what it sells.
+const CORPORATE_WIKI = /\b(?:compan(?:y|ies)|establish\w*|disestablish\w*|listed|nasdaq|stock exchange|dow jones|multinational|headquartered|based in|history of|culture of|spin-offs?|mergers|acquisitions|bankruptcy|stubs?|errors|centric|\d{4}s?)\b/i;
+
+// The path under urn:tag:genre:brand, e.g. ['food_and_beverage', 'drinks', 'coffee_and_tea'].
+// Search results carry tag_id, insights results id.
+const genrePath = t => String(t.tag_id || t.id || '').replace(/^urn:tag:genre:brand:?/, '').split(':').filter(Boolean);
+
+function isGenericTag(t) {
+  const name = String(t.name || '').trim();
+  if (!name || GENERIC_TAGS.has(tagKey(name))) return true;
+  if (t.type === GENRE) {
+    const path = genrePath(t);
+    return path.length < 2 || APP_GENRES.has(path[0]);
+  }
+  return t.type === 'urn:tag:wikipedia_category' && CORPORATE_WIKI.test(name);
+}
+
+// The specific category tags on an entity, once each by name, with the genre
+// path for genre tags.
+function categoryTags(e) {
+  const out = [];
+  for (const t of e.tags || []) {
+    if (!CATEGORY_TYPES.has(t.type) || isGenericTag(t)) continue;
+    const name = String(t.name).trim();
+    if (!out.some(x => tagKey(x.name) === tagKey(name))) out.push({ name, path: t.type === GENRE ? genrePath(t) : null });
+  }
+  return out;
+}
+
+// The category tags a candidate shares with our brand. Genre tags nest, so a
+// sunscreen brand carries both Skincare and Suncare and a coffee chain both
+// Drinks and Coffee & Tea: tags on one branch count once, as the deepest.
+function sharedTags(theirs, ourKeys) {
+  const shared = theirs.filter(t => ourKeys.has(tagKey(t.name)));
+  const under = (a, b) => b.path && a.path && b.path.length > a.path.length && a.path.every((seg, i) => b.path[i] === seg);
+  return shared.filter(t => !shared.some(o => under(t, o))).map(t => t.name);
+}
+
+// Our brand's most specific category tag for the filtered query: its deepest
+// genre tag outside the app store genres (Coffee & Tea for Starbucks, Running
+// for Nike). A top-level genre (Health & Beauty for Fenty Beauty) is used when
+// it is all the brand has.
+function filterTag(tags) {
+  let best = null;
+  for (const t of tags || []) {
+    if (t.type !== GENRE || !(t.tag_id || t.id)) continue;
+    const path = genrePath(t);
+    if (!path.length || APP_GENRES.has(path[0])) continue;
+    if (!best || path.length > best.depth) best = { id: t.tag_id || t.id, name: String(t.name || '').trim(), depth: path.length };
+  }
+  return best;
+}
+
+// Multi-brand chains whose Qloo tags carry no store format, only the generic
+// Retail (Foot Locker, Dick's).
+const RETAILER_NAMES = new Set(['sephora', 'ulta', 'ulta beauty', 'target', 'walmart', 'amazon', 'amazon com',
+  'foot locker', 'dick s sporting goods', 'best buy', 'kohl s', 'macy s']);
+const STORE_FORMAT = /\b(?:supermarkets?|supermarket chain|hypermarkets?|grocery|grocers?|convenience stores?|pharmac(?:y|ies)|drugstores?|drug stores?|department stores?|discount stores?|superstores?|warehouse clubs?|marketplaces?|personal care retail)\b/i;
+const STORE_TYPES = new Set([GENRE, 'urn:tag:industry:qloo', 'urn:tag:business_model:qloo', 'urn:tag:wikipedia_category']);
+
+function isRetailer(name, tags) {
+  if (RETAILER_NAMES.has(normName(name))) return true;
+  const of = type => (tags || []).filter(t => t.type === type).map(t => String(t.name || ''));
+  const brandType = of('urn:tag:brand_type:qloo');
+  // A product brand's store tags say where it is sold (Fuze Tea's industry
+  // "Grocery & Convenience Stores"); a store chain is never a product brand.
+  if (!brandType.some(n => /^product brand$/i.test(n))
+    && (tags || []).some(t => STORE_TYPES.has(t.type) && STORE_FORMAT.test(String(t.name || '')))) return true;
+  // An online store: e-commerce as its industry and a retail brand by type
+  // (Revolve, Soko Glam), not a brand that also sells online (Eggie).
+  return of('urn:tag:industry:qloo').some(n => /^e-?commerce$/i.test(n)) && brandType.some(n => /^retail brand$/i.test(n));
+}
 
 async function discoverRivals(ctx, input) {
   const brand = requireBrand(ctx, input.brand_id, 'brand_id');
   const own = ctx.entities.get(brand) || {};
   const ownName = normName(own.name);
-  const ownTags = new Set((own.tags || []).map(t => t.toLowerCase()));
-  counted(ctx, 'insights');
-  const d = await qloo.insights('urn:entity:brand', { 'signal.interests.entities': brand, take: DISCOVER_TAKE });
+  // A Wikipedia category named after our brand ("Starbucks") marks its own
+  // family, not a category.
+  const ownKeys = new Set(categoryTags({ tags: own.tags }).map(t => tagKey(t.name)).filter(k => k !== tagKey(own.name)));
+  const owned = new Set((own.tags || []).filter(t => t.type === 'urn:tag:subsidiary:qloo').map(t => normName(t.name)));
+  // A retailer's rivals are other retailers, so the flag only applies when our
+  // brand is not one.
+  const flagRetail = !isRetailer(own.name, own.tags);
+  const category = filterTag(own.tags);
 
-  const candidates = [];
-  for (const e of entitiesOf(d)) {
-    if (e.entity_id === brand || candidates.length >= DISCOVER_SHOWN) continue;
+  counted(ctx, 'insights', category ? 2 : 1);
+  const [overlap, sameCategory] = await Promise.all([
+    qloo.insights('urn:entity:brand', { 'signal.interests.entities': brand, take: DISCOVER_TAKE }),
+    category
+      ? qloo.insights('urn:entity:brand', { 'signal.interests.entities': brand, 'filter.tags': category.id, take: CATEGORY_TAKE }).catch(() => null)
+      : null,
+  ]);
+
+  const pool = new Map();
+  for (const [list, source] of [[entitiesOf(overlap), 'overlap'], [entitiesOf(sameCategory), 'category']]) {
+    for (const e of list) {
+      if (e.entity_id === brand) continue;
+      const seen = pool.get(e.entity_id);
+      if (seen) { seen.sources.add(source); continue; }
+      pool.set(e.entity_id, { e, sources: new Set([source]) });
+    }
+  }
+
+  // Whole words only: "dunkin" is in "dunkin donuts", but "h m" is not in "smith motors".
+  const within = (a, b) => (' ' + b + ' ').includes(' ' + a + ' ');
+  const ranked = [...pool.values()].map(({ e, sources }) => {
     const p = e.properties || {};
-    const tags = tagNames(e);
     const name = normName(e.name);
     const flags = [];
-    // Whole words only: "dunkin" is in "dunkin donuts", but "h m" is not in "smith motors".
-    const within = (a, b) => (' ' + b + ' ').includes(' ' + a + ' ');
     if (ownName && name && (within(ownName, name) || within(name, ownName))) flags.push('same brand family');
     if (own.parent && normName(own.parent) === name) flags.push('parent company');
     if (p.parent_organization && own.parent && normName(p.parent_organization) === normName(own.parent)) flags.push('same parent company');
-    if (p.parent_organization && normName(p.parent_organization) === ownName) flags.push('owned by ' + own.name);
-    if (tags.some(t => RETAIL_TAG.test(t))) flags.push('retailer');
-    ctx.entities.set(e.entity_id, { name: e.name, image: p.image?.url || null, type: 'brand', tags, parent: p.parent_organization || null });
-    candidates.push({
-      ref: makeRef(ctx, 'brand', e.entity_id, { id: e.entity_id }),
+    if ((p.parent_organization && normName(p.parent_organization) === ownName) || owned.has(name)) flags.push('owned by ' + own.name);
+    if (flagRetail && isRetailer(e.name, e.tags)) flags.push('retailer');
+    return {
+      e,
       entity_id: e.entity_id,
       name: e.name,
       affinity: pts(e.query?.affinity),
       popularity: pts(e.popularity),
-      shared_tags: tags.filter(t => ownTags.has(t.toLowerCase())),
+      shared_tags: sharedTags(categoryTags(e), ownKeys),
       category: descriptors(e),
       parent: p.parent_organization || null,
+      found_by: sources.size > 1 ? 'both' : [...sources][0],
       flags,
-    });
-  }
-  ctx.discovery = { brand_id: brand, candidates };
+    };
+  }).sort((a, b) => (b.shared_tags.length - a.shared_tags.length) || ((b.affinity ?? -1) - (a.affinity ?? -1)));
+
+  const candidates = ranked.slice(0, DISCOVER_SHOWN).map(({ e, ...c }) => {
+    const p = e.properties || {};
+    ctx.entities.set(e.entity_id, { name: e.name, image: p.image?.url || null, type: 'brand', tags: e.tags || [], parent: c.parent });
+    return { ref: makeRef(ctx, 'brand', e.entity_id, { id: e.entity_id }), ...c };
+  });
+  ctx.discovery = { brand_id: brand, candidates, category: category?.name || null };
   if (!candidates.length) {
     return { result: { brand: own.name, rows: [], note: 'Qloo returned no overlapping brands.' }, summary: 'No overlapping brands found' };
   }
+  const top = candidates.find(c => !c.flags.length);
   return {
     result: {
       brand: own.name,
-      note: 'Strongest audience overlap first. shared_tags are Qloo tags this brand shares with ours (same category); flags mark what is not a competitor.',
-      columns: ['ref', 'name', 'affinity', 'popularity', 'shared_tags', 'category', 'flags'],
-      rows: candidates.map(c => [c.ref, c.name, c.affinity, c.popularity, c.shared_tags.slice(0, 5).join(', '), c.category.join(', '), c.flags.join(', ') || null]),
+      category: category?.name || null,
+      note: 'Ranked by shared_tags (the specific category tags this brand shares with ours), then affinity. found_by: overlap (our audience over-indexes on it), category (from the pass filtered to our category tag), or both. flags mark what is not a competitor.',
+      columns: ['ref', 'name', 'affinity', 'popularity', 'shared_tags', 'category', 'found_by', 'flags'],
+      rows: candidates.map(c => [c.ref, c.name, c.affinity, c.popularity, c.shared_tags.slice(0, 5).join(', '), c.category.join(', '), c.found_by, c.flags.join(', ') || null]),
     },
-    summary: 'Found ' + candidates.length + ' brands whose audiences overlap with ' + own.name + ': ' + candidates.slice(0, 4).map(c => c.name).join(', '),
+    summary: 'Ranked ' + candidates.length + ' brands by the category tags they share with ' + own.name
+      + (category ? ', including a pass filtered to ' + category.name : '')
+      + (top ? '. Closest: ' + top.name + (top.shared_tags.length ? ' (' + top.shared_tags.slice(0, 3).join(', ') + ')' : '') : ''),
   };
 }
 
 // ── choose_rivals ─────────────────────────────────────────────────────────────
 // The model's choice of one or two rivals from discover_rivals, with its
-// reason. Checked here: every pick must be a candidate, and not our brand.
+// reason. Checked here: every pick must be a candidate and not our brand, a
+// flagged candidate is refused while an unflagged one exists, and so is one
+// that shares no category tag with us while an unflagged one does.
 
 function chooseRivals(ctx, input) {
   if (!ctx.discovery) throw toolError('Call discover_rivals first.');
   const refs = Array.isArray(input.rival_ids) ? input.rival_ids : [];
   if (refs.length < 1 || refs.length > 2) throw toolError('Choose one or two rivals.');
+  const clean = ctx.discovery.candidates.filter(x => !x.flags.length);
   const picked = [];
   for (const ref of refs) {
     const id = brandId(ctx, ref);
     if (id === ctx.discovery.brand_id) throw toolError(ref + ' is our own brand.');
     const c = ctx.discovery.candidates.find(x => x.entity_id === id);
     if (!c) throw toolError(ref + ' is not one of the discover_rivals candidates.');
+    if (c.flags.length && clean.length) throw toolError(c.name + ' is flagged (' + c.flags.join(', ') + '), so it is not a competitor. Choose an unflagged candidate.');
+    if (!c.shared_tags.length && clean.some(x => x.shared_tags.length)) throw toolError(c.name + ' shares no category tag with our brand. Choose a candidate in the same category.');
     if (!picked.includes(c)) picked.push(c);
   }
   const reason = sanitizeCopy(String(input.reason || '').trim()).slice(0, 400);
@@ -728,13 +962,25 @@ const TOOL_DEFS = [
     description: 'How Qloo tags the two brands themselves: tags they share (with a similarity score) and tags only one side carries. This describes the brands, not their audiences, so use it for positioning only.',
     input_schema: { type: 'object', properties: BRAND_PAIR, required: ['brand_id', 'rival_id'] },
   },
+  {
+    name: 'follow_lead',
+    description: "Follow one lead. Takes a single entity from an audience_gap row (the strongest gap, such as an artist the rival's fans love) and returns what that entity's own fans also over-index on in music, places (in the city), brands and TV, from Qloo insights with the entity as the signal. Rows are [ref, name, affinity, tags] with affinity 0 to 100; place rows carry the neighborhood in place of tags. Call it once per brief.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        entity_ref: { type: 'string', description: 'An entity ref from an audience_gap row, like e3.' },
+        locality_id: { type: 'string', description: "A city ref from find_city, like l1, for places. Defaults to the run's city." },
+      },
+      required: ['entity_ref'],
+    },
+  },
 ];
 
 // Offered only when the user named no rival (see runTasteAgent).
 const DISCOVERY_DEFS = [
   {
     name: 'discover_rivals',
-    description: "Find rival candidates when the user named none. Lists up to " + DISCOVER_SHOWN + " brands our audience over-indexes on (Qloo insights with our brand as the signal), strongest overlap first. Rows are [ref, name, affinity, popularity, shared_tags, category, flags]: affinity and popularity 0 to 100, shared_tags the Qloo tags the brand shares with ours, flags what makes it not a competitor (same brand family, parent company, same parent company, retailer). The refs work as rival ids everywhere.",
+    description: "Find rival candidates when the user named none. Qloo insights with our brand as the signal, twice: the brands our audience over-indexes on, and the same filtered to our brand's most specific category tag. Lists up to " + DISCOVER_SHOWN + " brands ranked by the specific category tags they share with ours (such as Coffee & Tea or Skincare), then affinity. Rows are [ref, name, affinity, popularity, shared_tags, category, found_by, flags]: affinity and popularity 0 to 100, found_by overlap, category or both, flags what makes it not a competitor (same brand family, parent company, same parent company, owned by our brand, retailer). The refs work as rival ids everywhere.",
     input_schema: {
       type: 'object',
       properties: { brand_id: { type: 'string', description: "Our brand's ref from search_brands, like b1." } },
@@ -764,6 +1010,7 @@ const EXECUTORS = {
   geo_gap: geoGap,
   demographic_gap: demographicGap,
   brand_positioning: brandPositioning,
+  follow_lead: followLead,
 };
 
 // One sentence for the trace, written before the call runs, naming the Qloo
@@ -789,6 +1036,12 @@ function describeCall(ctx, name, input = {}) {
     case 'geo_gap': return 'Mapping both audiences across ' + city + ' with Qloo heatmaps, then naming the hotspots with Qloo insights';
     case 'demographic_gap': return 'Comparing the age and gender mix of both audiences with Qloo demographics';
     case 'brand_positioning': return 'Comparing how Qloo tags ' + brand + ' and ' + rival + ' with Qloo compare';
+    case 'follow_lead': {
+      const seed = gapItem(ctx, input.entity_ref);
+      let words;
+      try { words = leadDomains(leadLocality(ctx, input)).map(d => LEAD_WORDS[d]); } catch (_) { words = LEAD_DOMAINS.map(d => LEAD_WORDS[d]); }
+      return 'Following the lead: what ' + (seed ? seed.name + ' fans' : 'these fans') + ' also love in ' + listWords(words) + ', with Qloo insights';
+    }
     default: return 'Running ' + name;
   }
 }

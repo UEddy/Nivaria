@@ -7,16 +7,20 @@
 // do for a real model. Opt in with LLM_CHAIN=scripted.
 //
 // The script reads the provider-neutral transcript (see src/taste/llm.js) and
-// answers in three turns:
-//   1. search_brands for our brand and each rival, and find_city for the city.
-//   2. Every comparison in parallel, as the system prompt asks: audience_gap
-//      per domain (place too when there is a city), demographic_gap,
-//      brand_positioning, and geo_gap with a city.
-//   3. submit_brief, written from the rows those tools returned and citing
-//      them by ref. The prose is templated, so it reads plainer than a model's.
+// answers in four turns, as the system prompt asks:
+//   1. plan, with four steps, alongside search_brands for our brand and each
+//      rival and find_city for the city.
+//   2. audience_gap per domain (place too when there is a city) and
+//      brand_positioning, in parallel. When the city could not be found, the
+//      plan is revised here, with the reason.
+//   3. follow_lead on the strongest gap, with demographic_gap and, with a
+//      city, geo_gap, in parallel.
+//   4. submit_brief, written from the rows those tools returned and citing
+//      them by ref, with the rank 1 pick built on what follow_lead found. The
+//      prose is templated, so it reads plainer than a model's.
 // With no rival named it first discovers one: discover_rivals for our brand,
-// then choose_rivals with the candidate a model is told to prefer (no flag,
-// most shared Qloo tags, then highest affinity), before step 2.
+// then choose_rivals with the first unflagged candidate (they arrive ranked
+// by shared category tags, then affinity), before step 2.
 //
 // SCRIPTED_QUOTA_AFTER=n makes it run out of quota for tests: every call
 // after the nth brief it writes from then on fails with a 429 whose wait is
@@ -78,6 +82,30 @@ function lookups(opening) {
   return calls;
 }
 
+// The plan the script states in its first turn, or again (with a reason)
+// when the city turns out not to exist.
+function planSteps(opening, city) {
+  const named = opening.rivals.length > 0;
+  const steps = [{
+    step: 'Look up ' + listNames([opening.brand, ...opening.rivals]) + ' in Qloo' + (city ? ', and find ' + city : ''),
+    tools: ['search_brands', ...(city ? ['find_city'] : [])],
+  }];
+  if (!named) steps.push({ step: 'Find the brands whose audiences overlap with ' + opening.brand + ' and choose the closest rival', tools: ['discover_rivals', 'choose_rivals'] });
+  const compare = 'Compare the audiences in music, film, TV and other brands' + (city ? ', and places in ' + city : '');
+  const follow = 'follow the strongest lead and compare the age and gender mix' + (city ? ', and map both audiences across ' + city : '');
+  if (named) {
+    steps.push({ step: compare + ', and how Qloo tags each brand', tools: ['audience_gap', 'brand_positioning'] });
+    steps.push({ step: follow.charAt(0).toUpperCase() + follow.slice(1), tools: ['follow_lead', 'demographic_gap', ...(city ? ['geo_gap'] : [])] });
+  } else {
+    steps.push({
+      step: 'Compare the audiences, follow the strongest lead' + (city ? ' and map ' + city : ' and compare the age and gender mix'),
+      tools: ['audience_gap', 'brand_positioning', 'follow_lead', 'demographic_gap', ...(city ? ['geo_gap'] : [])],
+    });
+  }
+  steps.push({ step: 'Write the brief, with the top pick built on the lead', tools: ['submit_brief'] });
+  return steps;
+}
+
 // The first candidate for each name, as the script's "pick".
 function resolvePicks(opening, done) {
   const pick = query => {
@@ -94,21 +122,23 @@ function resolvePicks(opening, done) {
   return { brand, rivals, city: city ? { ref: city.ref, name: city.name } : null };
 }
 
-// The discovered candidate a model is told to prefer: not flagged, most shared
-// Qloo tags (same category), then the strongest audience overlap.
+// The discovered candidate a model is told to prefer: the first unflagged
+// one, since discover_rivals ranks them by shared category tags, then
+// affinity. Rows are [ref, name, affinity, popularity, shared_tags, category,
+// found_by, flags].
 function chooseFrom(brand, discovered) {
-  const rows = (discovered?.rows || []).map(r => ({ ref: r[0], name: r[1], affinity: r[2], shared: r[4] ? r[4].split(', ') : [], flags: r[6] }));
-  const ok = rows.filter(r => !r.flags);
-  const best = [...(ok.length ? ok : rows)].sort((a, b) => (b.shared.length - a.shared.length) || ((b.affinity || 0) - (a.affinity || 0)))[0];
+  const rows = (discovered?.rows || []).map(r => ({ ref: r[0], name: r[1], affinity: r[2], shared: r[4] ? r[4].split(', ') : [], flags: r[7] }));
+  const best = rows.find(r => !r.flags) || rows[0];
   if (!best) throw scriptError('Qloo returned no brands to choose a rival from');
   const tags = best.shared.slice(0, 2);
   return call('choose_rivals', {
     rival_ids: [best.ref],
     reason: best.name + ' is the closest competitor: its audience affinity with ' + brand.name + "'s fans is " + best.affinity
-      + (tags.length ? ' and it shares the Qloo tags ' + listNames(tags) + '.' : ', the highest among the candidates.'),
+      + (tags.length ? ' and it shares the category tags ' + listNames(tags) + '.' : ', the highest among the candidates.'),
   });
 }
 
+// Turn 2: the audience gaps and positioning.
 function comparisons(picks) {
   const calls = [];
   for (const rival of picks.rivals) {
@@ -117,8 +147,33 @@ function comparisons(picks) {
       if (domain === 'place' && !picks.city) continue;
       calls.push(call('audience_gap', { ...pair, domain, ...(domain === 'place' ? { locality_id: picks.city.ref } : {}) }));
     }
-    calls.push(call('demographic_gap', pair));
     calls.push(call('brand_positioning', pair));
+  }
+  return calls;
+}
+
+// The lead to follow: the audience_gap row with the widest gap across every
+// rival and domain. Venue gaps run wider (they are scoped to the city) and
+// are often bars, which a hook may not use, so music, film, TV and brands
+// come first and a venue is followed only when nothing else has a gap.
+// Rows are [ref, name, rival, ours, gap, tags].
+function strongestGap(done) {
+  const best = { place: null, other: null };
+  for (const c of done.filter(x => x.name === 'audience_gap' && x.result)) {
+    const k = c.result.domain === 'place' ? 'place' : 'other';
+    for (const r of c.result.rows || []) if (r[4] != null && (!best[k] || r[4] > best[k][4])) best[k] = r;
+  }
+  return best.other || best.place;
+}
+
+// Turn 3: follow the strongest lead, with the map and demographics.
+function leadAndMap(picks, done) {
+  const calls = [];
+  const lead = strongestGap(done);
+  if (lead) calls.push(call('follow_lead', { entity_ref: lead[0], ...(picks.city ? { locality_id: picks.city.ref } : {}) }));
+  for (const rival of picks.rivals) {
+    const pair = { brand_id: picks.brand.ref, rival_id: rival.ref };
+    calls.push(call('demographic_gap', pair));
     if (picks.city) calls.push(call('geo_gap', { ...pair, locality_id: picks.city.ref }));
   }
   return calls;
@@ -172,20 +227,43 @@ function writeBrief(picks, done) {
     };
   });
 
-  const winFirst = chosen.slice(0, WIN_FIRST_MAX).map((s, i) => {
+  // Rank 1 is built on follow_lead: the followed entity's gap, and what its
+  // fans also over-index on. Lead rows are [ref, name, affinity, tags] under
+  // music, places, brands and TV.
+  const winFirst = [];
+  const followed = done.find(c => c.name === 'follow_lead' && c.result);
+  if (followed) {
+    const gapCall = done.find(c => c.name === 'audience_gap' && c.result && (c.result.rows || []).some(r => r[0] === followed.input.entity_ref));
+    const seed = gapCall?.result.rows.find(r => r[0] === followed.input.entity_ref);
+    const rival = picks.rivals.find(r => r.ref === gapCall?.input.rival_id) || picks.rivals[0];
+    const tops = ['music', 'brands', 'TV', 'places'].map(k => (followed.result[k] || [])[0]).filter(Boolean).slice(0, 3);
+    if (seed && tops.length) {
+      const music = (followed.result.music || [])[0];
+      winFirst.push({
+        rank: 1,
+        segment: 'Fans of ' + seed[1],
+        why: seed[1] + ' scores ' + seed[2] + ' for ' + rival.name + ' fans and ' + seed[3] + ' for ' + brand
+          + ', the widest ' + (DOMAINS[gapCall.result.domain]?.label || '') + ' gap, and its fans also over-index on ' + listNames(tops.map(t => t[1])) + '.',
+        campaign_hook: 'Meet ' + seed[1] + ' fans where their tastes already go: ' + listNames(tops.map(t => t[1])) + '.',
+        channels: ['Creator partnership with the ' + seed[1] + ' audience', ...(music && music[1] !== seed[1] ? ['Tie-in with ' + music[1]] : [])],
+        evidence: [seed[0], ...tops.map(t => t[0])],
+      });
+    }
+  }
+  winFirst.push(...chosen.slice(0, WIN_FIRST_MAX - winFirst.length).map((s, i) => {
     const lead = s.rows[0];
     const spot = hotspotsFor(s.rival)[0];
     const channels = ['Creator partnership with the ' + lead[1] + ' audience'];
     if (spot) channels.push('Pop-up in ' + placeName(spot));
     return {
-      rank: i + 1,
+      rank: winFirst.length + i + 1,
       segment: segments[i].segment,
       why: 'Widest ' + s.label + ' gap: ' + lead[1] + ' scores ' + lead[2] + ' for ' + s.rival.name + ' fans and ' + lead[3] + ' for ' + brand + '.',
       campaign_hook: 'Put ' + brand + ' where ' + lead[1] + ' fans already are, with a ' + s.label + ' tie-in built around ' + lead[1] + '.',
       channels,
       evidence: [lead[0], ...(spot ? [spot[0]] : [])],
     };
-  });
+  }));
 
   const geo = [];
   for (const rival of picks.rivals) {
@@ -262,7 +340,7 @@ function scriptedProvider(entry, cfg) {
       let text = '';
       if (!done.some(c => c.name === 'search_brands')) {
         if (finalOnly) throw scriptError('ran out of time before the lookups');
-        calls = lookups(opening);
+        calls = [call('plan', { steps: planSteps(opening, opening.city) }), ...lookups(opening)];
         text = 'Resolving the brands' + (opening.city ? ' and the city' : '') + ' first.';
       } else if (!opening.rivals.length && !done.some(c => c.name === 'discover_rivals')) {
         if (finalOnly) throw scriptError('ran out of time before finding rivals');
@@ -280,7 +358,19 @@ function scriptedProvider(entry, cfg) {
         if (!done.some(c => c.name === 'audience_gap')) {
           if (finalOnly) throw scriptError('ran out of time before the comparisons');
           calls = comparisons(picks);
-          text = 'Running every comparison for ' + listNames(picks.rivals.map(r => r.name)) + ' in parallel.';
+          text = 'Comparing the audiences for ' + listNames(picks.rivals.map(r => r.name)) + ' in parallel.';
+          // The city named in the request does not exist in Qloo: say so in a
+          // revised plan, and carry on without places and the map.
+          if (opening.city && !picks.city) {
+            calls.unshift(call('plan', {
+              steps: planSteps(opening, ''),
+              reason: 'Qloo found no city called ' + opening.city + ', so the brief skips places and the map.',
+            }));
+          }
+        } else if (!done.some(c => c.name === 'demographic_gap')) {
+          if (finalOnly) throw scriptError('ran out of time before following the lead');
+          calls = leadAndMap(picks, done);
+          text = 'Following the strongest lead' + (picks.city ? ' while mapping ' + picks.city.name : '') + '.';
         } else {
           calls = [call('submit_brief', writeBrief(picks, done))];
           briefsWritten += 1;

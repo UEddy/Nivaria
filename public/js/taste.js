@@ -502,10 +502,10 @@ const Taste = (() => {
   // ── Live trace ──────────────────────────────────────────────────────────────
 
   function traceItem(s) {
-    const icon = s.kind === 'switch' ? ICON.swap : s.kind === 'note' ? ICON.note
+    const icon = s.kind === 'switch' || s.kind === 'replan' ? ICON.swap : s.kind === 'note' ? ICON.note
       : s.status === 'running' ? ICON.spin : s.status === 'error' ? ICON.err : ICON.ok;
     const cls = 'taste-step taste-step--' + (s.kind === 'tool' ? s.status : s.kind)
-      + (s.tool === 'discover_rivals' || s.tool === 'choose_rivals' ? ' taste-step--decision' : '');
+      + (['discover_rivals', 'choose_rivals', 'follow_lead'].includes(s.tool) ? ' taste-step--decision' : '');
     // The model's own narration between calls reads as a quote.
     const label = s.kind === 'note' ? '"' + s.label + '"' : s.label;
     return `
@@ -522,15 +522,43 @@ const Taste = (() => {
   // Raw provider and tool errors stay off the page: a failed step says so
   // plainly, and a model switch shows only its label.
   function stepSummary(s) {
-    if (s.kind === 'note' || s.kind === 'switch') return '';
+    if (s.kind === 'note' || s.kind === 'switch' || s.kind === 'replan') return '';
     if (s.status === 'error') return 'This step did not work, so the agent carried on without it.';
     return s.summary || '';
+  }
+
+  // The agent's plan, pinned at the top of the trace. Each step ticks off as
+  // the tools it named finish; while the run goes, the first open step spins.
+  // A revised plan says why it changed.
+  function planBlock(p) {
+    const items = p.items || [];
+    const active = p.status === 'running' ? items.findIndex(it => it.status === 'pending') : -1;
+    return `
+      <li class="taste-plan">
+        <div class="taste-plan-head">
+          <span class="taste-plan-label">The agent's plan</span>
+          ${p.revisions ? `<span class="taste-hint">Revised${p.revisions > 1 ? ' ' + p.revisions + ' times' : ''}</span>` : ''}
+        </div>
+        <ol class="taste-plan-steps">
+          ${items.map((it, i) => {
+            const state = i === active ? 'active' : it.status;
+            const mark = it.status === 'done' ? ICON.ok : i === active ? ICON.spin : String(i + 1);
+            return `
+              <li class="taste-plan-step taste-plan-step--${esc(state)}">
+                <span class="taste-plan-mark">${mark}</span>
+                <span class="taste-plan-text">${esc(it.text)}${it.status === 'skipped' ? ' <span class="taste-hint">(skipped)</span>' : ''}</span>
+              </li>`;
+          }).join('')}
+        </ol>
+        ${p.reason ? `<div class="taste-plan-why">Why the plan changed: ${esc(p.reason)}</div>` : ''}
+      </li>`;
   }
 
   function traceItems(list) {
     const shown = list.filter(Boolean);
     if (!shown.length) return '<li class="taste-step taste-step--running"><span class="taste-step-icon">' + ICON.spin + '</span><span class="taste-step-main"><span class="taste-step-label">Starting the agent</span></span></li>';
-    return shown.map(traceItem).join('');
+    const plan = shown.find(s => s.kind === 'plan');
+    return (plan ? planBlock(plan) : '') + shown.filter(s => s.kind !== 'plan').map(traceItem).join('');
   }
 
   // As src/taste/llm.js labels its providers.
@@ -563,7 +591,7 @@ const Taste = (() => {
           <span class="bc-section-label">How the agent built this brief</span>
           <span class="taste-hint">${esc(facts)}${writer ? ' · written by ' + esc(writer) : ''}</span>
         </summary>
-        <ol class="taste-trace">${list.map(traceItem).join('')}</ol>
+        <ol class="taste-trace">${traceItems(list)}</ol>
       </details>`;
   }
 
@@ -680,6 +708,22 @@ const Taste = (() => {
       </table>`;
   }
 
+  const andList = items => (items.length < 3 ? items.join(' and ') : items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1]);
+
+  // Under the pick built on follow_lead: the entity the agent followed, with
+  // its gap, and what that entity's fans also over-index on, all as Qloo
+  // returned them.
+  function leadNote(b, l) {
+    const found = (l.found || []).map(f => esc(f.name) + ' (' + num(pts(f.affinity)) + ')');
+    return `
+      <div class="taste-lead">
+        <span class="taste-lead-label">Lead followed</span>
+        <span>${esc(l.name)}: ${esc(rivalName(b, l.rival_id))} fans ${num(pts(l.rival_affinity))}, ${esc(b.brand?.name || 'yours')} fans ${num(pts(l.our_affinity))}.
+          ${found.length ? `Its fans also over-index on ${andList(found)}.` : ''}
+          <span class="taste-hint">Qloo affinity, 0 to 100.</span></span>
+      </div>`;
+  }
+
   function confidenceBadge(c) {
     const label = { high: 'High confidence', medium: 'Medium confidence', low: 'Low confidence' }[c] || '';
     return label ? `<span class="badge ${c === 'high' ? 'badge-accent' : 'badge-neutral'}">${label}</span>` : '';
@@ -695,7 +739,7 @@ const Taste = (() => {
       <div class="bc-section taste-choice">
         <div class="bc-section-header">
           <div class="bc-section-label">Rivals chosen by the agent</div>
-          <span class="taste-hint">From ${esc(String(rc.candidates.length))} brands whose audiences overlap with ${esc(b.brand?.name || '')}, by Qloo insights</span>
+          <span class="taste-hint">${esc(String(rc.candidates.length))} brands from Qloo insights on ${esc(b.brand?.name || '')} fans${rc.category ? ', including a pass filtered to ' + esc(rc.category) : ''}, ranked by shared category tags</span>
         </div>
         <div class="taste-choice-picked">
           ${picked.map(c => `<span class="taste-choice-pick">${brandMark(c)}<span>${esc(c.name)}</span></span>`).join('')}
@@ -703,7 +747,7 @@ const Taste = (() => {
         <p class="taste-choice-reason">${esc(rc.reason)}</p>
         <div class="taste-choice-scroll">
           <table class="taste-ev taste-choice-table">
-            <thead><tr><th scope="col">Brand Qloo found</th><th scope="col">Affinity</th><th scope="col">Shared Qloo tags</th><th scope="col">Decision</th></tr></thead>
+            <thead><tr><th scope="col">Brand Qloo found</th><th scope="col">Affinity</th><th scope="col">Shared category tags</th><th scope="col">Decision</th></tr></thead>
             <tbody>
               ${rc.candidates.map(c => `
                 <tr class="${c.picked ? 'is-picked' : ''}">
@@ -752,6 +796,7 @@ const Taste = (() => {
                 <div class="taste-win-title">${esc(w.segment)}</div>
                 <div>${esc(w.why)}</div>
                 <div class="taste-win-hook"><strong>Campaign hook:</strong> ${esc(w.campaign_hook)}</div>
+                ${w.lead ? leadNote(b, w.lead) : ''}
                 ${(w.channels || []).length ? `<div class="bc-pattern-tags">${w.channels.map(c => `<span class="pattern-tag taste-channel">${esc(capFirst(c))}</span>`).join('')}</div>` : ''}
               </div>
             </li>`).join('')}
@@ -1060,7 +1105,13 @@ const Taste = (() => {
       const picked = b.rival_choice.candidates.filter(c => c.picked).map(c => c.name).join(' and ');
       lines.splice(2, 0, 'Rivals chosen by the agent: ' + picked + '. ' + b.rival_choice.reason, '');
     }
-    for (const w of b.win_first) lines.push(w.rank + '. ' + w.segment + ': ' + w.why + ' Campaign hook: ' + w.campaign_hook);
+    for (const w of b.win_first) {
+      lines.push(w.rank + '. ' + w.segment + ': ' + w.why + ' Campaign hook: ' + w.campaign_hook);
+      if (w.lead) {
+        const found = (w.lead.found || []).map(f => f.name + ' (' + pts(f.affinity) + ')');
+        lines.push('   Lead followed: ' + w.lead.name + '. ' + (found.length ? 'Its fans also over-index on ' + andList(found) + ' (Qloo affinity, 0 to 100).' : ''));
+      }
+    }
     lines.push('', 'Segments the rival owns:');
     for (const s of b.rival_owned_segments) lines.push('- ' + s.segment + ': ' + s.insight);
     navigator.clipboard?.writeText(lines.join('\n'))

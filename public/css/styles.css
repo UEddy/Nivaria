@@ -4459,3 +4459,38 @@ body[data-mode="taste"] [data-surface="monitor"] { display: none; }
 .taste-step--decision { background: rgba(45, 70, 214, 0.08); }
 .taste-step--decision .taste-step-icon { color: var(--accent-2); border-color: rgba(45, 70, 214, 0.35); background: rgba(45, 70, 214, 0.12); }
 .taste-step--decision .taste-step-sum { color: var(--txt-2); }
+.taste-step--replan { background: var(--yellow-dim); }
+.taste-step--replan .taste-step-icon { color: var(--yellow-2); border-color: rgba(245,158,11,0.25); background: var(--yellow-dim); }
+
+/* The agent's plan, pinned at the top of the trace */
+.taste-plan {
+  list-style: none; margin-bottom: 6px; padding: 10px 12px;
+  border: 1px solid rgba(45, 70, 214, 0.35); border-radius: var(--radius-xs);
+  background: rgba(45, 70, 214, 0.06);
+}
+.taste-plan-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 8px; }
+.taste-plan-label { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--accent-2); }
+.taste-plan-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.taste-plan-step { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--txt-2); }
+.taste-plan-mark {
+  width: 20px; height: 20px; flex-shrink: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  background: var(--bg-elevated); border: 1px solid var(--border); color: var(--txt-3);
+}
+.taste-plan-text { padding-top: 1px; min-width: 0; overflow-wrap: anywhere; }
+.taste-plan-step--done .taste-plan-mark { color: var(--green-2); border-color: rgba(16,185,129,0.25); background: var(--green-dim); }
+.taste-plan-step--done .taste-plan-text,
+.taste-plan-step--active .taste-plan-text { color: var(--txt); }
+.taste-plan-step--active .taste-plan-mark { border-color: rgba(45, 70, 214, 0.35); }
+.taste-plan-step--skipped .taste-plan-text { color: var(--txt-3); }
+.taste-plan-why { margin-top: 8px; font-size: 12.5px; color: var(--txt-2); }
+
+/* "Lead followed" under the win-first pick built on follow_lead */
+.taste-lead {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
+  padding: 7px 10px; border-radius: var(--radius-xs);
+  border-left: 2px solid var(--accent-2); background: rgba(45, 70, 214, 0.06);
+  font-size: 12.5px; line-height: 1.5; color: var(--txt-2);
+}
+.taste-lead-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--accent-2); }

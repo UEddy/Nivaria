@@ -57,21 +57,24 @@ Questions to answer:
 3. Which segments should we win first? A ranked list with campaign hooks built from the actual tastes.
 
 How to work:
-- First resolve every brand with search_brands, and the city with find_city when one is given. Pick the brand candidate that matches what the user meant. find_city returns the one city to use. Pass the chosen refs (b1, l1) to the other tools.
-- When the user names no rival, find them first: after search_brands for our brand, call discover_rivals with its ref. From its candidates pick one or two real competitors: brands in the same category as ours (they share Qloo tags with it) that compete for the same customers. Never pick our own brand or another brand of the same family, its parent company, a brand with the same owner, or a retailer, marketplace or other business that sells it, and do not pick a brand from an unrelated category just because its audience overlaps. Then call choose_rivals with their refs and one sentence on why that cites the affinity and shared tags discover_rivals returned. Use those refs as the rivals for everything that follows.
-- Call independent tools in the same turn so they run in parallel. For each rival, run audience_gap for artist, movie, tv_show and brand, plus place when there is a city, and run demographic_gap and brand_positioning. With a city, also run geo_gap.
-- Follow up only where it sharpens the answer, for example audience_gap scoped to the city for a domain where the rival leads strongly. The whole run has about three minutes, so batch your calls.
+- In your first turn, call plan with 3 to 4 steps in the order you will run them, each naming the tools it uses, alongside your first lookups in that same turn. Never spend a turn on the plan alone. If the plan has to change (a brand or rival cannot be found, or there is no city), call plan again with the revised steps and a one-sentence reason, alongside your next calls.
+- Resolve every brand with search_brands, and the city with find_city when one is given. Pick the brand candidate that matches what the user meant. find_city returns the one city to use. Pass the chosen refs (b1, l1) to the other tools.
+- When the user names no rival, find them first: after search_brands for our brand, call discover_rivals with its ref. Its candidates are ranked by the category tags they share with our brand. Pick one or two real competitors: brands in the same category as ours (they share category tags with it) that compete for the same customers. Never pick our own brand or another brand of the same family, its parent company, a brand with the same owner, or a retailer, marketplace or other business that sells it, and do not pick a brand from an unrelated category just because its audience overlaps. Then call choose_rivals with their refs and one sentence on why that cites the affinity and shared tags discover_rivals returned. Use those refs as the rivals for everything that follows.
+- Call independent tools in the same turn so they run in parallel. Once the brands are resolved, in one turn, run audience_gap for each rival in artist, movie, tv_show and brand, plus place when there is a city, and brand_positioning.
+- In the next turn, call follow_lead once, on the strongest gap across those audience_gap results: the entity with the largest gap that a campaign could be built on (an artist, show, film, brand or venue, never a bar or pub). Call it together with demographic_gap and, with a city, geo_gap. Put any follow-up (such as audience_gap scoped to the city for a domain where the rival leads strongly) in this same turn. The whole run has about three minutes, so batch your calls.
+- Build the rank 1 win_first pick on what follow_lead found: its campaign hook names entities from the lead's results, and its evidence cites those f refs along with the e ref you followed.
 - Then call submit_brief exactly once, as a tool call.
 
 Reading the data:
 - Scores are whole points out of 100. Affinity measures how strongly an audience over-indexes on an entity or map cell, and gap is rival minus ours. A gap of 5 or more is meaningful and 10 or more is strong.
 - A segment is a cluster of related entities with large gaps (several reality fashion shows, a run of R&B artists), not a single title. Name it in plain words.
+- follow_lead affinity is how strongly the followed entity's own fans over-index on each result, not a gap between the brands.
 - Demographic scores run from -100 to 100, where positive means over-indexed.
 - brand_positioning compares how Qloo tags the two brands. Use it for a line or two on positioning, never as audience evidence.
 
 Rules:
-- Every claim must rest on numbers from a tool result. Never invent statistics, audience sizes, revenue or trends. In evidence fields, cite rows by their ref (e3 for an entity, c2 for a map cell); the server attaches the scores. Only quote a number in prose if a tool returned it.
-- Refs (b1, l1, e3, c2) belong only in id and evidence fields. In prose, use the names.
+- Every claim must rest on numbers from a tool result. Never invent statistics, audience sizes, revenue or trends. In evidence fields, cite rows by their ref (e3 for an entity, c2 for a map cell, f4 for a follow_lead result); the server attaches the scores. Only quote a number in prose if a tool returned it.
+- Refs (b1, l1, e3, c2, f4) belong only in id and evidence fields. In prose, use the names.
 - Describe audiences only by what the tools returned: their tastes, places, and age and gender scores. Never describe income, wealth, price sensitivity, spending habits, budgets, education, occupation or any other trait no tool returned. Never infer or name race, ethnicity, religion, nationality or other protected traits, even when venues or neighborhoods seem to suggest one.
 - Campaign hooks must come from the actual entities (a show, an artist, a venue, a neighborhood). Channels must be concrete, such as a creator partnership with a named show's audience or a pop-up in a named neighborhood.
 - Build campaign hooks and channels on coffee, food, music, film, TV, retail and neighborhoods. Bars, pubs, drinking and hangovers have no place in them. When the rival leads in bars or pubs, use that neighborhood or the audience's other tastes instead.
@@ -108,7 +111,7 @@ const SUBMIT_TOOL = {
       },
       win_first: {
         type: 'array',
-        description: 'Ranked list of what to win first. Three to five.',
+        description: 'Ranked list of what to win first. Three to five. Rank 1 is built on what follow_lead found.',
         items: {
           type: 'object',
           properties: {
@@ -117,7 +120,7 @@ const SUBMIT_TOOL = {
             why: { type: 'string' },
             campaign_hook: { type: 'string' },
             channels: { type: 'array', items: { type: 'string' } },
-            evidence: { type: 'array', items: { type: 'string' }, description: 'Entity refs (e3) and map cell refs (c2) behind this pick.' },
+            evidence: { type: 'array', items: { type: 'string' }, description: 'Entity refs (e3), map cell refs (c2) and follow_lead refs (f4) behind this pick.' },
           },
           required: ['rank', 'segment', 'why', 'campaign_hook', 'channels', 'evidence'],
         },
@@ -156,9 +159,41 @@ const SUBMIT_TOOL = {
   },
 };
 
-const ALL_TOOLS = [...tools.TOOL_DEFS, SUBMIT_TOOL];
+// The agent's plan, stated in its first turn next to its first lookups so it
+// costs no model call. The server keeps it as one trace step and ticks each
+// step off once every tool it names has finished (see runTasteAgent).
+const PLANNABLE = [...tools.DISCOVERY_DEFS, ...tools.TOOL_DEFS, SUBMIT_TOOL].map(t => t.name);
+const PLAN_STEPS = { min: 3, max: 4 };
+
+const PLAN_TOOL = {
+  name: 'plan',
+  description: 'State your plan for this brief: ' + PLAN_STEPS.min + ' to ' + PLAN_STEPS.max + ' steps in the order you will run them, each with the tools it calls. Call it in your first turn alongside your first lookups, never alone. Call it again only if the plan changes, with the revised steps and why.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      steps: {
+        type: 'array',
+        description: PLAN_STEPS.min + ' to ' + PLAN_STEPS.max + ' steps.',
+        items: {
+          type: 'object',
+          properties: {
+            step: { type: 'string', description: 'One short sentence in plain words, naming the brands, city or domains.' },
+            tools: { type: 'array', items: { type: 'string', enum: PLANNABLE }, description: 'The tools this step calls.' },
+          },
+          required: ['step', 'tools'],
+        },
+      },
+      reason: { type: 'string', description: 'Only for a revised plan: why it changed, in one sentence.' },
+    },
+    required: ['steps'],
+  },
+};
+
+const ALL_TOOLS = [PLAN_TOOL, ...tools.TOOL_DEFS, SUBMIT_TOOL];
 // A run with no rival named also gets rival discovery.
-const DISCOVERY_TOOLS = [...tools.DISCOVERY_DEFS, ...tools.TOOL_DEFS, SUBMIT_TOOL];
+const DISCOVERY_TOOLS = [PLAN_TOOL, ...tools.DISCOVERY_DEFS, ...tools.TOOL_DEFS, SUBMIT_TOOL];
+
+const PLAN_NUDGE = 'State your plan: call plan alongside your next calls.';
 
 function userPrompt(brand, rivals, city) {
   return [
@@ -183,13 +218,17 @@ function findCell(ctx, rivalId, geohash) {
   return null;
 }
 
-// A cited ref (e3, c2) to the Qloo row behind it. Raw entity_ids and geohashes
-// are accepted too, so a model that copies an id still resolves.
+// A cited ref (e3, c2, f4) to the Qloo row behind it. Raw entity_ids and
+// geohashes are accepted too, so a model that copies an id still resolves.
 function resolveCitation(ctx, ref, rivalId) {
   const hit = ctx.refs.get(ref);
   if (hit && hit.kind === 'entity') {
     const item = ctx.gapIndex.get(hit.rival_id + ':' + hit.id);
     if (item) return { kind: 'entity', rival_id: hit.rival_id, ...item };
+  }
+  if (hit && hit.kind === 'lead') {
+    const item = ctx.lead?.index.get(hit.id);
+    if (item) return { kind: 'lead', lead: ctx.lead.seed.name, ...item };
   }
   if (hit && hit.kind === 'cell') {
     const cell = findCell(ctx, hit.rival_id, hit.geohash);
@@ -215,19 +254,19 @@ function resolveCitation(ctx, ref, rivalId) {
 //   ("no", "avoid", "without") or names a rule topic, and drop a channel that
 //   is nothing but such an instruction.
 // - A raw data key, e.g. "35_to_44" or "tv_show": written out in words.
-const REF_IN_PROSE = /\s*\((?:\s*[becl]\d{1,3}\s*,?)+\)|\b[becl]\d{1,3}\b/g;
+const REF_IN_PROSE = /\s*\((?:\s*[beclf]\d{1,3}\s*,?)+\)|\b[beclf]\d{1,3}\b/g;
 
 // ── Refs in the model's narration ─────────────────────────────────────────────
 // The trace shows what the model says between tool calls, and it thinks in
 // refs ("Patagonia is b1", "e31 leads", "c2 (Bushwick)"). Each ref becomes the
-// name it stands for in this run: a brand, a city, a scored entity or a map
-// cell's place. A ref that only labels a name already written ("Patagonia is
-// b1", "Patagonia (b1)", "ref b1") is dropped, as is any ref the run does not
-// know.
-const NOTE_REF = /\b[becl]\d{1,3}\b/;
-const NOTE_REF_LIST = /\s*\((?:\s*(?:refs?\s+)?[becl]\d{1,3}\s*,?)+\)/gi;
-const NOTE_REF_LABEL = /\s+(?:is|=|as)\s+([becl]\d{1,3})\b/gi;
-const NOTE_HAS_REF = /\s+(?:has|with)\s+(?:the\s+)?refs?\s+[becl]\d{1,3}\b/gi;
+// name it stands for in this run: a brand, a city, a scored entity, a map
+// cell's place or a follow_lead result. A ref that only labels a name already
+// written ("Patagonia is b1", "Patagonia (b1)", "ref b1") is dropped, as is
+// any ref the run does not know.
+const NOTE_REF = /\b[beclf]\d{1,3}\b/;
+const NOTE_REF_LIST = /\s*\((?:\s*(?:refs?\s+)?[beclf]\d{1,3}\s*,?)+\)/gi;
+const NOTE_REF_LABEL = /\s+(?:is|=|as)\s+([beclf]\d{1,3})\b/gi;
+const NOTE_HAS_REF = /\s+(?:has|with)\s+(?:the\s+)?refs?\s+[beclf]\d{1,3}\b/gi;
 
 function refName(ctx, ref) {
   const hit = ctx.refs.get(ref);
@@ -235,6 +274,7 @@ function refName(ctx, ref) {
   if (hit.kind === 'brand') return tools.entityName(ctx, hit.id);
   if (hit.kind === 'locality') return ctx.localities.get(hit.id)?.name || null;
   if (hit.kind === 'entity') return ctx.gapIndex.get(hit.rival_id + ':' + hit.id)?.name || ctx.entities.get(hit.id)?.name || null;
+  if (hit.kind === 'lead') return ctx.lead?.index.get(hit.id)?.name || null;
   if (hit.kind === 'cell') {
     const cell = findCell(ctx, hit.rival_id, hit.geohash);
     return cell ? (cell.label || cell.neighborhood || cell.area || null) : null;
@@ -259,8 +299,8 @@ function nameRefs(ctx, text) {
       if (!name || before.endsWith(bare(name))) return '';
       return m.slice(0, m.length - ref.length) + name;
     })
-    .replace(/\brefs?\s+(?=[becl]\d{1,3}\b)/gi, '')
-    .replace(/\b[becl]\d{1,3}\b/g, ref => refName(ctx, ref) || '')
+    .replace(/\brefs?\s+(?=[beclf]\d{1,3}\b)/gi, '')
+    .replace(/\b[beclf]\d{1,3}\b/g, ref => refName(ctx, ref) || '')
     // Tidy what a removal leaves behind.
     .replace(/\(\s*\)/g, '')
     .replace(/\s+([,.;:!?])/g, '$1')
@@ -333,6 +373,7 @@ function knownNames(ctx) {
       for (const p of c.top_places || []) add(p);
     }
   }
+  for (const it of ctx.lead?.index.values() || []) { add(it.name); add(it.neighborhood); }
   return [...names];
 }
 
@@ -421,11 +462,12 @@ function serverHotspots(ctx, rivalId, brandId) {
   }));
 }
 
-// Distinct Qloo-scored items the brief cites (entities and map cells), each
-// shown with the numbers the server attached.
+// Distinct Qloo-scored items the brief cites (entities, map cells and
+// follow_lead results), each shown with the numbers the server attached.
 function countDataPoints(brief) {
   const keys = new Set();
-  const add = e => keys.add(e.kind === 'cell' ? 'c:' + (e.rival_id || '') + ':' + e.geohash : 'e:' + (e.rival_id || '') + ':' + e.entity_id);
+  const add = e => keys.add(e.kind === 'cell' ? 'c:' + (e.rival_id || '') + ':' + e.geohash
+    : e.kind === 'lead' ? 'f:' + e.entity_id : 'e:' + (e.rival_id || '') + ':' + e.entity_id);
   for (const s of brief.rival_owned_segments) s.evidence.forEach(add);
   for (const w of brief.win_first) w.evidence.forEach(add);
   for (const h of brief.geo_hotspots) add({ ...h, kind: 'cell' });
@@ -439,11 +481,14 @@ function assembleBrief(raw, ctx, warnings) {
   const rivalIds = (b.rival_ids || []).map(r => tools.brandId(ctx, r)).filter(Boolean);
   const brandRef = id => ({ entity_id: id, name: tools.entityName(ctx, id), image: ctx.entities.get(id)?.image || null });
 
-  const evidenceFor = (refs, rivalId, where) => {
+  // A follow_lead result is evidence for a win-first pick only: it is one
+  // audience's taste, not a gap between the brands.
+  const evidenceFor = (refs, rivalId, where, { lead = false } = {}) => {
     const out = [];
     for (const ref of refs || []) {
       const hit = resolveCitation(ctx, ref, rivalId);
-      if (hit) out.push(hit);
+      if (hit && hit.kind === 'lead' && !lead) { dropped += 1; warnings.push('Dropped follow_lead citation ' + ref + ' in ' + where + ', which needs a gap between the brands'); }
+      else if (hit) out.push(hit);
       else { dropped += 1; warnings.push('Dropped unresolved citation ' + ref + ' in ' + where); }
     }
     return out;
@@ -458,9 +503,25 @@ function assembleBrief(raw, ctx, warnings) {
   }
 
   const winFirst = (b.win_first || [])
-    .map(w => ({ ...w, evidence: evidenceFor(w.evidence, null, 'win_first "' + w.segment + '"') }))
+    .map(w => ({ ...w, evidence: evidenceFor(w.evidence, null, 'win_first "' + w.segment + '"', { lead: true }) }))
     .sort((x, y) => (x.rank || 0) - (y.rank || 0))
     .map((w, i) => ({ ...w, rank: i + 1 }));
+
+  // The "Lead followed" note goes under the pick built on follow_lead (the
+  // first that cites its results), with the followed entity's gap and the
+  // results the pick cites, all as Qloo returned them.
+  if (ctx.lead) {
+    const w = winFirst.find(x => x.evidence.some(e => e.kind === 'lead'));
+    if (w) {
+      const { ref, ...seed } = ctx.lead.seed;
+      w.lead = {
+        ...seed,
+        found: w.evidence.filter(e => e.kind === 'lead').map(e => ({ entity_id: e.entity_id, name: e.name, domain: e.domain, affinity: e.affinity })),
+      };
+    } else {
+      warnings.push('The agent followed the lead on ' + ctx.lead.seed.name + ' but built no win-first pick on it');
+    }
+  }
 
   const hotspots = [];
   for (const h of b.geo_hotspots || []) {
@@ -497,6 +558,7 @@ function assembleBrief(raw, ctx, warnings) {
   if (ctx.discovery && ctx.rivalChoice) {
     brief.rival_choice = {
       reason: dropTraitSentences(cleanProse(ctx.rivalChoice.reason), 'rival_choice.reason', warnings),
+      category: ctx.discovery.category,
       candidates: ctx.discovery.candidates.map(c => ({
         entity_id: c.entity_id,
         name: c.name,
@@ -505,6 +567,7 @@ function assembleBrief(raw, ctx, warnings) {
         popularity: c.popularity,
         shared_tags: c.shared_tags.slice(0, 5),
         category: c.category,
+        found_by: c.found_by,
         flags: c.flags,
         picked: ctx.rivalChoice.picked.includes(c.entity_id),
       })),
@@ -637,6 +700,61 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
     emit(step);
   };
 
+  // The plan: one trace step (kind "plan") holding the agent's current plan,
+  // re-emitted as it changes. A plan step ticks off once every tool it names
+  // has succeeded in this run and none of them is still running; a step that
+  // names no tool ticks with a later one. A revision restates the plan, so its
+  // steps that already ran tick at once, and says why in a step of its own.
+  // When the brief is in, a step whose tools never ran is marked skipped.
+  let plan = null;           // { step }
+  const toolRuns = {};       // tool name -> { running, finished }
+  const runsOf = name => (toolRuns[name] = toolRuns[name] || { running: 0, finished: 0 });
+
+  const tickPlan = (final = false) => {
+    if (!plan) return;
+    let changed = false;
+    const items = plan.step.items;
+    const ran = t => runsOf(t).finished > 0;
+    const set = (item, status) => { item.status = status; changed = true; };
+    for (const item of items) {
+      if (item.status !== 'pending' || !item.tools.length) continue;
+      if (item.tools.every(t => ran(t) && !runsOf(t).running)) set(item, 'done');
+      else if (final) set(item, item.tools.some(ran) ? 'done' : 'skipped');
+    }
+    items.forEach((item, i) => {
+      if (item.status !== 'pending' || item.tools.length) return;
+      const later = items.slice(i + 1).some(x => x.status === 'done');
+      if (later || final) set(item, later ? 'done' : 'skipped');
+    });
+    if (changed) emit(plan.step);
+  };
+
+  const setPlan = input => {
+    const clean = s => sanitizeCopy(nameRefs(ctx, String(s || '')).trim());
+    const cap = (s, n) => (s.length <= n ? s : s.slice(0, s.lastIndexOf(' ', n - 3) > 0 ? s.lastIndexOf(' ', n - 3) : n - 3).replace(/[,;:]$/, '') + '...');
+    const items = (Array.isArray(input?.steps) ? input.steps : []).map(s => ({
+      text: cap(clean(s?.step), 160),
+      tools: [...new Set((Array.isArray(s?.tools) ? s.tools : []).filter(t => PLANNABLE.includes(t)))],
+      status: 'pending',
+    })).filter(s => s.text);
+    if (items.length < PLAN_STEPS.min || items.length > PLAN_STEPS.max) {
+      return { error: 'Give ' + PLAN_STEPS.min + ' to ' + PLAN_STEPS.max + ' steps, each with the tools it calls.' };
+    }
+    if (!plan) {
+      plan = { step: openStep({ kind: 'plan', label: 'Plan', items, revisions: 0 }) };
+    } else {
+      const reason = cap(clean(input.reason), 240);
+      if (!reason) return { error: 'A revised plan needs a reason: say in one sentence why the plan changed.' };
+      const done = new Set(plan.step.items.filter(x => x.status === 'done').map(x => x.text.toLowerCase()));
+      for (const it of items) if (done.has(it.text.toLowerCase())) it.status = 'done';
+      Object.assign(plan.step, { items, revisions: plan.step.revisions + 1, reason });
+      closeStep(openStep({ kind: 'replan', label: 'Plan changed: ' + reason }), { status: 'done' });
+      emit(plan.step);
+    }
+    tickPlan();
+    return { content: plan.step.revisions ? 'Revised plan noted. Carry it out.' : 'Plan noted. Carry it out, and call plan again only if it changes.' };
+  };
+
   // One model turn on the current chain entry. A transient failure (429, 5xx,
   // timeout) gets one backoff retry; if that fails, or the entry cannot work
   // at all (bad key, unknown model), the run moves to the next entry for the
@@ -750,6 +868,11 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
       }
 
       const results = await Promise.all(calls.map(async call => {
+        // The plan is kept by the loop, not run as a tool, and has no step of its own.
+        if (call.name === 'plan') {
+          const out = call.inputError ? { error: call.inputError } : setPlan(call.input);
+          return out.error ? { id: call.id, name: call.name, isError: true, content: out.error } : { id: call.id, name: call.name, content: out.content };
+        }
         const isSubmit = call.name === 'submit_brief';
         const step = openStep({
           kind: 'tool', tool: call.name, turn: turns, ...(isSubmit ? {} : { input: call.input }),
@@ -773,18 +896,28 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
           }
           submitted = call.input;
           closeStep(step, { status: 'done', summary: 'Brief submitted' });
+          runsOf(call.name).finished += 1;
+          tickPlan();
           return { id: call.id, name: call.name, content: 'Brief received.' };
         }
+        runsOf(call.name).running += 1;
         const out = await tools.executeTool(ctx, call.name, call.input);
+        runsOf(call.name).running -= 1;
+        if (out.ok) runsOf(call.name).finished += 1;
         closeStep(step, { status: out.ok ? 'done' : 'error', summary: out.ok ? out.summary : out.error });
+        tickPlan();
         return out.ok
           ? { id: call.id, name: call.name, content: JSON.stringify(out.result) }
           : { id: call.id, name: call.name, isError: true, content: out.error };
       }));
       // All results for one turn go back together.
       transcript.push({ role: 'tool', results });
+      // No plan in the first turn: ask for it with the next calls, which
+      // costs no extra turn.
+      if (turns === 1 && !plan && !submitted) transcript.push({ role: 'user', text: PLAN_NUDGE });
     }
   } catch (err) {
+    if (plan) closeStep(plan.step, { status: 'error' });
     const timedOut = controller.signal.aborted || err.aborted;
     const e = new Error(timedOut ? 'The agent ran out of time before writing the brief' : err.message);
     e.steps = steps;
@@ -798,6 +931,10 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
     clearTimeout(timer);
   }
 
+  if (plan) {
+    tickPlan(true);
+    closeStep(plan.step, { status: 'done' });
+  }
   const brief = assembleBrief(submitted, ctx, warnings);
   // The rest of the provenance: the Qloo endpoints this run called, with
   // counts, and the model that wrote the brief (the last one used).

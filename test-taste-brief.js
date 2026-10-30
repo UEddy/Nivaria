@@ -198,7 +198,52 @@ function rawBrief({ brand, rival, artist }, extra = {}) {
     ['No refs here, e.g. a b-side or c-suite.', 'No refs here, e.g. a b-side or c-suite.'],
   ];
   for (const [input, want] of cases) check('narration: ' + JSON.stringify(input), n(input) === want, JSON.stringify(n(input)));
-  check('no ref token is left in any case', cases.every(([input]) => !/\b[becl]\d{1,3}\b/.test(n(input))));
+  check('no ref token is left in any case', cases.every(([input]) => !/\b[beclf]\d{1,3}\b/.test(n(input))));
+  }
+
+  {
+  console.log('follow the lead');
+  const lead = await context();
+  const { ctx } = lead;
+  const wrong = await tools.executeTool(ctx, 'follow_lead', { entity_ref: lead.brand });
+  check('follow_lead takes only an entity ref from an audience gap', !wrong.ok && /entity ref/.test(wrong.error), wrong.error);
+  const before = ctx.calls.insights || 0;
+  const followed = await tools.executeTool(ctx, 'follow_lead', { entity_ref: lead.artist[0] });
+  check('follow_lead returns music, places, brands and TV for the followed entity', followed.ok
+    && ['music', 'places', 'brands', 'TV'].every(k => followed.result[k]?.length > 0) && followed.result.lead === lead.artist[1], JSON.stringify(followed.result).slice(0, 200));
+  check('one Qloo insights call per domain, scoped to the run\'s city for places', ctx.calls.insights - before === 4 && followed.result.city === 'New York', JSON.stringify(ctx.calls));
+  check('its rows carry f refs and whole-point affinities', Object.values(followed.result).filter(Array.isArray).flat()
+    .filter(r => Array.isArray(r)).every(r => /^f\d+$/.test(r[0]) && Number.isInteger(r[2])));
+  check('our brand and the rival are never lead results', ![...ctx.lead.index.keys()].some(id => ctx.pairBrands.has(id)));
+  const again = await tools.executeTool(ctx, 'follow_lead', { entity_ref: lead.artist[0] });
+  check('follow_lead runs once per brief', !again.ok && /once/.test(again.error), again.error);
+  check('the trace label says it follows the lead', /^Following the lead: what .+ fans also love in music, places, brands and TV, with Qloo insights$/
+    .test(tools.describeCall(ctx, 'follow_lead', { entity_ref: lead.artist[0] })), tools.describeCall(ctx, 'follow_lead', { entity_ref: lead.artist[0] }));
+
+  const rows = ['music', 'brands'].map(k => followed.result[k][0]);
+  const f1 = rows[0][0];
+  const f2 = rows[1][0];
+  const leadWarnings = [];
+  const lb = assembleBrief(rawBrief(lead, {
+    rival_owned_segments: [{ rival_id: lead.rival, domain: 'artist', segment: 'Indie pop listeners', confidence: 'high', insight: 'x', evidence: [lead.artist[0], f1] }],
+    win_first: [
+      { rank: 1, segment: 'Fans of ' + lead.artist[1], why: 'x', campaign_hook: 'y', channels: [], evidence: [lead.artist[0], f1, f2, 'f999'] },
+      { rank: 2, segment: 'Indie pop listeners', why: 'x', campaign_hook: 'y', channels: [], evidence: [lead.artist[0]] },
+    ],
+  }), ctx, leadWarnings);
+  const w1 = lb.win_first[0];
+  check('a win-first pick cites lead results, and the server attaches their Qloo numbers', w1.evidence.filter(e => e.kind === 'lead').length === 2
+    && w1.evidence.filter(e => e.kind === 'lead').every(e => e.affinity === ctx.lead.index.get(e.entity_id).affinity && typeof e.affinity === 'number'));
+  check('the "Lead followed" note sits under that pick, with the followed entity and its gap', w1.lead?.name === lead.artist[1]
+    && w1.lead.gap === ctx.lead.seed.gap && w1.lead.found.map(f => f.name).join() === [rows[0][1], rows[1][1]].join()
+    && !lb.win_first[1].lead, JSON.stringify(w1.lead));
+  check('a lead result cited as a rival gap is dropped, and so is an unknown f ref', lb.rival_owned_segments[0].evidence.every(e => e.kind === 'entity')
+    && lb.provenance.dropped === 2 && leadWarnings.some(x => /follow_lead citation/.test(x)) && leadWarnings.some(x => /f999/.test(x)), JSON.stringify(leadWarnings));
+  check('lead results count as data points', lb.provenance.data_points === 3 + lb.geo_hotspots.length, JSON.stringify(lb.provenance));
+  const unused = [];
+  assembleBrief(rawBrief(lead), ctx, unused);
+  check('a followed lead that no pick uses is noted in the warnings', unused.some(x => /followed the lead/.test(x)), JSON.stringify(unused));
+  check('narration names an f ref', nameRefs(ctx, 'Fans also love ' + f1 + '.') === 'Fans also love ' + rows[0][1] + '.', nameRefs(ctx, 'Fans also love ' + f1 + '.'));
   }
 
   console.log('\n' + passed + ' passed, ' + failed + ' failed');

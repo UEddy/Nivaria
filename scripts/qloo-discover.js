@@ -3,10 +3,14 @@
 //   node scripts/qloo-discover.js Starbucks Glossier
 //
 // For each brand: search_brands, then discover_rivals, through the same tool
-// code the agent uses (src/qloo/tools.js), and prints every candidate with its
-// audience affinity, the Qloo tags it shares with the brand, and the flags
-// that mark what is not a competitor. Uses QLOO_API_KEY from .env and spends
-// two Qloo calls per brand, and nothing from the model chain.
+// code the agent uses (src/qloo/tools.js). Prints every candidate in rank
+// order with its audience affinity, the category tags it shares with the
+// brand, how it was found (audience overlap, the pass filtered to the brand's
+// category tag, or both) and the flags that mark what is not a competitor,
+// then the pick: the first unflagged candidate, which is what the scripted
+// stand-in chooses and what choose_rivals steers a model toward. Uses
+// QLOO_API_KEY from .env and spends three Qloo calls per brand, and nothing
+// from the model chain.
 
 require('dotenv').config();
 const tools = require('../src/qloo/tools');
@@ -19,12 +23,15 @@ async function check(name) {
   if (!brand) { console.log('\n' + name + ': Qloo found no brand'); return; }
   const disc = await tools.executeTool(ctx, 'discover_rivals', { brand_id: brand.ref });
   if (!disc.ok) throw new Error(disc.error);
-  console.log('\n' + brand.name + ' (' + brand.ref + '): ' + disc.summary);
-  console.log('  affinity  name                           shared tags / flags');
-  for (const c of ctx.discovery.candidates) {
-    const notes = [c.shared_tags.slice(0, 4).join(', ') || 'no shared tags', c.flags.length ? 'FLAG: ' + c.flags.join(', ') : ''].filter(Boolean).join('  ');
-    console.log('  ' + String(c.affinity).padStart(8) + '  ' + c.name.padEnd(30).slice(0, 30) + ' ' + notes);
+  const { candidates, category } = ctx.discovery;
+  console.log('\n' + brand.name + ' (' + brand.ref + '), category pass: ' + (category || 'none'));
+  console.log('  affinity  found by  name                           shared category tags / flags');
+  for (const c of candidates) {
+    const notes = [c.shared_tags.slice(0, 4).join(', ') || 'no shared category tags', c.flags.length ? 'FLAG: ' + c.flags.join(', ') : ''].filter(Boolean).join('  ');
+    console.log('  ' + String(c.affinity).padStart(8) + '  ' + c.found_by.padEnd(8) + '  ' + c.name.padEnd(30).slice(0, 30) + ' ' + notes);
   }
+  const pick = candidates.find(c => !c.flags.length);
+  console.log('  Pick: ' + (pick ? pick.name + ' (' + pick.shared_tags.length + ' shared category tags, affinity ' + pick.affinity + ')' : 'none'));
 }
 
 (async () => {

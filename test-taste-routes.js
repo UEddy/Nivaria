@@ -167,6 +167,25 @@ async function main() {
   check('model is the scripted stand-in', /^scripted:/.test(run.model || ''), run.model);
   check('no em or en dash in the brief', !/[\u2013\u2014]/.test(JSON.stringify(run.brief)));
 
+  console.log('plan and lead');
+  const planStep = run.steps.find(s => s.kind === 'plan');
+  const firstTurn2 = run.steps.find(s => s.turn === 2);
+  check('the agent states a 3 to 4 step plan in its first turn', planStep && planStep.items.length >= 3 && planStep.items.length <= 4
+    && planStep.n < firstTurn2.n && run.steps.filter(s => s.kind === 'plan').length === 1, JSON.stringify(planStep));
+  const planEmits = steps.filter(s => s.kind === 'plan').map(s => s.items.filter(i => i.status === 'done').length);
+  check('the stream ticks plan steps off one by one as they complete', planEmits[0] === 0 && planEmits[planEmits.length - 1] === planStep.items.length
+    && planEmits.every((d, i) => i === 0 || d >= planEmits[i - 1]) && new Set(planEmits).size === planStep.items.length + 1, JSON.stringify(planEmits));
+  check('the stored plan is complete, every step done', planStep.status === 'done' && planStep.items.every(i => i.status === 'done'));
+  const leadStep = run.steps.find(s => s.tool === 'follow_lead');
+  check('the trace shows "Following the lead: ..."', leadStep?.status === 'done' && /^Following the lead: what .+ fans also love in music, places, brands and TV/.test(leadStep.label), leadStep?.label);
+  check('follow_lead runs in the same turn as the map and demographics', ['geo_gap', 'demographic_gap'].every(t => run.steps.find(s => s.tool === t)?.turn === leadStep.turn), JSON.stringify(run.steps.filter(s => s.turn === leadStep.turn).map(s => s.tool)));
+  check('a run takes four model turns', run.turns === 4, run.turns);
+  const top = run.brief.win_first[0];
+  check('the top win-first pick is built on the lead, with a "Lead followed" note', top.lead && top.lead.found.length > 0
+    && top.evidence.some(e => e.kind === 'lead' && typeof e.affinity === 'number')
+    && top.lead.found.every(f => top.evidence.some(e => e.kind === 'lead' && e.entity_id === f.entity_id && e.affinity === f.affinity)), JSON.stringify(top.lead));
+  check('no em or en dash in the trace', !/[\u2013\u2014]/.test(JSON.stringify(run.steps)));
+
   const replay = await stream(port, '/api/taste/runs/' + id + '/events');
   check('a finished run replays its trace and ends', replay.events.filter(e => e.event === 'step').length === run.steps.length
     && replay.events[replay.events.length - 1].data.status === 'done');
@@ -219,6 +238,17 @@ async function main() {
     && rc.candidates.filter(c => c.picked).map(c => c.name).join() === dRun.rivals.join() && /affinity/.test(rc.reason), JSON.stringify(rc && rc.reason));
   check('the same brand family and the retailer are flagged and not picked', rc.candidates.some(c => c.flags.includes('same brand family') && !c.picked)
     && rc.candidates.some(c => c.flags.includes('retailer') && !c.picked));
+  // Every fake brand carries industry Retail, B2C and a "Supermarkets"
+  // distribution channel; only the one with a store-format industry
+  // (Supermarket Chain) is a retailer.
+  check('generic tags never make a retailer: only the supermarket chain is flagged', rc.candidates.filter(c => c.flags.includes('retailer')).length === 1,
+    JSON.stringify(rc.candidates.map(c => c.name + ':' + c.flags.join('/'))));
+  check('shared tags are specific category tags only', rc.candidates.every(c => c.shared_tags.every(t => !/^(retail|b2c|food & beverage|lifestyle|beauty|apparel|food|supermarkets)$/i.test(t)))
+    && rc.candidates.find(c => c.picked).shared_tags.includes('Coffee & Tea'), JSON.stringify(rc.candidates.map(c => c.shared_tags)));
+  check("a second pass filtered to the brand's own category finds a rival the overlap list missed", rc.category === 'Coffee & Tea'
+    && rc.candidates.some(c => c.name === 'Lantern Roasters' && c.found_by === 'category') && rc.candidates.some(c => c.found_by === 'both'), JSON.stringify(rc.candidates.map(c => c.name + ':' + c.found_by)));
+  check('the plan covers discovery, and every step is done', dRun.steps.find(s => s.kind === 'plan')?.items.some(i => i.tools.includes('discover_rivals'))
+    && dRun.steps.find(s => s.kind === 'plan').items.every(i => i.status === 'done'));
   check('our own brand is never a candidate', !rc.candidates.some(c => c.name === 'Starbucks'));
   check('the trace shows discovery and the choice', dRun.steps.some(s => s.tool === 'discover_rivals' && s.status === 'done')
     && dRun.steps.some(s => s.tool === 'choose_rivals' && s.status === 'done' && /affinity/.test(s.summary)));
@@ -228,6 +258,27 @@ async function main() {
   const discAgain = await request(port, 'POST', '/api/taste/runs', { body: { brand: 'Starbucks', rivals: [], city: 'New York' } });
   check('a blank rival is never served from the cache', discAgain.status === 202 && !discAgain.json.cached, discAgain.text.slice(0, 200));
   await waitFor(async () => (await request(port, 'GET', '/api/taste/runs/' + discAgain.json.run.id)).json.run.status !== 'running');
+
+  const tools = require('./src/qloo/tools');
+  const tctx = tools.createContext();
+  const own = await tools.executeTool(tctx, 'search_brands', { query: 'Starbucks' });
+  await tools.executeTool(tctx, 'discover_rivals', { brand_id: own.result.results[0].ref });
+  const flagged = tctx.discovery.candidates.find(c => c.flags.length);
+  const refused = await tools.executeTool(tctx, 'choose_rivals', { rival_ids: [flagged.ref], reason: 'Its affinity is the highest.' });
+  check('choose_rivals refuses a flagged candidate while an unflagged one exists', !refused.ok && /flagged/.test(refused.error), refused.error);
+
+  console.log('plan changes');
+  const lost = await request(port, 'POST', '/api/taste/runs', { body: { brand: 'Nike', rivals: ['Adidas'], city: 'Atlantis' } });
+  const lRun = await waitFor(async () => {
+    const r = await request(port, 'GET', '/api/taste/runs/' + lost.json.run.id);
+    return r.json.run.status !== 'running' && r.json.run;
+  });
+  const lPlan = lRun.steps.find(s => s.kind === 'plan');
+  const replan = lRun.steps.find(s => s.kind === 'replan');
+  check('when the city cannot be found, the agent revises its plan and says why', lRun.status === 'done' && lPlan?.revisions === 1
+    && /^Plan changed: Qloo found no city called Atlantis/.test(replan?.label || '') && /Atlantis/.test(lPlan.reason), JSON.stringify({ label: replan?.label, reason: lPlan?.reason }));
+  check('the revised plan drops the map, and every step of it is done', lPlan.items.every(i => !/Atlantis/.test(i.text) && !i.tools.includes('geo_gap') && i.status === 'done')
+    && !lRun.steps.some(s => s.tool === 'geo_gap'), JSON.stringify(lPlan.items));
 
   console.log('featured briefs');
   const runsMod = require('./src/tasteRuns');
