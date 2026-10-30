@@ -226,17 +226,32 @@ async function main() {
   const local = await request(port, 'GET', '/internal/taste/featured', { ip: null, headers: token });
   check('a local request with the token is answered', local.status === 200 && local.json.pairs.length === featured.FEATURED.length, local.text.slice(0, 120));
 
-  // Without the test override, the featured chain is both Gemini models and
-  // nothing else, even with other providers configured.
+  // Without the test override, the featured chain is the run chain in its
+  // order, and --provider narrows it to one provider's models.
+  const llm = require('./src/taste/llm');
+  const envKeys = ['FEATURED_CHAIN', 'LLM_CHAIN', 'GEMINI_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY', 'BASETEN_API_KEY', 'BASETEN_MODELS'];
   const savedEnv = { ...process.env };
   delete process.env.FEATURED_CHAIN;
-  Object.assign(process.env, { GEMINI_API_KEY: 'test', GROQ_API_KEY: 'test', OPENROUTER_API_KEY: 'test' });
-  const geminiOnly = require('./src/taste/llm').buildChain(featured.featuredChain());
-  for (const k of ['FEATURED_CHAIN', 'GEMINI_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY']) {
+  Object.assign(process.env, {
+    GEMINI_API_KEY: 'test', GROQ_API_KEY: 'test', OPENROUTER_API_KEY: 'test', BASETEN_API_KEY: 'test',
+    BASETEN_MODELS: 'org/model-a,org/model-b', LLM_CHAIN: 'baseten:org/model-a,gemini,gemini:gemini-3.5-flash,baseten:org/model-b,groq,openrouter',
+  });
+  const ordered = llm.buildChain(featured.featuredChain()).map(e => e.key);
+  const onlyGemini = llm.buildChain(featured.featuredChain('gemini')).map(e => e.key);
+  const onlyBaseten = llm.buildChain(featured.featuredChain('baseten')).map(e => e.key);
+  delete process.env.LLM_CHAIN;
+  const defaultGemini = llm.buildChain(featured.featuredChain('gemini')).map(e => e.key);
+  let unknownProvider = '';
+  try { featured.featuredChain('nope'); } catch (err) { unknownProvider = err.message; }
+  for (const k of envKeys) {
     if (savedEnv[k] === undefined) delete process.env[k]; else process.env[k] = savedEnv[k];
   }
-  check('the featured chain is Gemini only, both models', geminiOnly.length === 2 && geminiOnly.every(e => e.name === 'gemini')
-    && geminiOnly[0].model !== geminiOnly[1].model, geminiOnly.map(e => e.key).join(' > '));
+  check('the featured chain follows LLM_CHAIN, in its order', ordered.slice(0, 5).join() === 'baseten:org/model-a,gemini:gemini-3.6-flash,gemini:gemini-3.5-flash,baseten:org/model-b,groq:qwen/qwen3.8-27b'
+    && ordered.slice(5).every(k => k.startsWith('openrouter:')), ordered.join(' > '));
+  check('--provider gemini is both Gemini models', onlyGemini.join() === 'gemini:gemini-3.6-flash,gemini:gemini-3.5-flash'
+    && defaultGemini.join() === onlyGemini.join(), onlyGemini.join() + ' | ' + defaultGemini.join());
+  check('--provider baseten is the Baseten models in chain order', onlyBaseten.join() === 'baseten:org/model-a,baseten:org/model-b', onlyBaseten.join());
+  check('an unknown provider is refused', /Unknown provider "nope"/.test(unknownProvider), unknownProvider);
 
   // An example from the old boot path: a brief, but not one the script wrote.
   const old = await runs.runExample('glossier-fenty', { brand: 'Glossier', rivals: ['Fenty Beauty'], city: null });
@@ -266,6 +281,14 @@ async function main() {
   const lines3 = [];
   const code3 = await generate(['--base', base, '--pause', '0'], l => lines3.push(l));
   check('a third run writes nothing', code3 === 0 && runCount() === rows && lines3.filter(l => /skipped/.test(l)).length === 10, lines3.join(' | '));
+  check('the script says which chain it writes with', /one at a time with scripted:script$/.test(lines3[0]), lines3[0]);
+  const pinned = [];
+  const pinnedCode = await generate(['--base', base, '--pause', '0', '--provider', 'scripted'], l => pinned.push(l));
+  check('--provider runs on that provider and still resumes', pinnedCode === 0 && /with scripted:script$/.test(pinned[0])
+    && pinned.filter(l => /skipped/.test(l)).length === 10, pinned.join(' | '));
+  const refused = [];
+  const refusedCode = await generate(['--base', base, '--provider', 'nope'], l => refused.push(l));
+  check('an unknown --provider stops before writing anything', refusedCode === 1 && /Cannot write featured briefs: Unknown provider "nope"/.test(refused.join(' ')), refused.join(' | '));
 
   const nikeBefore = featured.featuredStatus().find(p => p.key === 'nike-adidas-la').run_id;
   const code4 = await generate(['--base', base, '--pause', '0', '--force', '--only', 'nike-adidas-la'], () => {});

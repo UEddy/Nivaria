@@ -1,8 +1,13 @@
-// Write the featured Taste Gap briefs with Gemini only, one at a time.
+// Write the featured Taste Gap briefs with the model chain, one at a time.
 //
 //   cd /opt/nivaria && sudo -u nivaria node scripts/generate-featured.js
 //
+// Each brief goes through the chain in its usual order (LLM_CHAIN, else the
+// default chain), falling back down it as a live run does.
+//
 // Options:
+//   --provider name   only that provider's models from the chain (baseten,
+//                     gemini for both Gemini models, groq, openrouter...)
 //   --force           rewrite pairs that already have a current brief
 //   --only a,b        just these pair keys (see src/tasteFeatured.js)
 //   --pause 20        seconds to wait between briefs (default 20), to stay
@@ -16,12 +21,14 @@
 // The internal token comes from SESSION_SECRET in .env, which is why it runs
 // as the service user from the app directory.
 //
-// It skips pairs that already have a current Gemini brief, stops cleanly when
-// Gemini's quota runs out, and can be run again to resume. The two original
-// examples are rewritten too: they were not written by this script.
+// It skips pairs that already have a current brief, stops cleanly when every
+// model in the chain is out of quota or credit, and can be run again to
+// resume. The two original examples are rewritten too: they were not written
+// by this script.
 //
-// Exit code: 0 when every pair is ready, 2 when it stopped early because
-// Gemini is out of quota, 1 for anything else (server down, a failed pair).
+// Exit code: 0 when every pair is ready, 2 when it stopped early because the
+// chain is out of quota or credit, 1 for anything else (server down, a failed
+// pair, an unknown provider).
 
 const http = require('http');
 const https = require('https');
@@ -30,10 +37,14 @@ const { internalToken } = require('../src/lib/internalToken');
 const RUN_TIMEOUT_MS = 6 * 60 * 1000;
 
 function parseArgs(argv) {
-  const out = { force: false, only: null, pauseMs: 20000, base: 'http://127.0.0.1:' + (process.env.PORT || 3000) };
+  const out = { force: false, only: null, provider: null, pauseMs: 20000, base: 'http://127.0.0.1:' + (process.env.PORT || 3000) };
   for (let i = 0; i < argv.length; i += 1) {
     const k = argv[i];
     if (k === '--force') out.force = true;
+    else if (k === '--provider') {
+      out.provider = String(argv[++i] || '').trim().toLowerCase();
+      if (!out.provider) throw new Error('--provider needs a provider name, such as baseten or gemini');
+    }
     else if (k === '--only') out.only = String(argv[++i] || '').split(',').map(s => s.trim()).filter(Boolean);
     else if (k === '--pause') out.pauseMs = Math.max(0, Number(argv[++i]) || 0) * 1000;
     else if (k === '--base') out.base = String(argv[++i] || '').replace(/\/+$/, '');
@@ -76,9 +87,13 @@ async function main(argv = process.argv.slice(2), log = console.log) {
     return 1;
   }
 
+  const providerQuery = opts.provider ? 'provider=' + encodeURIComponent(opts.provider) : '';
   let pairs;
+  let chain;
   try {
-    ({ pairs } = await call(opts.base, 'GET', '/internal/taste/featured'));
+    const status = await call(opts.base, 'GET', '/internal/taste/featured' + (providerQuery ? '?' + providerQuery : ''));
+    if (status.error) { log('Cannot write featured briefs: ' + status.error); return 1; }
+    ({ pairs, chain } = status);
   } catch (err) {
     log('Could not reach the server at ' + opts.base + ': ' + err.message + '. Is the service running?');
     return 1;
@@ -89,7 +104,7 @@ async function main(argv = process.argv.slice(2), log = console.log) {
     pairs = pairs.filter(p => opts.only.includes(p.key));
   }
 
-  log('Featured briefs on ' + opts.base + ', Gemini only, one at a time' + (opts.force ? ', rewriting current ones' : ''));
+  log('Featured briefs on ' + opts.base + ', one at a time with ' + (chain || []).join(' > ') + (opts.force ? ', rewriting current ones' : ''));
   let ready = 0;
   let failed = 0;
   let wrote = false;
@@ -105,7 +120,8 @@ async function main(argv = process.argv.slice(2), log = console.log) {
     log('  ' + n + ': writing (' + (p.status === 'stale' ? 'replacing the older brief' : 'new') + ')...');
     let r;
     try {
-      r = await call(opts.base, 'POST', '/internal/taste/featured/' + encodeURIComponent(p.key) + (opts.force ? '?force=1' : ''));
+      const query = [opts.force ? 'force=1' : '', providerQuery].filter(Boolean).join('&');
+      r = await call(opts.base, 'POST', '/internal/taste/featured/' + encodeURIComponent(p.key) + (query ? '?' + query : ''));
     } catch (err) {
       log('    could not finish: ' + err.message + '. Run this again to resume.');
       return 1;
@@ -114,7 +130,7 @@ async function main(argv = process.argv.slice(2), log = console.log) {
       ready += 1;
       log('    ' + (r.result === 'done' ? 'done in ' + secs(r.ms) + ' (' + r.model + ')' : 'already current') + ': ' + r.headline);
     } else if (r.result === 'quota') {
-      log('    Gemini is out of quota (every Gemini model answered 429).');
+      log('    Every model in the chain is out of quota or credit (' + (r.error || '429') + ').');
       log('Stopped with ' + ready + ' of ' + pairs.length + ' ready. Run this again after the quota resets to write the rest.');
       return 2;
     } else if (r.result === 'busy') {

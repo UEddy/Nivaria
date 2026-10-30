@@ -5,17 +5,18 @@
 // Writing them is quota-heavy, so it happens two ways:
 //   - scripts/generate-featured.js asks the running server (POST
 //     /internal/taste/featured/:key, src/routes/tasteInternal.js) to write each
-//     brief with Gemini only (featuredChain), one at a time. A brief written
-//     that way is marked FEATURED_VERSION and replaces any older brief for the
-//     pair; a pair that already has a good one is skipped, so the script
-//     resumes where it stopped.
+//     brief with the model chain in its usual order (featuredChain), or with
+//     one provider's models when the script is given --provider, one at a
+//     time. A brief written that way is marked FEATURED_VERSION and replaces
+//     any older brief for the pair; a pair that already has a good one is
+//     skipped, so the script resumes where it stopped.
 //   - At boot, a pair marked boot (the original two examples) with no brief at
 //     all is written with the configured chain, so a fresh database is never
 //     empty. Those are not marked current, so the script replaces them.
 //
 // TASTE_EXAMPLES controls the boot step: unset fills missing boot pairs,
 // refresh rewrites boot pairs that have no current featured brief (it never
-// touches the script's Gemini briefs), off skips it. A boot pair that fails is
+// touches the script's briefs), off skips it. A boot pair that fails is
 // tried again RETRY_DELAY_MS later, up to MAX_ATTEMPTS, then at the next boot.
 // Nothing generated here is ever committed: the database is git-ignored and
 // Qloo response data must stay out of the repo.
@@ -50,10 +51,22 @@ const pairOf = key => FEATURED.find(p => p.key === key) || null;
 const inputOf = p => ({ brand: p.brand, rivals: p.rivals, city: p.city });
 const labelOf = p => p.brand + ' vs ' + p.rivals.join(' and ') + (p.city ? ' in ' + p.city : '');
 
-// Gemini only, both models (each has its own daily quota). FEATURED_CHAIN
-// overrides it; the tests use the scripted stand-in.
-function featuredChain() {
-  return process.env.FEATURED_CHAIN || 'gemini,gemini:' + (process.env.GEMINI_SECOND_MODEL || llm.SECOND_GEMINI_MODEL);
+// The chain the script writes with: LLM_CHAIN (else the default chain) in its
+// order, or FEATURED_CHAIN when set (the tests use the scripted stand-in).
+// provider narrows it to that provider's entries ("gemini" is both Gemini
+// models, each with its own daily quota). null means the run chain itself.
+function featuredChain(provider = null) {
+  const base = process.env.FEATURED_CHAIN || null;
+  return provider ? llm.onlyProvider(provider, base) : base;
+}
+
+// The chain entries the script will use, or the reason it cannot run.
+function featuredChainKeys(provider = null) {
+  try {
+    return { chain: llm.buildChain(featuredChain(provider)).map(e => e.key) };
+  } catch (err) {
+    return { error: err.message };
+  }
 }
 
 function realModelConfigured() {
@@ -129,11 +142,13 @@ function featuredStatus() {
   });
 }
 
-// Write one pair's brief with Gemini only. Returns { key, result, ... } where
-// result is skipped (a good current brief exists and force is off), done,
-// quota (every Gemini model answered 429, so the script should stop), busy
-// (another brief is being written), failed or unknown.
-async function generateFeatured(key, { force = false } = {}) {
+// Write one pair's brief with the featured chain (one provider's models when
+// provider is given). Returns { key, result, ... } where result is skipped (a
+// good current brief exists and force is off), done, quota (every model in
+// the chain failed and the last one was out of quota or credit, 429 or 402,
+// so the script should stop), busy (another brief is being written), failed
+// or unknown.
+async function generateFeatured(key, { force = false, provider = null } = {}) {
   const pair = pairOf(key);
   if (!pair) return { key, result: 'unknown', error: 'No featured pair has that key.' };
   const label = labelOf(pair);
@@ -142,8 +157,10 @@ async function generateFeatured(key, { force = false } = {}) {
     if (cur) return { key, label, result: 'skipped', run_id: cur.id, headline: cur.headline, model: cur.model };
   }
   if (!String(process.env.QLOO_API_KEY || '').trim()) return { key, label, result: 'failed', error: 'QLOO_API_KEY is not set on this server.' };
+  let chain;
   try {
-    llm.buildChain(featuredChain());
+    chain = featuredChain(provider);
+    llm.buildChain(chain);
   } catch (err) {
     return { key, label, result: 'failed', error: err.message };
   }
@@ -152,13 +169,13 @@ async function generateFeatured(key, { force = false } = {}) {
   generating = true;
   const started = Date.now();
   try {
-    const { id, error } = await runs.runExample(pair.key, inputOf(pair), { chain: featuredChain(), version: FEATURED_VERSION });
+    const { id, error } = await runs.runExample(pair.key, inputOf(pair), { chain, version: FEATURED_VERSION });
     const ms = Date.now() - started;
     if (id) {
       const row = runs.featuredRows().find(r => r.id === id);
       return { key, label, result: 'done', run_id: id, headline: row?.headline || '', model: row?.model || null, ms };
     }
-    const quota = Boolean(error?.chainExhausted) && error?.status === 429;
+    const quota = Boolean(error?.chainExhausted) && [429, 402].includes(error?.status);
     return { key, label, result: quota ? 'quota' : 'failed', error: String(error?.message || 'The run failed').slice(0, 300), ms };
   } finally {
     generating = false;
@@ -194,6 +211,6 @@ function listFeatured() {
 }
 
 module.exports = {
-  FEATURED, FEATURED_VERSION, featuredChain,
+  FEATURED, FEATURED_VERSION, featuredChain, featuredChainKeys,
   ensureFeatured, featuredStatus, generateFeatured, listFeatured,
 };

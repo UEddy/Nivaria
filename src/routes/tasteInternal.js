@@ -4,9 +4,12 @@
 // token, which only something with the server's .env can compute. Anything
 // else gets a plain 404.
 //
-//   GET  /featured        every featured pair and whether its brief is current
-//   POST /featured/:key   write that pair's brief with Gemini only and wait;
-//                         ?force=1 rewrites a current one
+//   GET  /featured        every featured pair and whether its brief is current,
+//                         and the chain the script will write with (or why
+//                         it cannot); ?provider=name narrows it
+//   POST /featured/:key   write that pair's brief with the chain and wait;
+//                         ?force=1 rewrites a current one, ?provider=name
+//                         uses only that provider's models
 
 const express = require('express');
 const featured = require('../tasteFeatured');
@@ -25,14 +28,16 @@ function localOnly(req, res, next) {
 
 router.use(localOnly);
 
+const providerParam = req => (typeof req.query.provider === 'string' && req.query.provider.trim()) || null;
+
 router.get('/featured', (req, res) => {
-  res.json({ pairs: featured.featuredStatus() });
+  res.json({ pairs: featured.featuredStatus(), ...featured.featuredChainKeys(providerParam(req)) });
 });
 
 // One brief takes up to about three minutes; the script waits for it.
 router.post('/featured/:key', async (req, res) => {
   try {
-    res.json(await featured.generateFeatured(req.params.key, { force: req.query.force === '1' }));
+    res.json(await featured.generateFeatured(req.params.key, { force: req.query.force === '1', provider: providerParam(req) }));
   } catch (err) {
     console.warn('[taste] featured generation failed: ' + err.message);
     res.json({ key: req.params.key, result: 'failed', error: err.message });

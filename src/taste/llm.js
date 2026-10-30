@@ -33,6 +33,13 @@
 //               run). OPENROUTER_MODELS (comma separated) overrides them. Free
 //               models allow 20 requests a minute and 50 a day (1000 a day
 //               after buying 10 credits).
+//   baseten     Baseten Model APIs (inference.baseten.co/v1), paid per token.
+//               Off: it has no default models, so it only runs with
+//               BASETEN_API_KEY set, models in BASETEN_MODELS (comma
+//               separated) and "baseten" in LLM_CHAIN. Not yet tried on a
+//               real run: the only key tried (2026-10-30) could list models
+//               but got 403 "please check the api-key you provided" on every
+//               chat request.
 //   zai         Z.ai international endpoint (api.z.ai/api/paas/v4).
 //               glm-4.7-flash is the free GLM Flash model (GLM-5.3-Flash is
 //               paid). Its trial run timed out and then got 429 "temporarily
@@ -53,6 +60,9 @@
 // Unset, the chain is DEFAULT_CHAIN below, with
 // LLM_PROVIDER (if set) moved to the front. Entries whose API key is blank are
 // skipped.
+//
+// onlyProvider() narrows a chain to one provider's entries, for a caller
+// pinned to it (generate-featured.js --provider).
 //
 // Privacy: adapters send only what the agent hands them (the system prompt,
 // the brand, rival and city names, and Qloo tool results). No request carries
@@ -125,6 +135,18 @@ const PROVIDERS = {
     extra: () => ({ provider: { require_parameters: true } }),
     headers: () => ({ 'X-Title': 'Nivaria' }),
   },
+  baseten: {
+    label: 'Baseten',
+    kind: 'openai',
+    keyEnv: 'BASETEN_API_KEY',
+    modelsEnv: 'BASETEN_MODELS',
+    baseEnv: 'BASETEN_BASE_URL',
+    baseUrl: 'https://inference.baseten.co/v1',
+    // None by default, so the provider stays off until BASETEN_MODELS names some.
+    models: [],
+    maxTokens: 8000,
+    timeoutMs: 60000,
+  },
   zai: {
     label: 'Z.ai',
     kind: 'openai',
@@ -183,20 +205,38 @@ function defaultModels(name) {
   return [process.env[cfg.modelEnv] || cfg.model];
 }
 
-// The ordered list of { name, model, key } entries a run may use.
-// spec: a chain in LLM_CHAIN syntax for one caller (the featured briefs run
-// Gemini only); unset, LLM_CHAIN and then DEFAULT_CHAIN apply.
-function buildChain(spec) {
+const providerOf = token => token.split(':')[0].trim().toLowerCase();
+
+// A chain's entries as written: spec in LLM_CHAIN syntax, else LLM_CHAIN,
+// else DEFAULT_CHAIN with LLM_PROVIDER moved to the front.
+function chainTokens(spec) {
   let tokens = splitList(spec == null ? process.env.LLM_CHAIN : spec);
   if (!tokens.length) {
     tokens = DEFAULT_CHAIN();
     const first = String(process.env.LLM_PROVIDER || '').trim().toLowerCase();
     if (first) {
       if (!PROVIDERS[first]) throw new Error('LLM_PROVIDER must be one of ' + Object.keys(PROVIDERS).join(', ') + ', got "' + first + '"');
-      const mine = tokens.filter(t => t.split(':')[0] === first);
-      tokens = [...(mine.length ? mine : [first]), ...tokens.filter(t => t.split(':')[0] !== first)];
+      const mine = tokens.filter(t => providerOf(t) === first);
+      tokens = [...(mine.length ? mine : [first]), ...tokens.filter(t => providerOf(t) !== first)];
     }
   }
+  return tokens;
+}
+
+// One provider's entries of a chain (both Gemini models, say), in LLM_CHAIN
+// syntax; the provider's configured models when the chain has none of it.
+function onlyProvider(name, spec) {
+  const p = String(name || '').trim().toLowerCase();
+  if (!PROVIDERS[p]) throw new Error('Unknown provider "' + name + '": use one of ' + Object.keys(PROVIDERS).join(', '));
+  const mine = chainTokens(spec).filter(t => providerOf(t) === p);
+  return (mine.length ? mine : [p]).join(',');
+}
+
+// The ordered list of { name, model, key } entries a run may use.
+// spec: a chain in LLM_CHAIN syntax for one caller; unset, LLM_CHAIN and then
+// DEFAULT_CHAIN apply.
+function buildChain(spec) {
+  const tokens = chainTokens(spec);
   const chain = [];
   for (const token of tokens) {
     // Model ids can contain ":" (OpenRouter's ":free"), so split on the first one.
@@ -502,4 +542,4 @@ function createProvider(entry) {
   return cfg.kind === 'anthropic' ? anthropicProvider(entry, cfg) : openAIProvider(entry, cfg);
 }
 
-module.exports = { PROVIDERS, SECOND_GEMINI_MODEL, buildChain, createProvider, classifyFailure, isConfigured, estimateTokens };
+module.exports = { PROVIDERS, SECOND_GEMINI_MODEL, buildChain, chainTokens, onlyProvider, createProvider, classifyFailure, isConfigured, estimateTokens };
