@@ -193,7 +193,7 @@ const ALL_TOOLS = [PLAN_TOOL, ...tools.TOOL_DEFS, SUBMIT_TOOL];
 // A run with no rival named also gets rival discovery.
 const DISCOVERY_TOOLS = [PLAN_TOOL, ...tools.DISCOVERY_DEFS, ...tools.TOOL_DEFS, SUBMIT_TOOL];
 
-const PLAN_NUDGE = 'State your plan: call plan alongside your next calls.';
+const PLAN_NUDGE = 'You have not stated your plan yet. In this turn, call plan (3 to 4 steps, each with the tools it calls) together with your next tool calls.';
 
 function userPrompt(brand, rivals, city) {
   return [
@@ -600,6 +600,10 @@ function checkBrief(input, ctx) {
   for (const k of ['headline', 'summary']) if (!input[k] || typeof input[k] !== 'string') problems.push(k + ' is required.');
   if (!Array.isArray(input.rival_owned_segments) || !input.rival_owned_segments.length) problems.push('rival_owned_segments needs at least one segment.');
   if (!Array.isArray(input.win_first) || !input.win_first.length) problems.push('win_first needs at least one item.');
+  // A weaker model can drop a required field (Flash-Lite left out every why).
+  else if (input.win_first.some(w => !w || ['segment', 'why', 'campaign_hook'].some(k => typeof w[k] !== 'string' || !w[k].trim()))) {
+    problems.push('Every win_first item needs segment, why and campaign_hook as text.');
+  }
   return problems;
 }
 
@@ -839,6 +843,7 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
         transcript,
         tools: wrapUp ? [SUBMIT_TOOL] : discovery ? DISCOVERY_TOOLS : ALL_TOOLS,
         finalOnly: wrapUp,
+        planTurn: turns === 1 && !plan && !wrapUp,
       });
       addUsage(usage, res.usage);
       let used = providers[providers.length - 1];

@@ -18,8 +18,14 @@
 //               gemini-3.6-flash answered a parallel tool call in about 4s;
 //               gemini-3.8-flash and gemini-flash-latest took over two minutes.
 //               The free tier allows 20 requests a day PER MODEL, so a second
-//               model (gemini-3.5-flash) is its own quota. GEMINI_MODEL and
-//               GEMINI_SECOND_MODEL override them.
+//               model (gemini-3.5-flash) is its own quota, and so is a third,
+//               gemini-3.5-flash-lite (about 500 a day and 10 a minute on the
+//               free tier by third-party reports; Google's docs point to AI
+//               Studio). Flash-Lite passed a real run on 2026-10-30 (Starbucks
+//               vs Dunkin' Donuts in New York: valid brief, 13 citations, none
+//               dropped, lead followed) once its plan was forced (see
+//               planFirst). GEMINI_MODEL, GEMINI_SECOND_MODEL and
+//               GEMINI_LITE_MODEL override them.
 //   groq        Groq's OpenAI-compatible endpoint. qwen/qwen3.8-27b is the model
 //               on this key that makes parallel tool calls. Free keys are
 //               capped at 8K tokens a minute, 7K input per request and 1K
@@ -40,6 +46,12 @@
 //               real run: the only key tried (2026-10-30) could list models
 //               but got 403 "please check the api-key you provided" on every
 //               chat request.
+//   cerebras    Cerebras (api.cerebras.ai/v1) and GitHub Models
+//   github      (models.github.ai/inference, a token with models:read). Off
+//               the same way, and paced to a requests-a-minute cap (5 and
+//               10; CEREBRAS_RPM, GITHUB_MODELS_RPM). Neither
+//               had a key on 2026-10-30, so none has passed a real run; set
+//               the key and *_MODELS, run one brief, then add it to LLM_CHAIN.
 //   zai         Z.ai international endpoint (api.z.ai/api/paas/v4).
 //               glm-4.7-flash is the free GLM Flash model (GLM-5.3-Flash is
 //               paid). Its trial run timed out and then got 429 "temporarily
@@ -89,6 +101,9 @@ const PROVIDERS = {
     timeoutMs: 45000,
     // Gemini 3 cannot turn thinking off; low keeps each turn quick.
     extra: () => ({ reasoning_effort: 'low' }),
+    // Flash-Lite skipped the optional plan tool in both trial runs
+    // (2026-10-30), nudge or not, so its first turn is the plan, forced.
+    planFirst: model => /flash-lite/i.test(model),
   },
   groq: {
     label: 'Groq',
@@ -147,6 +162,36 @@ const PROVIDERS = {
     maxTokens: 8000,
     timeoutMs: 60000,
   },
+  // Off like Baseten: no default models, so each runs only with its key, a
+  // model in its *_MODELS list and its name in LLM_CHAIN. None has passed a
+  // real run yet (no key on 2026-10-30). rpm paces requests to the account's
+  // per-minute cap; *_RPM overrides it.
+  cerebras: {
+    label: 'Cerebras',
+    kind: 'openai',
+    keyEnv: 'CEREBRAS_API_KEY',
+    modelsEnv: 'CEREBRAS_MODELS',
+    baseEnv: 'CEREBRAS_BASE_URL',
+    baseUrl: 'https://api.cerebras.ai/v1',
+    models: [],
+    rpmEnv: 'CEREBRAS_RPM',
+    rpm: 5,
+    maxTokens: 8000,
+    timeoutMs: 60000,
+  },
+  github: {
+    label: 'GitHub Models',
+    kind: 'openai',
+    keyEnv: 'GITHUB_MODELS_TOKEN',
+    modelsEnv: 'GITHUB_MODELS',
+    baseEnv: 'GITHUB_MODELS_BASE_URL',
+    baseUrl: 'https://models.github.ai/inference',
+    models: [],
+    rpmEnv: 'GITHUB_MODELS_RPM',
+    rpm: 10,
+    maxTokens: 4000,
+    timeoutMs: 60000,
+  },
   zai: {
     label: 'Z.ai',
     kind: 'openai',
@@ -180,12 +225,15 @@ const PROVIDERS = {
 };
 
 const SECOND_GEMINI_MODEL = 'gemini-3.5-flash';
+const LITE_GEMINI_MODEL = 'gemini-3.5-flash-lite';
 
-// gemini primary, a second Gemini model (its own daily quota), groq, then
-// every OpenRouter model. Z.ai failed its trial run, so it is opt-in.
+// gemini primary, a second Gemini model and Flash-Lite (each its own daily
+// quota), groq, then every OpenRouter model. Z.ai failed its trial run, so it
+// is opt-in.
 const DEFAULT_CHAIN = () => [
   'gemini',
   'gemini:' + (process.env.GEMINI_SECOND_MODEL || SECOND_GEMINI_MODEL),
+  'gemini:' + (process.env.GEMINI_LITE_MODEL || LITE_GEMINI_MODEL),
   'groq',
   'openrouter',
 ];
@@ -303,7 +351,7 @@ function estimateTokens(system, transcript, tools) {
   return Math.ceil(chars / 3);
 }
 
-// ── OpenAI-compatible chat completions (Gemini, Groq, OpenRouter, Z.ai) ───────
+// ── OpenAI-compatible chat completions (every provider but Anthropic) ─────────
 
 const toFunctionTool = t => ({
   type: 'function',
@@ -384,20 +432,42 @@ function bodyRetryMs(data) {
   return null;
 }
 
+// A provider with a requests-a-minute cap (cfg.rpm) gets one request every
+// 60/rpm seconds, shared by every run in this process: each request reserves
+// the next free slot before it waits, so concurrent runs queue rather than
+// collide.
+const nextSlot = {};
+
+function pace(name, rpm) {
+  if (!rpm) return 0;
+  const now = Date.now();
+  const at = Math.max(now, nextSlot[name] || 0);
+  nextSlot[name] = at + 60000 / rpm;
+  return at - now;
+}
+
 function openAIProvider(entry, cfg) {
   const { model } = entry;
   const baseUrl = (process.env[cfg.baseEnv] || cfg.baseUrl).replace(/\/+$/, '');
   const envBudget = cfg.inputBudgetEnv ? process.env[cfg.inputBudgetEnv] : undefined;
   const inputBudget = envBudget != null && envBudget !== '' ? Number(envBudget) || 0 : cfg.inputBudget || 0;
   const maxTokens = (cfg.maxTokensEnv && Number(process.env[cfg.maxTokensEnv])) || cfg.maxTokens;
+  const rpm = (cfg.rpmEnv && Number(process.env[cfg.rpmEnv])) || cfg.rpm || 0;
   return {
     ...entry, label: cfg.label + ' (' + model + ')', timeoutMs: cfg.timeoutMs, inputBudget,
-    async complete({ system, transcript, tools, finalOnly, signal, timeoutMs }) {
+    planFirst: Boolean(cfg.planFirst && cfg.planFirst(model)),
+    // planTurn: the run has no plan yet and this is its first turn; a
+    // planFirst model must call plan, and only plan, in it.
+    async complete({ system, transcript, tools, finalOnly, planTurn, signal, timeoutMs }) {
+      const forceTool = planTurn && this.planFirst && tools.some(t => t.name === 'plan') ? 'plan' : null;
+      const wait = pace(entry.name, rpm);
+      if (wait > 0) await new Promise(r => setTimeout(r, wait));
       const body = {
         model,
         messages: renderOpenAI(entry, system, transcript),
         tools: tools.map(toFunctionTool),
-        tool_choice: finalOnly && cfg.forceToolChoice !== false ? 'required' : 'auto',
+        tool_choice: finalOnly && cfg.forceToolChoice !== false ? 'required'
+          : forceTool ? { type: 'function', function: { name: forceTool } } : 'auto',
         max_tokens: maxTokens,
         ...(cfg.extra ? cfg.extra(model) : {}),
       };
@@ -542,4 +612,4 @@ function createProvider(entry) {
   return cfg.kind === 'anthropic' ? anthropicProvider(entry, cfg) : openAIProvider(entry, cfg);
 }
 
-module.exports = { PROVIDERS, SECOND_GEMINI_MODEL, buildChain, chainTokens, onlyProvider, createProvider, classifyFailure, isConfigured, estimateTokens };
+module.exports = { PROVIDERS, SECOND_GEMINI_MODEL, LITE_GEMINI_MODEL, buildChain, chainTokens, onlyProvider, createProvider, classifyFailure, isConfigured, estimateTokens };

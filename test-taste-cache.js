@@ -248,8 +248,30 @@ async function main() {
   }
   check('the featured chain follows LLM_CHAIN, in its order', ordered.slice(0, 5).join() === 'baseten:org/model-a,gemini:gemini-3.6-flash,gemini:gemini-3.5-flash,baseten:org/model-b,groq:qwen/qwen3.8-27b'
     && ordered.slice(5).every(k => k.startsWith('openrouter:')), ordered.join(' > '));
-  check('--provider gemini is both Gemini models', onlyGemini.join() === 'gemini:gemini-3.6-flash,gemini:gemini-3.5-flash'
-    && defaultGemini.join() === onlyGemini.join(), onlyGemini.join() + ' | ' + defaultGemini.join());
+  check('--provider gemini is the chain\'s Gemini models: both Flash, then Flash-Lite in the default chain', onlyGemini.join() === 'gemini:gemini-3.6-flash,gemini:gemini-3.5-flash'
+    && defaultGemini.join() === 'gemini:gemini-3.6-flash,gemini:gemini-3.5-flash,gemini:gemini-3.5-flash-lite', onlyGemini.join() + ' | ' + defaultGemini.join());
+
+  // Flash-Lite's first turn must be the plan; other models choose freely.
+  // A requests-a-minute cap spaces calls. axios is stubbed: no network.
+  const axios = require('axios');
+  const realPost = axios.post;
+  const bodies = [];
+  const sentAt = [];
+  axios.post = async (url, body) => { bodies.push(body); sentAt.push(Date.now()); return { data: { choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] } }; };
+  const toolList = [{ name: 'plan', description: 'p', input_schema: { type: 'object', properties: {} } }, { name: 'search_brands', description: 's', input_schema: { type: 'object', properties: {} } }];
+  const ask = (name, model, planTurn) => llm.createProvider({ name, model, key: name + ':' + model })
+    .complete({ system: 's', transcript: [{ role: 'user', text: 'u' }], tools: toolList, finalOnly: false, planTurn, timeoutMs: 1000 });
+  await ask('gemini', 'gemini-3.5-flash-lite', true);
+  await ask('gemini', 'gemini-3.5-flash-lite', false);
+  await ask('gemini', 'gemini-3.6-flash', true);
+  process.env.GITHUB_MODELS_RPM = '300';
+  await ask('github', 'm', false);
+  await ask('github', 'm', false);
+  delete process.env.GITHUB_MODELS_RPM;
+  axios.post = realPost;
+  check('Flash-Lite is made to call plan in its first turn, and only then', JSON.stringify(bodies[0].tool_choice) === '{"type":"function","function":{"name":"plan"}}'
+    && bodies[1].tool_choice === 'auto' && bodies[2].tool_choice === 'auto', JSON.stringify(bodies.slice(0, 3).map(b => b.tool_choice)));
+  check('a provider with a requests-a-minute cap spaces its requests', sentAt[4] - sentAt[3] >= 190, String(sentAt[4] - sentAt[3]) + 'ms');
   check('--provider baseten is the Baseten models in chain order', onlyBaseten.join() === 'baseten:org/model-a,baseten:org/model-b', onlyBaseten.join());
   check('an unknown provider is refused', /Unknown provider "nope"/.test(unknownProvider), unknownProvider);
 
