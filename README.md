@@ -33,6 +33,21 @@ Every section of a brief comes from a Qloo call. All of them go through one clie
 
 A run makes a few dozen Qloo calls. The brief shows how many of each endpoint it used.
 
+## Nivaria vs an LLM alone
+
+Ask a capable LLM on its own "Who is Dunkin' winning that Starbucks isn't, in New York, and how do we reach them?" and it answers from general knowledge: plausible, generic, and with any number in it made up. Nivaria answers the same question from Qloo's taste graph. The Nivaria column below comes from real runs on the Qloo hackathon API, recorded in this repository's commit history.
+
+| The question | An LLM alone | Nivaria, with Qloo |
+|---|---|---|
+| **Who is the real rival?** | Names the obvious competitor from general knowledge. It cannot measure whose audience actually overlaps with yours. | Ranks the brands Starbucks fans over-index on by shared category tags, then affinity. It picks **Dunkin' Donuts** (4 shared category tags, affinity 91, found by both the overlap pass and the Coffee & Tea pass) and flags **Teavana** as owned by Starbucks, not a rival. |
+| **What does the rival's audience love that ours doesn't?** | Offers stereotypes. Any score it gives is invented, and it cannot compare two audiences on the same items. | Takes the rival audience's top artists, films, shows, places and brands from Qloo, then re-scores exactly those entities for our audience. Every gap is two Qloo affinities on the same entity. |
+| **Where in the city?** | Has no neighborhood-level taste data. | Joins both brands' Qloo heatmaps: 1,264 cells for Starbucks vs Dunkin' in New York, all inside the city's outline, with hotspots across Staten Island, Queens, Brooklyn and the Bronx, each named from the places in it. |
+| **What's the campaign hook?** | Something generic, like "partner with local creators". | Follows the strongest gap one hop through the taste graph. For Starbucks vs Dunkin' it followed **Florida Georgia Line** to **Luke Bryan**, **Joe Gibbs Racing** and **Nashville**, and built the rank 1 pick's hook on them. |
+| **Can I trust the numbers?** | No way to check them. | The model never writes a number. It cites Qloo results by reference and the server attaches Qloo's own scores. A real run on Gemini Flash-Lite cited 13 Qloo data points and none had to be dropped. |
+| **Does it stay within the data?** | Freely describes audiences by traits nobody measured. | Only claims Qloo can back survive. When a featured brief called a map cell's audience "Staten Island morning commuters", something no Qloo tool measures, a backstop was added that now removes sentences like it. |
+
+**Without Qloo, Nivaria does not run.** The server refuses to start a brief without `QLOO_API_KEY` (`configProblem` in `src/tasteRuns.js`), and every section of a brief, from the rivals to the map to the win-first plan, is built from Qloo results. The scripted stand-in replaces the language model, never Qloo. The fake Qloo in `scripts/qloo-fake.js` exists only for offline development and tests, has to be preloaded by hand, and returns made-up names.
+
 ## Technological implementation
 
 - **A real tool-use agent.** `src/taste/agent.js` runs a loop of up to 15 model turns with a three-minute deadline. In its first turn the model states a three or four step plan (the `plan` tool) alongside its first lookups. It then calls the Qloo tools, running independent ones in parallel, and ends by calling `submit_brief` with a structured brief. A named pair typically takes four turns, and six with rival discovery. A model that skips the plan (Flash-Lite) is asked for it in a turn of its own. Near the turn or time limit, only `submit_brief` stays available.
