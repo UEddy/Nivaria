@@ -27,6 +27,7 @@ const { ipKeyGenerator } = require('express-rate-limit');
 const { getDb } = require('./db');
 const { runTasteAgent, cleanInput } = require('./taste/agent');
 const llm = require('./taste/llm');
+const display = require('./taste/display');
 
 // Keep a finished run's live entry briefly, for a stream that connects just
 // as the run ends.
@@ -53,9 +54,10 @@ function hydrate(row, { full = false } = {}) {
   const out = { ...row, rivals: parseJson(row.rivals, []) };
   for (const k of PRIVATE_COLS) delete out[k];
   if (full) {
-    out.brief = parseJson(row.brief, null);
     out.data = parseJson(row.data, null);
-    out.warnings = parseJson(row.warnings, []);
+    // As a reader sees it, stored briefs included (src/taste/display.js).
+    out.brief = display.restoreAmpersands(parseJson(row.brief, null), out.data);
+    out.warnings = display.plainWarnings(parseJson(row.warnings, []));
     out.providers = parseJson(row.providers, []);
     const entry = live.get(row.id);
     out.steps = entry && !entry.ended ? entry.steps.filter(Boolean) : parseJson(row.steps, []);
@@ -262,6 +264,9 @@ async function execute(id, input, { chain = null } = {}) {
         emit(entry, { type: 'step', step });
       },
     });
+    // The server's checks are stored raw and go to the log in full; readers
+    // only ever see them as plain sentences (display.plainWarnings).
+    if (run.warnings.length) console.log('[taste] run ' + id + ' server checks: ' + run.warnings.join(' | '));
     // A run that discovered its rivals is stored, and cached, under the
     // rivals the agent chose, so asking for that pair later is a cache hit.
     const asRun = run.input.discovered ? { ...input, rivals: run.input.rivals } : input;
@@ -338,7 +343,7 @@ function featuredRows() {
     .prepare("SELECT id, example_key, example_version, finished_at, brand, rivals, city, model, brief, data FROM taste_runs WHERE example_key IS NOT NULL AND status = 'done' ORDER BY id")
     .all()
     .map(r => {
-      const brief = parseJson(r.brief, {}) || {};
+      const brief = display.restoreAmpersands(parseJson(r.brief, {}) || {}, parseJson(r.data, {}));
       return {
         id: r.id,
         example_key: r.example_key,

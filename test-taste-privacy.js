@@ -26,7 +26,7 @@ function check(label, fn) {
 const ALLOWED_REQUIRES = new Set([
   'axios', '@anthropic-ai/sdk',
   '../lib/retry', '../lib/sanitizeText',
-  './client', './llm', './scripted', '../qloo/tools',
+  './client', './llm', './scripted', './display', '../qloo/tools',
 ]);
 for (const dir of ['src/taste', 'src/qloo']) {
   for (const file of fs.readdirSync(path.join(__dirname, dir)).filter(f => f.endsWith('.js'))) {

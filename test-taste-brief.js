@@ -266,6 +266,37 @@ function rawBrief({ brand, rival, artist }, extra = {}) {
   check('narration names an f ref', nameRefs(ctx, 'Fans also love ' + f1 + '.') === 'Fans also love ' + rows[0][1] + '.', nameRefs(ctx, 'Fans also love ' + f1 + '.'));
   }
 
+  {
+  console.log('what a reader sees');
+  const display = require('./src/taste/display');
+  const plain = display.plainWarnings([
+    'Dropped unresolved citation e1|^{rival_id: in segment "Alternative Rock and Pop Punk"',
+    'Dropped unresolved citation e9 in win_first "Indie pop listeners"',
+    'Dropped unresolved citation e8 in win_first "Indie pop listeners"',
+    'Dropped hotspot c99',
+    'Removed a sentence that described a trait no tool returned ("morning commuters")',
+    'Something internal: {"ref":"e3"}',
+  ]);
+  check('a dropped citation reads as a plain sentence', plain.includes("1 claim in Alternative Rock and Pop Punk couldn't be matched to Qloo data and was removed.")
+    && plain.includes("2 claims in Indie pop listeners couldn't be matched to Qloo data and were removed."), JSON.stringify(plain));
+  check('no raw citation, ref or internal text reaches the reader', !plain.some(p => /\b[beclf]\d+\b|\||\^|\{|rival_id|citation|win_first|hotspot/i.test(p)), JSON.stringify(plain));
+  check('an unknown check becomes a generic sentence', plain.includes("One part of the draft didn't pass a check and was changed."), JSON.stringify(plain));
+  check('no dash in any reader sentence', !plain.some(p => /[–—]/.test(p)));
+
+  const brief = { segment: 'Contemporary R and B and Hip Hop', why: 'Fans of R and B and soul, and coffee and tea.', evidence: [{ descriptors: ['Contemporary R&B'] }] };
+  const shown = display.restoreAmpersands(brief, { gaps: {} });
+  check("Qloo's R&B is put back where the model spelled it out", shown.segment === 'Contemporary R&B and Hip Hop' && shown.why === 'Fans of R&B and soul, and coffee and tea.', JSON.stringify(shown));
+  check('the stored brief itself is not changed', brief.segment === 'Contemporary R and B and Hip Hop');
+
+  // A model switch reads in plain words, with no status code.
+  process.env.SCRIPTED_QUOTA_AFTER = '0';
+  const { runTasteAgent } = require('./src/taste/agent');
+  let switched = null;
+  try { await runTasteAgent({ brand: 'Starbucks', rivals: ["Dunkin'"], chain: 'scripted,scripted:second', timeoutMs: 20000 }); } catch (err) { switched = (err.steps || []).find(s => s.kind === 'switch'); }
+  process.env.SCRIPTED_QUOTA_AFTER = '';
+  check('a model switch says "Primary model busy, switched to ..."', switched?.label === 'Primary model busy, switched to Scripted stand-in' && switched.reason === 'busy', JSON.stringify(switched));
+  }
+
   console.log('\n' + passed + ' passed, ' + failed + ' failed');
   process.exit(failed ? 1 : 0);
 })().catch(err => { console.error(err); process.exit(1); });

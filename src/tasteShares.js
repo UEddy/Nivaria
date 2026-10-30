@@ -21,6 +21,7 @@ const crypto = require('crypto');
 const { getDb } = require('./db');
 const { sanitizeCopy } = require('./lib/sanitizeText');
 const { isDemoEmail } = require('./lib/demoAccount');
+const display = require('./taste/display');
 
 function parseJson(v, fallback) {
   if (v == null || v === '') return fallback;
@@ -89,7 +90,7 @@ function sharedRun(token) {
     city: row.city,
     created_at: row.created_at,
     finished_at: row.finished_at,
-    brief: parseJson(row.brief, null),
+    brief: display.restoreAmpersands(parseJson(row.brief, null), parseJson(row.data, null)),
     data: parseJson(row.data, null),
   };
 }

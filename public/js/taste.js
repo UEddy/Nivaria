@@ -501,13 +501,13 @@ const Taste = (() => {
 
   // ── Live trace ──────────────────────────────────────────────────────────────
 
-  function traceItem(s) {
+  function traceItem(s, switchIndex = 0) {
     const icon = s.kind === 'switch' || s.kind === 'replan' ? ICON.swap : s.kind === 'note' ? ICON.note
       : s.status === 'running' ? ICON.spin : s.status === 'error' ? ICON.err : ICON.ok;
     const cls = 'taste-step taste-step--' + (s.kind === 'tool' ? s.status : s.kind)
       + (['discover_rivals', 'choose_rivals', 'follow_lead'].includes(s.tool) ? ' taste-step--decision' : '');
     // The model's own narration between calls reads as a quote.
-    const label = s.kind === 'note' ? '"' + s.label + '"' : s.label;
+    const label = s.kind === 'note' ? '"' + s.label + '"' : s.kind === 'switch' ? switchLabel(s, switchIndex) : s.label;
     return `
       <li class="${cls}">
         <span class="taste-step-icon">${icon}</span>
@@ -558,11 +558,24 @@ const Taste = (() => {
     const shown = list.filter(Boolean);
     if (!shown.length) return '<li class="taste-step taste-step--running"><span class="taste-step-icon">' + ICON.spin + '</span><span class="taste-step-main"><span class="taste-step-label">Starting the agent</span></span></li>';
     const plan = shown.find(s => s.kind === 'plan');
-    return (plan ? planBlock(plan) : '') + shown.filter(s => s.kind !== 'plan').map(traceItem).join('');
+    let switches = 0;
+    return (plan ? planBlock(plan) : '') + shown.filter(s => s.kind !== 'plan').map(s => traceItem(s, s.kind === 'switch' ? switches++ : 0)).join('');
+  }
+
+  // A model switch in plain words, built from the step itself so stored runs
+  // read the same: "Primary model busy, switched to Gemini (gemini-3.5-flash)".
+  // A model that cannot run at all (a bad key, a missing model) is unavailable
+  // rather than busy. Status codes stay out of the page.
+  function switchLabel(s, index) {
+    const unavailable = s.reason ? s.reason === 'unavailable' : /((?:401|402|403|404))|auth error|no credit|not available/i.test((s.label || '') + ' ' + (s.summary || ''));
+    const key = String(s.to || '');
+    const cut = key.indexOf(':');
+    const name = cut < 0 ? key : (PROVIDER_LABEL[key.slice(0, cut)] || capFirst(key.slice(0, cut))) + ' (' + key.slice(cut + 1) + ')';
+    return (index === 0 ? 'Primary model' : 'Fallback model') + (unavailable ? ' unavailable' : ' busy') + ', switched to ' + name;
   }
 
   // As src/taste/llm.js labels its providers.
-  const PROVIDER_LABEL = { gemini: 'Gemini', groq: 'Groq', openrouter: 'OpenRouter', zai: 'Z.ai', anthropic: 'Claude' };
+  const PROVIDER_LABEL = { gemini: 'Gemini', groq: 'Groq', openrouter: 'OpenRouter', zai: 'Z.ai', anthropic: 'Claude', baseten: 'Baseten', cerebras: 'Cerebras', github: 'GitHub Models', scripted: 'Scripted stand-in' };
 
   // The model that wrote the brief: from the brief's provenance, else (older
   // runs) the last model the run used.
@@ -848,7 +861,7 @@ const Taste = (() => {
         </div>` : ''}
 
       ${!readOnly && run.warnings?.length ? `
-        <div class="bc-reasoning">Server checks on the model's draft: ${run.warnings.map(esc).join('; ')}</div>` : ''}`;
+        <div class="bc-reasoning">Server checks on the model's draft: ${run.warnings.map(esc).join(' ')}</div>` : ''}`;
   }
 
   function tagRow(label, tags) {

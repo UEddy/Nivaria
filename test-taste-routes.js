@@ -326,6 +326,19 @@ async function main() {
   check('regenerating a featured brief replaces the old row', Boolean(regen.id) && after[0].run.id === regen.id
     && (await request(port, 'GET', '/api/taste/runs/' + firstId)).status === 404);
 
+  console.log('stored briefs, as a reader sees them');
+  // A brief stored before these fixes: raw checks, and R&B spelled out.
+  // (db is the test database handle from above)
+  const stored = JSON.parse(db.prepare('SELECT brief FROM taste_runs WHERE id = ?').get(id).brief);
+  stored.rival_owned_segments[0].segment = 'Contemporary R and B';
+  db.prepare('UPDATE taste_runs SET brief = ?, warnings = ? WHERE id = ?').run(JSON.stringify(stored),
+    JSON.stringify(['Dropped unresolved citation e1|^{rival_id: in segment "Alternative Rock and Pop Punk"']), id);
+  const reread = (await request(port, 'GET', '/api/taste/runs/' + id)).json.run;
+  check('stored raw checks are served as plain sentences', reread.warnings.length === 1
+    && reread.warnings[0] === "1 claim in Alternative Rock and Pop Punk couldn't be matched to Qloo data and was removed.", JSON.stringify(reread.warnings));
+  check('and a stored "R and B" is served as R&B', reread.brief.rival_owned_segments[0].segment === 'Contemporary R&B', reread.brief.rival_owned_segments[0].segment);
+  check('the database keeps the raw check for the log', /e1\|\^\{rival_id/.test(db.prepare('SELECT warnings FROM taste_runs WHERE id = ?').get(id).warnings));
+
   server.close();
   fs.rmSync(tmp, { recursive: true, force: true });
   console.log('\n' + passed + ' passed, ' + failed + ' failed');

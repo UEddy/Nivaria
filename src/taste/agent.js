@@ -28,6 +28,7 @@ const { sleep, retryAfterMs } = require('../lib/retry');
 const { sanitizeCopy, sanitizeCopyDeep } = require('../lib/sanitizeText');
 const tools = require('../qloo/tools');
 const llm = require('./llm');
+const display = require('./display');
 
 const MAX_TURNS = 15;
 const DEFAULT_TIMEOUT_MS = 3 * 60 * 1000;
@@ -80,7 +81,7 @@ Rules:
 - Build campaign hooks and channels on coffee, food, music, film, TV, retail and neighborhoods. Bars, pubs, drinking and hangovers have no place in them. When the rival leads in bars or pubs, use that neighborhood or the audience's other tastes instead.
 - These rules shape what you write and are never part of it: do not mention them, and do not annotate a hook or channel with what it leaves out.
 - The headline states the finding and the move: the rival's strongest segment or neighborhood and what to win first. Never a generic title such as "Brief: Starbucks vs Dunkin'".
-- Never use em-dashes, en-dashes, or "+" as a connector between words or phrases. Write "and" instead, and use commas, periods, colons or parentheses.
+- Never use em-dashes, en-dashes, or "+" as a connector between words or phrases. Write "and" instead of that "+", and use commas, periods, colons or parentheses. Keep names and genres exactly as Qloo writes them, ampersands included (R&B, Coffee & Tea).
 - Keep text tight: a headline under 110 characters, a summary of two or three sentences, and one or two sentences per insight.`;
 
 const SUBMIT_TOOL = {
@@ -593,7 +594,8 @@ function assembleBrief(raw, ctx, warnings) {
   // How the numbers were checked: citations resolved against this run's Qloo
   // results, and those that could not be (runTasteAgent adds the rest).
   brief.provenance = { data_points: countDataPoints(brief), dropped };
-  return brief;
+  // Qloo's own ampersand names (R&B), which the model may have spelled out.
+  return display.restoreAmpersands(brief, chartData(ctx));
 }
 
 // Everything the UI charts, straight from Qloo: gaps per domain, the full
@@ -810,7 +812,7 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
           if (err.aborted || controller.signal.aborted) throw err;
           const verdict = llm.classifyFailure(err);
           if (!verdict) throw err;
-          failure = { err, why: verdict.why };
+          failure = { err, why: verdict.why, action: verdict.action };
           if (verdict.action === 'skip' || attempt === 2) break;
           const suggested = err.retryAfterMs ?? retryAfterMs(err);
           if (suggested != null && suggested > MAX_BACKOFF_MS) break;
@@ -830,8 +832,10 @@ async function runTasteAgent({ brand, rivals, city, onStep, timeoutMs = DEFAULT_
       link += 1;
       provider = llm.createProvider(chain[link]);
       const step = openStep({
-        kind: 'switch', from: from.key, to: provider.key,
-        label: 'Switching from ' + from.label + ' to ' + provider.label + ' after a ' + failure.why,
+        // In plain words for the trace; the status code stays in the summary
+        // (the server log), which the page never shows.
+        kind: 'switch', from: from.key, to: provider.key, reason: failure.action === 'skip' ? 'unavailable' : 'busy',
+        label: (link === 1 ? 'Primary model' : 'Fallback model') + (failure.action === 'skip' ? ' unavailable' : ' busy') + ', switched to ' + provider.label,
       });
       closeStep(step, { status: 'done', summary: failure.err.message.slice(0, 200) });
       if (provider.inputBudget && !budgetNoted) {
